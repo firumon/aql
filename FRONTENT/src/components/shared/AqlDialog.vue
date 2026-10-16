@@ -65,7 +65,7 @@
       <!-- ── Footer ──────────────────────────────────────────────────────── -->
       <template v-if="!hideActions">
         <q-separator />
-        <q-card-actions align="right" class="aql-dialog-footer">
+        <q-card-actions align="between" class="aql-dialog-footer">
           <slot name="actions" :loading="loading" :disabled="disableConfirm">
             <q-btn
               flat
