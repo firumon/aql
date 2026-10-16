@@ -1,0 +1,26 @@
+# Auto-detect text files and normalize line endings
+# Working directory uses CRLF, Git repository uses LF
+* text=auto eol=crlf
+
+# Shell scripts must use LF to run in bash
+*.sh text eol=lf
+*.bash text eol=lf
+
+# Binary files
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.webp binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.eot binary
+*.otf binary
+*.pdf binary
+*.zip binary
+*.tar binary
+*.gz binary
+*.exe binary
+*.dll binary

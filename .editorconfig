@@ -1,3 +1,5 @@
+root = true
+
 [*]
 charset = utf-8
 end_of_line = crlf
@@ -7,3 +9,6 @@ trim_trailing_whitespace = true
 [*.{js,jsx,mjs,cjs,ts,tsx,mts,cts,vue,gs,scss}]
 indent_size = 2
 indent_style = space
+
+[*.sh]
+end_of_line = lf
