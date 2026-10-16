@@ -33,7 +33,7 @@
       :class="[cardClass, 'q-mb-sm']"
     >
       <q-card-section>
-        <FormRecord v-bind="formRecordBindings(draft.value)" @update:field="onDraftField" />
+        <FormRecord v-bind="formRecordBindings(draft)" @update:field="onDraftField" />
         <div class="row justify-end q-gutter-sm q-mt-sm">
           <q-btn
             v-if="editIndex !== null"
@@ -72,7 +72,7 @@
             <q-btn v-close-popup flat round dense :icon="closeIcon" />
           </q-card-section>
           <q-card-section>
-            <FormRecord v-bind="formRecordBindings(draft.value)" @update:field="onDraftField" />
+            <FormRecord v-bind="formRecordBindings(draft)" @update:field="onDraftField" />
           </q-card-section>
           <q-card-actions align="right">
             <q-btn v-close-popup flat no-caps :label="cancelLabel" :color="cancelColor" />
@@ -312,7 +312,7 @@ function formRecordBindings (record) {
   return {
     ...attrs,
     resource: childName.value,
-    record: unref(record),
+    record: unref(record) || {},
     // Re-opening an already-added row is an edit; a fresh draft is an add.
     mode: editIndex.value !== null ? 'edit' : 'add',
     hideFields: effectiveHideFields.value,

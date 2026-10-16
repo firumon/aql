@@ -80,7 +80,7 @@ defineOptions({ name: 'ContentsFormRecord', inheritAttrs: false })
 
 const props = defineProps({
   resource: { type: String, required: true },
-  record: { type: Object, required: true },
+  record: { type: Object, default: () => ({}) },
   title: { type: String, default: '' },
   // Render mode handed to the `_fields` resolver: 'add' -> _fields/<type>/Add.vue,
   // 'edit' -> _fields/<type>/Edit.vue. Create.vue leaves the default; Update.vue
@@ -467,9 +467,11 @@ function resolveDefaultValues () {
   const ctx = modifierContext()
   let resolved = raw
 
+  const currentRecord = props.record || {}
+
   if (typeof raw === 'function') {
     try {
-      resolved = raw(props.record, ctx)
+      resolved = raw(currentRecord, ctx)
     } catch (err) {
       console.error('[FormRecord] defaultValues function failed:', err)
       resolved = {}
@@ -481,7 +483,7 @@ function resolveDefaultValues () {
   for (const [header, value] of Object.entries(resolved)) {
     if (typeof value === 'function') {
       try {
-        out[header] = value(props.record, ctx)
+        out[header] = value(currentRecord, ctx)
       } catch (err) {
         console.error(`[FormRecord] defaultValues["${header}"] function failed:`, err)
         continue
@@ -503,8 +505,9 @@ function resolveDefaultValues () {
 }
 
 function seedDefaults () {
+  const currentRecord = props.record || {}
   for (const [header, value] of Object.entries(resolveDefaultValues())) {
-    if (props.record[header] !== undefined) continue
+    if (currentRecord[header] !== undefined) continue
     const field = orderedFields.value.find((f) => f.header === header)
     emit('update:field', header, value, { custom: !!field?.custom })
   }
