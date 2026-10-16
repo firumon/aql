@@ -6,8 +6,8 @@
     v-bind="finalProps"
   />
 
-  <!-- Fallback to AqlList directly -->
-  <AqlList
+  <!-- Fallback to AppList directly -->
+  <AppList
     v-else
     v-bind="finalProps"
     @click="handleItemClick"
@@ -19,7 +19,7 @@ import { computed, useAttrs } from 'vue'
 import { useCommonSection } from 'src/composables/resources/useCommonSection'
 import { useResourceNav } from 'src/composables/resources/useResourceNav'
 import { useDefaultListProps } from 'src/composables/resources/useDefaultListProps'
-import AqlList from 'components/shared/AqlList.vue'
+import AppList from 'components/app/AppList.vue'
 
 defineOptions({ name: 'CommonList', inheritAttrs: false })
 
@@ -33,7 +33,6 @@ const emit = defineEmits(['navigate-to-view'])
 const nav = useResourceNav()
 const attrs = useAttrs()
 
-// Generate default props for AqlList based on resolvedFields
 const defaultProps = computed(() => useDefaultListProps(props.resolvedFields))
 
 // Combine defaults with props and raw attribute overrides

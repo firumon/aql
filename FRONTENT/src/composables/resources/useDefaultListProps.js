@@ -1,9 +1,5 @@
 import { computed } from 'vue'
 
-/**
- * Outputs default AqlList props based on resolvedFields.
- * @param {Array|import('vue').Ref<Array>} fieldsRef
- */
 export function useDefaultListProps(fields) {
   const resolvedFields = Array.isArray(fields) ? fields : (fields?.value || [])
 

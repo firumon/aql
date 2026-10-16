@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <q-page padding>
     <HeaderPanel
       :title="isEditMode ? 'Edit Warehouse Transfer' : 'New Warehouse Transfer'"
@@ -155,7 +155,7 @@
       </q-card-section>
 
       <q-card-section class="q-px-none">
-        <AqlList
+        <AppList
           :items="addedItems"
           :item-key="item => item.TransferItemKey"
           label="ProductName"
@@ -208,7 +208,7 @@ import { useWarehouseTransfers } from '../../../composables/operation/warehouseT
 import HeaderPanel from 'components/shared/HeaderPanel.vue'
 import StepProgressIndicator from 'components/shared/StepProgressIndicator.vue'
 import AqlGroupedList from 'components/app/AqlGroupedList.vue'
-import AqlList from 'components/shared/AqlList.vue'
+import AppList from 'components/app/AppList.vue'
 import SectionDividerLabel from "components/shared/SectionDividerLabel.vue";
 
 defineOptions({ name: 'WarehouseTransfersAddPage' })

@@ -128,7 +128,7 @@
         </q-card-section>
         <q-separator />
         <q-card-section>
-          <AqlList
+          <AppList
             dense
             :items="childItems"
             item-key="Code"
@@ -233,7 +233,7 @@ import { useResourceNav } from 'src/composables/resources/useResourceNav'
 import { useWarehouseTransfers } from '../../../composables/operation/warehouseTransfers/useWarehouseTransfers.js'
 import { useProductSkuResolver } from 'src/composables/master/products/useProductSkuResolver'
 import GenericHeaderPanel from 'components/shared/GenericHeaderPanel.vue'
-import AqlList from 'components/shared/AqlList.vue'
+import AppList from 'components/app/AppList.vue'
 import SectionDividerLabel from 'components/shared/SectionDividerLabel.vue'
 import StepProgressIndicator from 'components/shared/StepProgressIndicator.vue'
 import ResourceActionButton from 'components/shared/ResourceActionButton.vue'

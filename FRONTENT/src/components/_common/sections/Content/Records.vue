@@ -20,7 +20,7 @@
       <div v-else-if="!items.length" class="q-py-lg text-center text-grey-6">
         {{ finalProps.emptyMessage || 'No records found' }}
       </div>
-      <AqlList
+      <AppList
         v-else
         :items="finalProps.items"
         :bordered="false"
@@ -53,7 +53,7 @@
             </div>
           </div>
         </template>
-      </AqlList>
+      </AppList>
     </q-card-section>
   </q-card>
 </template>
@@ -65,7 +65,7 @@ import { useSectionResolver } from 'src/composables/resources/useSectionResolver
 import Loading from 'components/_common/sections/Content/Loading.vue'
 import Empty from 'components/_common/sections/Content/Empty.vue'
 import RecordComponent from 'components/_common/sections/Content/RecordsRecord.vue'
-import AqlList from 'components/shared/AqlList.vue'
+import AppList from 'components/app/AppList.vue'
 
 const props = defineProps({
   items: { type: Array, default: () => [] },

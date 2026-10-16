@@ -177,7 +177,7 @@ const props = defineProps({ item: { type: Object, required: true } })
 |---|---|
 | `abstract/List.vue` | content loop, meta loop, btn section, checkbox sections (left & right) |
 
-`components/shared/AqlList.vue` is a near-duplicate of `abstract/List.vue` (its own `getComponentType`) that has **not** adopted this contract, and still backs the `#content2`/`#empty` slots on several pages. Its list props are deliberately left un-widened so they don't advertise support it lacks. Converging the two is open work.
+`components/shared/AqlList.vue` has been removed. All list rendering is converged onto `abstract/List.vue` via `app/AppList.vue`.
 
 ---
 

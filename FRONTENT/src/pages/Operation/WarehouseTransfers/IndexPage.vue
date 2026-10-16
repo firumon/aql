@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <q-page padding class="aql-page-container">
     <!-- Header + Reload -->
     <div class="row items-center justify-between no-wrap q-mb-md">
@@ -34,7 +34,7 @@
     <template v-else-if="searchTerm">
       <div class="text-subtitle1 text-weight-medium q-mb-sm">Search Results</div>
       <div v-if="!searchedTransfers.length" class="text-grey text-center q-pa-xl">No matching transfers found.</div>
-      <AqlList
+      <AppList
         v-else dense separator
         item-key="Code"
         :highlight="true"
@@ -55,7 +55,7 @@
       <!-- APPROVED (priority 1) -->
       <template v-if="approvedTransfers.length">
         <SectionDividerLabel label="APPROVED" class="q-mb-xs" />
-        <AqlList
+        <AppList
           class="q-mb-lg" dense separator
           item-key="Code"
           :highlight="true"
@@ -75,7 +75,7 @@
       <!-- PENDING_APPROVAL (priority 2) -->
       <template v-if="pendingTransfers.length">
         <SectionDividerLabel label="PENDING APPROVAL" class="q-mb-xs" />
-        <AqlList
+        <AppList
           class="q-mb-lg" dense separator
           item-key="Code"
           :highlight="true"
@@ -95,7 +95,7 @@
       <!-- DRAFT (priority 3) -->
       <template v-if="draftTransfers.length">
         <SectionDividerLabel label="DRAFTS" class="q-mb-xs" />
-        <AqlList
+        <AppList
           class="q-mb-lg" dense separator
           item-key="Code"
           :highlight="true"
@@ -131,7 +131,7 @@
               </span>
             </q-item-section>
           </template>
-          <AqlList
+          <AppList
             class="q-pt-sm" dense separator
             item-key="Code"
             :highlight="true"
@@ -165,7 +165,7 @@ import HeaderPanel from 'components/shared/HeaderPanel.vue'
 import ReloadButton from 'components/shared/ReloadButton.vue'
 import ResourceReports from 'components/Reports/ResourceReports.vue'
 import SectionDividerLabel from 'components/shared/SectionDividerLabel.vue'
-import AqlList from 'components/shared/AqlList.vue'
+import AppList from 'components/app/AppList.vue'
 import DataAddFAB from 'components/shared/DataAddFAB.vue'
 import { useResourceNav } from 'src/composables/resources/useResourceNav'
 

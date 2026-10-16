@@ -21,7 +21,7 @@
 
       <q-separator />
 
-      <AqlList
+      <AppList
         :items="rows"
         item-key="sku"
         :label="(row) => row.name"
@@ -40,7 +40,7 @@
 <script setup>
 import { computed, useAttrs } from 'vue'
 import SectionDividerLabel from 'components/shared/SectionDividerLabel.vue'
-import AqlList from 'components/shared/AqlList.vue'
+import AppList from 'components/app/AppList.vue'
 import { useConsumptionAddContext } from 'src/_ui/AQL/composables/Operation/OutletConsumptions/Add/useConsumptionAddContext'
 import { useSkuResource } from 'src/_resource/Master/SKUs/composables/useSkuResource'
 import { NODE, stepVisible } from 'src/_ui/AQL/composables/Operation/OutletConsumptions/Add/nodes'

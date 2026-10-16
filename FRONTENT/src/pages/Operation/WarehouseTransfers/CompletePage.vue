@@ -168,7 +168,6 @@ import { useResourceNav } from 'src/composables/resources/useResourceNav'
 import { useWarehouseTransfers } from '../../../composables/operation/warehouseTransfers/useWarehouseTransfers.js'
 import GenericHeaderPanel from 'components/shared/GenericHeaderPanel.vue'
 import SectionDividerLabel from 'components/shared/SectionDividerLabel.vue'
-import AqlList from "components/shared/AqlList.vue";
 
 defineOptions({ name: 'WarehouseTransfersCompletePage' })
 
