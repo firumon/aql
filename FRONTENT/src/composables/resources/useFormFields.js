@@ -312,12 +312,14 @@ export function useFormFields(resourceName) {
     if (!cfg) return map
 
     const options = cfg.ui?.options || cfg.options || {}
-    const headers = Array.isArray(cfg.headers) ? cfg.headers : []
 
-    for (const header of headers) {
-      const list = options[header]
+    for (const [header, list] of Object.entries(options)) {
       if (Array.isArray(list) && list.length) {
-        map[header] = list.map((v) => ({ label: String(v), value: v }))
+        map[header] = list.map((v) => (
+          typeof v === 'object' && v !== null && 'value' in v
+            ? v
+            : { label: String(v), value: v }
+        ))
       }
     }
     return map
