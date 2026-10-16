@@ -28,7 +28,7 @@ graph TD
 | `Products` | Master product definitions with variant configuration | `Status` (`Active`, `Inactive`), `VariantTypes` (CSV) |
 | `SKUs` | Individual inventory items / variants under a product | `ProductCode`, `Variant1`..`Variant5`, `Status` |
 | `Suppliers` | Supplier profiles, currency, and contact info | `Status` (`Active`, `Inactive`) |
-| `PurchaseRequisitions` | Internal purchase requests | `Progress` (`Draft`, `Submitted`, `Approved`, `Cancelled`) |
+| `PurchaseRequisitions` | Internal purchase requests | `Progress` (`Draft`, `Pending Approval`, `Revision Required`, `Approved`, `RFQ Processed`, `Rejected`) |
 | `RFQs` | Request for Quotation sent to suppliers | `Progress` (`Draft`, `Sent`, `Closed`, `Cancelled`) |
 | `SupplierQuotations` | Captured supplier pricing responses | `Progress` (`Received`, `Accepted`, `Rejected`) |
 | `PurchaseOrders` | Official purchase order contracts issued to suppliers | `Progress` (`DRAFT`, `PO_ISSUED`, `GOODS_RECEIVING`, `GRN_GENERATED`, `COMPLETED`, `CANCELLED`) |
@@ -50,7 +50,7 @@ graph TD
 - **Composite Add/Edit UX**: Creating or editing a product dynamically generates variant input tables based on `VariantTypes`.
 
 ### 3.2 RFQ Supplier Dispatch & Quotations
-1. **Requisition**: Purchasing need is identified based on inventory stock-out risk.
+1. **Requisition**: Purchasing need is identified based on inventory stock-out risk. Requisitions use [AqlSkuPicker.vue](file:///f:/AQL/FRONTENT/src/components/shared/AqlSkuPicker.vue) for click-and-go SKU selection without typing.
 2. **RFQ Dispatch**: RFQ is created and dispatched to eligible suppliers for competitive bidding.
 3. **Quotation Capture**: Received quotes are entered into `SupplierQuotations` for comparison (unit cost, lead time, payment terms).
 
