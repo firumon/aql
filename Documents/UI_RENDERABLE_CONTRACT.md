@@ -166,8 +166,8 @@ const props = defineProps({ item: { type: Object, required: true } })
 |---|---|
 | **No functional components as values** | `isComponentDef` is object-only by necessity: a resolver `(item) => item.Date` and a functional component are both plain functions and cannot be told apart. Wrap in `defineComponent()`. |
 | **Multi-branch props don't collapse** | `avatar` selects between `avatar` / `avatarLabel` / `icon` *before* resolving a value, so it is not a single value + wrapper. It needs its own resolver feeding `:value`. |
-| **Attrs evaluate unconditionally** | `:color="btnColor(item)"` runs even when a slot replaces the cell. Cheap normally; keep the section `v-if` if a host's attrs are expensive. |
 | **Row click suppression** | In `abstract/List.vue`, `isItemClickable` is `props.clickable && !props.btn && !slots.btn` — setting `btn` (component or not) makes rows non-clickable. Intended, but a visible behaviour change when adding buttons to a previously navigable list. |
+| **Simultaneous input + action button** | `abstract/List.vue` supports rendering both `input` and `btn` (or `#input` and `#btn`) side-by-side in a flex row. Clicking the button emits `@btn-click`, `@action-click`, and `@click` with the item row, while typing emits `@input-change`. |
 
 ---
 

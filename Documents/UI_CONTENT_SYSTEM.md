@@ -118,8 +118,7 @@ Every prop defaults to `undefined` so `useListStrategy` stays authoritative unle
   - `inputProps`: Object | Function. Direct props forwarded to `QInput` (e.g. `{ type: 'number', outlined: true }`).
   - Precedence: `inputLabel` > `inputProps.label` > `input.label`.
   - Event: emits `@input-change` with `{ value, item, itemKey, itemKeyValue, field }`.
-  - Mutation guard: if `v-model` is provided, source `item` is never mutated. If `v-model` is omitted, typing directly mutates `item[field]`.
-- **Row action**: `btn`, `btnColor`
+- **Row action**: `btn`, `btnColor`. Can be used independently or simultaneously alongside `input` (`input` + `btn` side-by-side flex row). Button click emits `@btn-click`, `@action-click`, and `@click` with the item row.
 - **Pagination**: `paginate` (Boolean, defaults to `true` in `abstract/List.vue`), `perPage` (Number, default `25`), `threshold` (Number, default `35`), `page` (Number, controlled current page synced with `resourceRecord.currentPage`)
 
 Function-valued props (`label`, `caption`, `chipColor`, ...) are per-item resolvers — `(item) => value` — consumed by `abstract/List.vue` and forwarded untouched.

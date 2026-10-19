@@ -99,7 +99,35 @@
 
           <!-- Right Side: 1. Input, 2. Checkbox, 3. Action Button -->
           <q-item-section v-if="isItemInput(item) || slots.input" side :top="align === 'top'">
-            <slot name="input" :item="item" :index="index">
+            <div v-if="hasBtn(item) || slots.btn" class="row items-center no-wrap q-gutter-x-xs">
+              <slot name="input" :item="item" :index="index">
+                <component
+                  :is="isComponentDef(input) ? input : ListInput"
+                  :item="item"
+                  v-model="model"
+                  :input="input"
+                  :input-props="inputProps"
+                  :input-label="inputLabel"
+                  :input-key="inputKey"
+                  :input-value="inputValue"
+                  :val="val"
+                  :item-key="itemKey"
+                  :dense="dense"
+                  @input-change="emit('input-change', $event)"
+                />
+              </slot>
+              <Renderable
+                :slot-fn="slots.btn"
+                :value="btn"
+                :item="item"
+                :is="QBtn"
+                value-prop="icon"
+                flat round dense
+                :color="btnColor(item)"
+                @click.stop="onActionClick(item)"
+              />
+            </div>
+            <slot v-else name="input" :item="item" :index="index">
               <component
                 :is="isComponentDef(input) ? input : ListInput"
                 :item="item"
@@ -239,6 +267,8 @@ const props = defineProps({
 
 const emit = defineEmits([
   'click',
+  'action-click',
+  'btn-click',
   'update:page',
   'update:modelValue',
   'update:model-value',
@@ -462,6 +492,8 @@ function hasBtn(item) {
 
 function onActionClick(item) {
   emit('click', item)
+  emit('action-click', item)
+  emit('btn-click', item)
 }
 
 const metaArray = computed(() => {
