@@ -26,24 +26,52 @@ var PURCHASE_REQUISITIONS_RESOURCE_NAME = 'PurchaseRequisitions';
  * }
  */
 function linkProcurementCodeToPurchaseRequisition_afterCreate(payload, result, auth, action, meta, resourceName) {
-  try {
-    if (!result || result.success !== true) return result;
+  return result;
+}
 
-    var procurementCode = resolveCreatedProcurementCode(result, meta);
-    var linkedPrCode = payload && payload.linkedPurchaseRequisitionCode
-      ? payload.linkedPurchaseRequisitionCode.toString().trim()
-      : '';
+function handlePurchaseRequisitions_afterExecuteAction(payload, result, auth, action, meta, resourceName) {
+  var actionName = (meta && meta.actionName ? meta.actionName : (payload && payload.actionName ? payload.actionName : '')).toString().trim();
+  var savedRecord = meta && meta.savedRecord ? meta.savedRecord : null;
+  if (!savedRecord || !savedRecord.Code) return result;
 
-    if (!procurementCode || !linkedPrCode) return result;
+  var prCode = (savedRecord.Code || '').toString().trim();
+  var existingProcCode = (savedRecord.ProcurementCode || '').toString().trim();
+  var user = auth && auth.user ? (auth.user.Name || auth.user.UserID || '') : '';
+  var role = auth && auth.user ? (auth.user.Role || auth.user.RoleName || '') : '';
 
-    updateResourceRecordFieldsByCode(
-      PURCHASE_REQUISITIONS_RESOURCE_NAME,
-      linkedPrCode,
-      { ProcurementCode: procurementCode },
-      auth
-    );
-  } catch (e) {
-    Logger.log('linkProcurementCodeToPurchaseRequisition_afterCreate ERROR: ' + String(e));
+  if (actionName.toLowerCase() === 'approve') {
+    if (!existingProcCode) {
+      var procPayload = {
+        resource: PROCUREMENT_RESOURCE_NAME,
+        record: {
+          Progress: 'PR_APPROVED',
+          InitiatedDate: formatDateTime24(),
+          CreatedUser: user,
+          CreatedRole: role,
+          Status: 'Active'
+        }
+      };
+      var createRes = handleResourceCreateRecord(auth, procPayload);
+      if (createRes && createRes.success && createRes.data && createRes.data.code) {
+        var newProcCode = createRes.data.code.toString().trim();
+        updateResourceRecordFieldsByCode(PURCHASE_REQUISITIONS_RESOURCE_NAME, prCode, {
+          ProcurementCode: newProcCode
+        }, auth);
+        if (result && result.data) {
+          result.data.procurementCode = newProcCode;
+        }
+      }
+    } else {
+      updateResourceRecordFieldsByCode(PROCUREMENT_RESOURCE_NAME, existingProcCode, {
+        Progress: 'PR_APPROVED'
+      }, auth);
+    }
+  } else if (actionName.toLowerCase() === 'reject') {
+    if (existingProcCode) {
+      updateResourceRecordFieldsByCode(PROCUREMENT_RESOURCE_NAME, existingProcCode, {
+        Progress: 'CANCELLED'
+      }, auth);
+    }
   }
 
   return result;

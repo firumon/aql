@@ -2098,6 +2098,8 @@ function handleExecuteAction(auth, payload) {
   var sideEffectResources = [];
   if (resourceName === 'WarehouseTransfers') {
     sideEffectResources.push('WarehouseTransferItems', 'StockMovements', 'WarehouseStorages');
+  } else if (resourceName === 'PurchaseRequisitions') {
+    sideEffectResources.push('Procurements');
   }
   if (sideEffectResources.length) {
     var deltaPayloads = collectWriteDeltaResources(auth, payload, sideEffectResources);

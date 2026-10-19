@@ -249,7 +249,7 @@ function initAppResourcesCodeConfig() {
         AccessRegionSource: '',
         OwnerUserField: 'CreatedBy',
         AdditionalActions: '',
-        Menu: JSON.stringify([{"group":["Procurement"],"order":1,"label":"Suppliers","icon":"business","route":"/master/suppliers","pageTitle":"Suppliers","pageDescription":"Manage supplier master records","show":true}]),
+        Menu: JSON.stringify([{"group":["Purchase"],"order":1,"label":"Suppliers","icon":"business","route":"/master/suppliers","pageTitle":"Suppliers","pageDescription":"Manage supplier master records","show":true}]),
         UIFields: JSON.stringify([
             { header: 'Name', label: 'Name', type: 'text', required: true },
             { header: 'Country', label: 'Country', type: 'openselect', source: 'Existing' },
@@ -608,7 +608,7 @@ function initAppResourcesCodeConfig() {
         IncludeInAuthorizationPayload: 'TRUE',
         Functional: 'FALSE',
         PreAction: '',
-        PostAction: 'linkProcurementCodeToPurchaseRequisition',
+        PostAction: '',
         Reports: '',
         CustomUIName: '',
         ListViews: JSON.stringify([
@@ -633,18 +633,17 @@ function initAppResourcesCodeConfig() {
         RequiredHeaders: 'Type,Priority',
         UniqueHeaders: '',
         UniqueCompositeHeaders: '',
-        DefaultValues: '{"Status":"Active","Progress":"Draft"}',
+        DefaultValues: '{"Status":"Active","Progress":"Draft","Type":"STOCK","Priority":"Medium"}',
         AccessRegionSource: '{"subject":[{"column":"WarehouseCode","resource":"Warehouses","empty":"next","fail":"user"},{"column":"ProcurementCode","resource":"Procurements","empty":"next","fail":"user"},{"user":true}]}',
         OwnerUserField: 'CreatedBy',
         AdditionalActions: JSON.stringify([
-            {"action":"Approve","label":"Approve","icon":"check_circle","color":"primary","kind":"mutate","confirm":false,"column":"Progress","columnValue":"Approved","columnValueOptions":[],"fields":[],"visibleWhen":{"column":"Progress","op":"eq","value":"Pending Approval"}},
-            {"action":"Reject","label":"Reject","icon":"cancel","color":"warning","kind":"mutate","confirm":false,"column":"Progress","columnValue":"Rejected","columnValueOptions":[],"fields":[{"name":"Comment","label":"Comment","type":"textarea","required":true}],"visibleWhen":{"column":"Progress","op":"eq","value":"Pending Approval"}},
-            {"action":"SendBack","label":"Request Revision","icon":"undo","color":"info","kind":"mutate","confirm":false,"column":"Progress","columnValue":"Revision Required","columnValueOptions":[],"fields":[{"name":"Comment","label":"Comment","type":"textarea","required":true}],"visibleWhen":{"column":"Progress","op":"eq","value":"Pending Approval"}},
-            {"action":"Review","label":"Review Requisition","icon":"rate_review","color":"primary","kind":"navigate","confirm":false,"navigate":{"target":"record","pageSlug":"review"},"visibleWhen":{"column":"Progress","op":"eq","value":"Pending Approval"}}
+            {"action":"Approve","label":"Approve","icon":"check_circle","color":"positive","kind":"mutate","confirm":false,"column":"Progress","columnValue":"Approved","columnValueOptions":[],"fields":[{"name":"Comment","label":"Approval Comment","type":"textarea","required":false}],"visibleWhen":{"column":"Progress","op":"eq","value":"Pending Approval"}},
+            {"action":"SendBack","label":"Request Revision","icon":"undo","color":"warning","kind":"mutate","confirm":false,"column":"Progress","columnValue":"Revision Required","columnValueOptions":[],"fields":[{"name":"Comment","label":"Revision Instructions","type":"textarea","required":true}],"visibleWhen":{"column":"Progress","op":"eq","value":"Pending Approval"}},
+            {"action":"Reject","label":"Reject","icon":"cancel","color":"negative","kind":"mutate","confirm":false,"column":"Progress","columnValue":"Rejected","columnValueOptions":[],"fields":[{"name":"Comment","label":"Rejection Reason","type":"textarea","required":true}],"visibleWhen":{"column":"Progress","op":"eq","value":"Pending Approval"}}
         ]),
         Menu: JSON.stringify([
-            {"group":["Procurement"],"order":2,"label":"Requisitions","icon":"request_quote","route":"/operation/purchase-requisitions","pageTitle":"Purchase Requisitions","pageDescription":"Internal requests for purchase","show":true},
-            {"group":["Procurement"],"order":3,"label":"Initiate Purchase Requisitions","icon":"request_quote","route":"/operation/purchase-requisitions/initiate-purchase-requisitions","pageTitle":"Purchase Requisitions","pageDescription":"Initiate Purchase Requisition","show":true,"menuAccess":{"require":"canWrite"}}
+            {"group":["Purchase"],"order":2,"label":"Requisitions","icon":"request_quote","route":"/operation/purchase-requisitions","pageTitle":"Purchase Requisitions","pageDescription":"Internal requests for purchase","show":true},
+            {"group":["Purchase"],"order":3,"label":"Revise Purchase Requisition","icon":"rate_review","route":"/operation/purchase-requisitions/revisions","pageTitle":"Revise Purchase Requisition","pageDescription":"Revise requisitions requested for changes","show":true,"menuAccess":{"require":"canWrite"}}
         ]),
         UIFields: JSON.stringify([
             { header: 'ProcurementCode', label: 'Procurement Code', type: 'text' },
@@ -670,11 +669,12 @@ function initAppResourcesCodeConfig() {
         IncludeInAuthorizationPayload: 'TRUE',
         Functional: 'FALSE',
         PreAction: '',
-        PostAction: '',
+        PostAction: 'handlePurchaseRequisitions',
         Reports: '',
         CustomUIName: '',
         ListViews: JSON.stringify([
-            { "name": "Drafts", "label": "My Drafts", "icon": "edit_note", "color": "grey-7", "default": true, "filter": { "type": "group", "logic": "AND", "items": [{ "type": "condition", "column": "Progress", "operator": "eq", "value": "Draft" }] } },
+            { "name": "Recent", "label": "Recent", "icon": "history", "color": "primary", "default": true, "filter": { "type": "group", "logic": "AND", "items": [{ "type": "condition", "column": "Progress", "operator": "neq", "value": "RFQ Processed" }, { "type": "condition", "column": "Status", "operator": "eq", "value": "Active" }] } },
+            { "name": "Drafts", "label": "My Drafts", "icon": "edit_note", "color": "grey-7", "default": false, "filter": { "type": "group", "logic": "AND", "items": [{ "type": "condition", "column": "Progress", "operator": "eq", "value": "Draft" }] } },
             { "name": "PendingApproval", "label": "Awaiting Approval", "icon": "hourglass_top", "color": "warning", "default": false, "filter": { "type": "group", "logic": "AND", "items": [{ "type": "condition", "column": "Progress", "operator": "eq", "value": "Pending Approval" }] } },
             { "name": "NeedsRevision", "label": "Needs Revision", "icon": "rate_review", "color": "orange", "default": false, "filter": { "type": "group", "logic": "AND", "items": [{ "type": "condition", "column": "Progress", "operator": "eq", "value": "Revision Required" }] } },
             { "name": "Approved", "label": "Approved", "icon": "task_alt", "color": "primary", "default": false, "filter": { "type": "group", "logic": "AND", "items": [{ "type": "condition", "column": "Progress", "operator": "eq", "value": "Approved" }] } },
@@ -703,7 +703,7 @@ function initAppResourcesCodeConfig() {
         RequiredHeaders: 'Code,PurchaseRequisitionCode,SKU,UOM,Quantity',
         UniqueHeaders: 'Code',
         UniqueCompositeHeaders: '',
-        DefaultValues: '{"Quantity":0,"EstimatedRate":0}',
+        DefaultValues: '{"Status":"Active","UOM":"PCS","Quantity":1}',
         AccessRegionSource: '',
         OwnerUserField: 'CreatedBy',
         AdditionalActions: '',
@@ -712,8 +712,7 @@ function initAppResourcesCodeConfig() {
             { header: 'PurchaseRequisitionCode', label: 'Purchase Requisition Code', type: 'text' },
             { header: 'SKU', label: 'SKU', type: 'text' },
             { header: 'UOM', label: 'Unit of Measure', type: 'text' },
-            { header: 'Quantity', label: 'Quantity', type: 'number' },
-            { header: 'EstimatedRate', label: 'Estimated Rate', type: 'currency' }
+            { header: 'Quantity', label: 'Quantity', type: 'number' }
         ]),
         IncludeInAuthorizationPayload: 'TRUE',
         Functional: 'FALSE',
@@ -749,7 +748,7 @@ function initAppResourcesCodeConfig() {
             {"action":"Close","label":"Close RFQ","icon":"lock","color":"negative","kind":"mutate","confirm":true,"column":"Progress","columnValue":"CLOSED","columnValueOptions":[],"fields":[],"visibleWhen":{"column":"Progress","op":"eq","value":"SENT"}}
         ]),
         Menu: JSON.stringify([
-            {"group":["Procurement"],"order":4,"label":"Request For Quotations","icon":"request_quote","route":"/operation/rfqs","pageTitle":"Request for Quotations","pageDescription":"Manage requests for quotation","show":true}
+            {"group":["Purchase"],"order":4,"label":"Request For Quotations","icon":"request_quote","route":"/operation/rfqs","pageTitle":"Request for Quotations","pageDescription":"Manage requests for quotation","show":true}
         ]),
         UIFields: JSON.stringify([
             { header: 'ProcurementCode', label: 'Procurement Code', type: 'text' },
@@ -837,7 +836,7 @@ function initAppResourcesCodeConfig() {
             SupplierCode: CONFIG.MASTER_SHEETS.SUPPLIERS
         }),
         Options: JSON.stringify({
-            Progress: ['ASSIGNED', 'SENT', 'RESPONDED', 'DECLINED', 'CANCELLED']
+            Progress: ['ASSIGNED', 'SENT', 'RESPONDED', 'CANCELLED']
         })
     },
     {
@@ -860,7 +859,7 @@ function initAppResourcesCodeConfig() {
             {"action":"Reject","label":"Reject","icon":"block","color":"negative","kind":"mutate","confirm":false,"column":"Progress","columnValue":"REJECTED","columnValueOptions":[],"fields":[{"name":"Comment","label":"Rejection Comment","type":"textarea","required":true}],"visibleWhen":{"column":"Progress","op":"eq","value":"RECEIVED"}}
         ]),
         Menu: JSON.stringify([
-            {"group":["Procurement"],"order":5,"label":"Supplier Quotations","icon":"request_quote","route":"/operation/supplier-quotations","pageTitle":"Supplier Quotations","pageDescription":"Record and manage supplier quotation responses","show":true}
+            {"group":["Purchase"],"order":5,"label":"Supplier Quotations","icon":"request_quote","route":"/operation/supplier-quotations","pageTitle":"Supplier Quotations","pageDescription":"Record and manage supplier quotation responses","show":true}
         ]),
         UIFields: JSON.stringify([
             { header: 'ProcurementCode', label: 'Procurement Code', type: 'text' },
@@ -985,7 +984,7 @@ function initAppResourcesCodeConfig() {
             {"action":"Cancel","label":"Cancel","icon":"cancel","color":"negative","kind":"navigate","confirm":false,"column":"Progress","columnValue":"CANCELLED","columnValueOptions":[],"fields":[{"name":"Comment","label":"Cancel Comment","type":"textarea","required":true}],"navigate":{"target":"record","pageSlug":"cancel-order"},"visibleWhen":{"column":"Progress","op":"in","value":["CREATED","SENT","ACKNOWLEDGED"]}}
         ]),
         Menu: JSON.stringify([
-            {"group":["Procurement"],"order":6,"label":"Purchase Orders","icon":"receipt_long","route":"/operation/purchase-orders","pageTitle":"Purchase Orders","pageDescription":"Manage purchase orders","show":true,"menuAccess":{"require":"canWrite"}}
+            {"group":["Purchase"],"order":6,"label":"Purchase Orders","icon":"receipt_long","route":"/operation/purchase-orders","pageTitle":"Purchase Orders","pageDescription":"Manage purchase orders","show":true,"menuAccess":{"require":"canWrite"}}
         ]),
         UIFields: JSON.stringify([
             { header: 'ProcurementCode', label: 'Procurement Code', type: 'text' },
@@ -1100,7 +1099,7 @@ function initAppResourcesCodeConfig() {
             {"action":"Cancel","label":"Cancel","icon":"cancel","color":"negative","kind":"navigate","confirm":false,"column":"Progress","columnValue":"CANCELLED","columnValueOptions":[],"fields":[{"name":"Comment","label":"Cancellation Comment","type":"textarea","required":true}],"navigate":{"target":"record","pageSlug":"cancel-receiving"},"visibleWhen":{"column":"Progress","op":"in","value":["DRAFT","CONFIRMED","GRN_GENERATED"]}}
         ]),
         Menu: JSON.stringify([
-            {"group":["Procurement"],"order":7,"label":"PO Receiving","icon":"inventory_2","route":"/operation/po-receivings","pageTitle":"PO Receiving","pageDescription":"Inspect received purchase order quantities before GRN finalization","show":true,"menuAccess":{"require":"canWrite"}}
+            {"group":["Purchase"],"order":7,"label":"PO Receiving","icon":"inventory_2","route":"/operation/po-receivings","pageTitle":"PO Receiving","pageDescription":"Inspect received purchase order quantities before GRN finalization","show":true,"menuAccess":{"require":"canWrite"}}
         ]),
         UIFields: JSON.stringify([
             { header: 'ProcurementCode', label: 'Procurement Code', type: 'text' },
@@ -1198,7 +1197,7 @@ function initAppResourcesCodeConfig() {
             {"action":"Invalidate","label":"Invalidate","icon":"block","color":"negative","kind":"mutate","confirm":true,"column":"Status","columnValue":"Inactive","columnValueOptions":[],"fields":[],"visibleWhen":{"column":"Status","op":"eq","value":"Active"}}
         ]),
         Menu: JSON.stringify([
-            {"group":["Procurement"],"order":8,"label":"Goods Receipts","icon":"fact_check","route":"/operation/goods-receipts","pageTitle":"Goods Receipts","pageDescription":"View finalized GRNs generated from PO Receiving","show":true}
+            {"group":["Purchase"],"order":8,"label":"Goods Receipts","icon":"fact_check","route":"/operation/goods-receipts","pageTitle":"Goods Receipts","pageDescription":"View finalized GRNs generated from PO Receiving","show":true}
         ]),
         UIFields: JSON.stringify([
             { header: 'ProcurementCode', label: 'Procurement Code', type: 'text' },
@@ -1279,9 +1278,9 @@ function initAppResourcesCodeConfig() {
             { "action": "warehouseTransfer", "label": "Warehouse Transfer", "kind": "mutate", "confirm": false, "column": "ReferenceType", "columnValue": "WarehouseTransfer" }
         ]),
         Menu: JSON.stringify([
-            {"group":["Warehouse"],"order":2,"label":"Stock Movements","icon":"inventory","route":"/operation/stock-movements","pageTitle":"Stock Movements","pageDescription":"View stock movement records","show":true,"menuAccess":{"require":"canRead"}},
-            {"group":["Warehouse"],"order":3,"label":"Direct Stock Entry","icon":"edit_note","route":"/operation/stock-movements/direct-entry","pageTitle":"Direct Stock Entry","pageDescription":"Directly enter stock quantities","show":true,"menuAccess":{"require":"canDirectEntry"}},
-            {"group":["Warehouse"],"order":4,"label":"GRN Stock Entry","icon":"receipt_long","route":"/operation/stock-movements/grn-entry","pageTitle":"GRN Stock Entry","pageDescription":"Post finalized GRN quantities into warehouse stock","show":true,"menuAccess":{"require":"canGrn"}}
+            {"group":["Purchase"],"order":9,"label":"Stock Movements","icon":"inventory","route":"/operation/stock-movements","pageTitle":"Stock Movements","pageDescription":"View stock movement records","show":true,"menuAccess":{"require":"canRead"}},
+            {"group":["Purchase"],"order":10,"label":"Direct Stock Entry","icon":"edit_note","route":"/operation/stock-movements/direct-entry","pageTitle":"Direct Stock Entry","pageDescription":"Directly enter stock quantities","show":true,"menuAccess":{"require":"canDirectEntry"}},
+            {"group":["Purchase"],"order":11,"label":"GRN Stock Entry","icon":"receipt_long","route":"/operation/stock-movements/grn-entry","pageTitle":"GRN Stock Entry","pageDescription":"Post finalized GRN quantities into warehouse stock","show":true,"menuAccess":{"require":"canGrn"}}
         ]),
         UIFields: JSON.stringify([
             { header: 'WarehouseCode', label: 'Warehouse Code', type: 'text' },
