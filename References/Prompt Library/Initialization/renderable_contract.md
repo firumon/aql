@@ -57,6 +57,7 @@ Replace the whole slot/`v-if`/wrapper cascade with one node:
 
 - `value-prop` when the wrapper takes the value as a **prop** (`QBtn`'s `icon`); omit it for the wrapper's **default slot** (`QItemLabel`'s children).
 - Keep the surrounding section's `v-if` gate — `Renderable` returning `null` does not remove the containing element.
+- **Dual input + button**: In `abstract/List.vue`, when both `input` and `btn` (or `#input` and `#btn`) are active, both render side-by-side in a flex row. Button clicks emit `@btn-click`, `@action-click`, and `@click`.
 
 ### 3.2 Prop declarations — the step that gets missed
 Declare every `Renderable`-routed prop as `[String, Function, Object]`, and **mirror it on every component in the forwarding chain**. A JS modifier's props hit `contents/<X>.vue` before `abstract/<X>.vue` and fail validation there first.

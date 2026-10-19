@@ -66,6 +66,10 @@ To custom-tailor content layouts:
     }
   }
   ```
+- **Row Inputs & Actions in `List` / `AppList`**:
+  - `input`: Activates row inputs (e.g. `:input="true"`, `input-value="Quantity"`, `input-props="{ type: 'number', min: 1 }"`). Emits `@input-change` with `{ value, item, itemKey, itemKeyValue, field }`.
+  - `btn`: Activates row action button (e.g. `btn="delete"`, `btn-color="negative"`).
+  - **Dual Input + Button**: `List.vue` supports simultaneous `input` and `btn` rendered side-by-side in a flex row. Button click emits `@btn-click`, `@action-click`, and `@click` with the item row.
 - For other content sections (Details, Form) the same pattern applies — the function receives `preparedProps` and returns the modified object.
 
 ### 2.2 Writing Vue Template Overrides
