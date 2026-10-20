@@ -1,5 +1,6 @@
 import { useAuth } from 'src/composables/core/useAuth'
 import {
+  recentPreset,
   draftsPreset,
   pendingApprovalPreset,
   needsRevisionPreset,
@@ -8,22 +9,19 @@ import {
   rejectedPreset
 } from 'src/_ui/AQL/composables/Operation/PurchaseRequisitions/Index/usePurchaseRequisitionRowPresets'
 
-// Sections run in urgency order: my queue, pipeline health, backlog age, then the work.
-const { user } = useAuth()
-
 export default {
   sections: [
     'PageHeader',
-    'MetricCards',
-    'LinearProgress',
-    'WorkflowFunnel',
-    'AgeingBuckets',
+    'QueueCards',
+    'SourcingCards',
+    'ApprovalAgeing',
     'FilterInput',
     'ListSwitcher'
   ],
   contents: ['List'],
 
-  PropsListDrafts: (props) => draftsPreset(props.items, user.value?.id),
+  PropsListRecent: (props) => recentPreset(props.items),
+  PropsListDrafts: (props) => draftsPreset(props.items, useAuth().user.value?.id),
   PropsListPendingApproval: (props) => pendingApprovalPreset(props.items),
   PropsListNeedsRevision: (props) => needsRevisionPreset(props.items),
   PropsListApproved: (props) => approvedPreset(props.items),

@@ -1,80 +1,35 @@
-import { useAuth } from 'src/composables/core/useAuth'
-import { buildRequisitionReviewChainNodes } from 'src/_resource/Operation/PurchaseRequisitions/composables/usePurchaseRequisitionPayload'
-import { isPendingApproval } from 'src/_resource/Operation/PurchaseRequisitions/composables/usePurchaseRequisitionProgress'
+import { validateRequisitionDraft } from 'src/_resource/Operation/PurchaseRequisitions/composables/usePurchaseRequisitionPayload'
+import {
+  REVIEW_ACTIONS, PROGRESS_STAMP_PREFIX, isPendingApproval
+} from 'src/_resource/Operation/PurchaseRequisitions/composables/usePurchaseRequisitionProgress'
 
 const NODE = 'PurchaseRequisitions'
 
-const text = (value) => String(value ?? '').trim()
-
-// [ Cancel ] [ Request Revision ] [ Reject ] [ Approve ]
-export default (props, { pageState, resourceConfig, resourceRecord }) => {
-  pageState.useNode(NODE)
-
-  const { user } = useAuth()
-
-  const requisition = () => {
-    const row = resourceRecord?.record?.value
-    return text(row?.Code) ? row : null
-  }
-
-  const procurement = () => requisition()?.$procurement || requisition()?.$Procurement || null
-
-  const comment = () => text(pageState.getControls('ReviewComment', null, NODE))
-
-  function run (action) {
-    const record = requisition()
-    if (!record) return { valid: false, message: 'This requisition could not be loaded.' }
-    if (!isPendingApproval(record)) {
-      return { valid: false, message: 'This requisition is no longer awaiting approval.' }
-    }
-
-    const result = buildRequisitionReviewChainNodes({
-      requisition: record,
-      action,
-      comment: comment(),
-      actorName: user.value?.name || user.value?.email || '',
-      procurement: procurement()
-    })
-
-    return result
-  }
-
+export default (props, { pageState, resourceRecord, resourceConfig }) => {
+  const decision = () => REVIEW_ACTIONS[pageState.getRecord('Progress', NODE)] || ''
   return {
-    actions: ['cancel', 'sendBack', 'reject', 'submit'],
-    submitLabel: 'Approve',
-
-    cancel: (name, { nav }) => {
-      nav.goTo('view')
-      return false
+    get showFormActions () {
+      const source = resourceRecord?.record?.value
+      return pageState.hasNode(NODE) && isPendingApproval(source) && resourceConfig.allowed('review', NODE, source)
     },
-
+    actions: ['cancel', 'submit'],
+    get submitLabel () {
+      return { approve: 'Approve Requisition', sendBack: 'Request Revision', reject: 'Reject Requisition' }[decision()] || 'Review'
+    },
+    get submitColor () { return { approve: 'positive', sendBack: 'warning', reject: 'negative' }[decision()] || 'primary' },
+    get submitIcon () { return { approve: 'check_circle', sendBack: 'undo', reject: 'cancel' }[decision()] || 'rate_review' },
+    cancel: (name, { nav }) => { nav.goTo('index'); return false },
     submit: () => {
-      const result = run('approve')
-      const applied = pageState.applyNodes(result)
-      if (applied.valid === false) return false
-      return { successMsg: applied.successMsg }
+      const source = resourceRecord?.record?.value
+      if (!decision()) return { valid: false, message: 'Please choose a review progress.' }
+      const error = pageState.getControls('submissionError', '', NODE)
+      const prefix = PROGRESS_STAMP_PREFIX[pageState.getRecord('Progress', NODE)]
+      const problem = error || validateRequisitionDraft({
+        source, action: decision(), comment: pageState.getRecord(`${prefix}Comment`, NODE)
+      })
+      if (problem) return { valid: false, message: problem }
+      if (!resourceConfig.allowed('review', NODE, source)) return { valid: false, message: 'You are not allowed to review this requisition.' }
     },
-
-    sendBack: (name, { nav }) => {
-      const result = run('sendBack')
-      const applied = pageState.applyNodes(result)
-      if (applied.valid === false) return false
-      return {
-        successMsg: applied.successMsg,
-        onSuccess: () => { pageState.reset(); nav.goTo('view') }
-      }
-    },
-
-    reject: (name, { nav }) => {
-      const result = run('reject')
-      const applied = pageState.applyNodes(result)
-      if (applied.valid === false) return false
-      return {
-        successMsg: applied.successMsg,
-        onSuccess: () => { pageState.reset(); nav.goTo('view') }
-      }
-    },
-
-    successRoute: 'view'
+    successRoute: 'index'
   }
 }

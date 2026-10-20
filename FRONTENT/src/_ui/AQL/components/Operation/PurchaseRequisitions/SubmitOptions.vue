@@ -1,52 +1,40 @@
 <template>
-  <div :class="gutterClass">
+  <div v-if="visible" :class="gutterClass">
     <template v-if="isDraftState">
       <q-card flat bordered :class="ui.cardClass">
         <q-card-section>
-          <div class="row items-center no-wrap q-col-gutter-sm">
-            <div class="col" :class="ui.flexWrapTextClass">
-              <div class="text-subtitle1 text-weight-medium">Save as draft</div>
-              <div class="text-caption text-grey-8">
-                Keep this requisition private until you are ready to send it for approval.
-              </div>
-            </div>
-            <div class="col-auto">
-              <q-toggle :model-value="isDraft" color="primary" @update:model-value="setDraft" />
-            </div>
-          </div>
+          <FieldToggleitemEdit
+            :model-value="isDraft"
+            :config="draftConfig"
+            header="isDraft"
+            @update:model-value="setDraft"
+          />
         </q-card-section>
       </q-card>
 
-      <q-card v-if="!isDraft" flat bordered :class="ui.cardClass">
-        <q-card-section :class="gutterClass">
-          <div class="text-subtitle1 text-weight-medium">Submission comment</div>
-          <div class="text-caption text-grey-8">
-            Anything the approver should know. Sent with the requisition.
-          </div>
-          <FieldTextareaEdit
-            :model-value="comment"
-            :record="record"
-            :config="COMMENT_CONFIG"
-            header="ProgressSubmittedComment"
-            @update:model-value="setComment"
+      <q-card v-if="canApprove && !isDraft" flat bordered :class="ui.cardClass">
+        <q-card-section>
+          <FieldToggleitemEdit
+            :model-value="isApproved"
+            :config="approvedConfig"
+            header="isApproved"
+            @update:model-value="setApproved"
           />
         </q-card-section>
       </q-card>
     </template>
 
     <q-card v-else-if="isRevision" flat bordered :class="ui.cardClass">
-      <q-card-section :class="gutterClass">
-        <div class="text-subtitle1 text-weight-medium">Resubmission comment</div>
-        <div class="text-caption text-grey-8">
-          Tell the approver what changed. Sent with the requisition when you resubmit.
+      <q-card-section>
+        <div class="row items-center no-wrap q-gutter-sm">
+          <q-icon name="info" color="info" size="20px" />
+          <div class="col" :class="ui.flexWrapTextClass">
+            <div class="text-subtitle2 text-weight-medium">Ready to Resubmit</div>
+            <div class="text-caption text-grey-8">
+              Saving this form will send your updated requisition back to the approver.
+            </div>
+          </div>
         </div>
-        <FieldTextareaEdit
-          :model-value="comment"
-          :record="record"
-          :config="RESUBMIT_CONFIG"
-          header="ProgressSubmittedComment"
-          @update:model-value="setComment"
-        />
       </q-card-section>
     </q-card>
   </div>
@@ -54,16 +42,36 @@
 
 <script setup>
 import { computed, useAttrs } from 'vue'
-import FieldTextareaEdit from 'src/_fields/textarea/Edit.vue'
+import { resolveFieldComponent } from 'src/_fields/useFieldResolver'
+const FieldToggleitemEdit = resolveFieldComponent('toggleitem', 'edit')
 import { useRequisitionFormContext } from 'src/_ui/AQL/composables/Operation/PurchaseRequisitions/useRequisitionFormContext'
 
 defineOptions({ name: 'PurchaseRequisitionsSubmitOptions', inheritAttrs: false })
 
-const COMMENT_CONFIG = { label: 'Comment (optional)' }
-const RESUBMIT_CONFIG = { label: 'Resubmission comment (optional)' }
+const props = defineProps({
+  step: { type: [Number, String], default: null }
+})
 
 const attrs = useAttrs()
 const gutterClass = computed(() => `q-gutter-y-${attrs.gutter || 'sm'}`)
 
-const { ui, record, isDraftState, isRevision, isDraft, comment, setDraft, setComment } = useRequisitionFormContext()
+const {
+  ui, isDraftState, isRevision, isDraft, setDraft, canApprove, isApproved, setApproved, pageState, editable
+} = useRequisitionFormContext()
+
+const visible = computed(() => editable.value && (props.step == null || Number(props.step) === (pageState?.meta?.currentStep || 1)))
+
+const draftConfig = computed(() => ({
+  label: 'Save as draft',
+  caption: isDraft.value
+    ? 'Keep this requisition private. It will not be sent for approval yet.'
+    : isApproved.value ? 'This requisition will be approved when saved.' : 'This requisition will be sent for approval when saved.'
+}))
+
+const approvedConfig = computed(() => ({
+  label: 'Approve now',
+  caption: isApproved.value
+    ? 'This requisition will be automatically approved upon saving.'
+    : 'This requisition will be submitted for approval.'
+}))
 </script>

@@ -12,10 +12,6 @@
           </div>
         </div>
 
-        <q-banner dense rounded class="bg-grey-2 q-mt-sm text-caption">
-          The requisition hands over to sourcing once it is approved. This is where the
-          wider procurement stands today.
-        </q-banner>
       </q-card-section>
     </q-card>
   </div>

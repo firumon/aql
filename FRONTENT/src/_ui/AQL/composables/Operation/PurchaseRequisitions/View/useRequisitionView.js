@@ -1,6 +1,7 @@
-import { computed, onMounted } from 'vue'
-import { usePageRecord } from 'src/composables/resources/usePageRecord'
-import { useSkuResource } from 'src/_resource/Master/SKUs/composables/useSkuResource'
+import { computed } from 'vue'
+import { parseAnyDate } from 'src/utils/dateHelpers'
+import { usePurchaseRequisitionResource } from 'src/_resource/Operation/PurchaseRequisitions/composables/usePurchaseRequisitionResource'
+import { useProcurementResource } from 'src/_resource/Operation/Procurements/composables/useProcurementResource'
 import { useWarehouseResource } from 'src/_resource/Master/Warehouses/composables/useWarehouseResource'
 import {
   progressLabel,
@@ -14,27 +15,20 @@ import {
   stampOf,
   workflowStamps
 } from 'src/_resource/Operation/PurchaseRequisitions/composables/usePurchaseRequisitionProgress'
-import { progressLabel as procurementLabel, progressColor as procurementColor, progressIcon as procurementIcon } from 'src/_resource/Operation/Procurements/composables/useProcurementProgress'
+import {
+  progressLabel as procurementLabel, progressColor as procurementColor, progressIcon as procurementIcon
+} from 'src/_resource/Operation/Procurements/composables/useProcurementProgress'
 import { useRequisitionViewContext } from './useRequisitionViewContext'
 
-const CHILD = 'PurchaseRequisitionItems'
-const DEFAULT_UOM = 'PCS'
-
 const text = (value) => String(value ?? '').trim()
-const num = (value) => {
-  const parsed = Number(value)
-  return Number.isFinite(parsed) ? parsed : 0
-}
-const asRow = (value) => (value && typeof value === 'object' ? value : {})
-const isActive = (value) => text(asRow(value).Status || 'Active') === 'Active'
 
 export { progressLabel, progressColor, progressIcon, typeMeta, priorityMeta, workflowStamps }
 
 export function formatStampDate (value) {
   const raw = text(value)
   if (!raw) return ''
-  const parsed = new Date(raw)
-  if (Number.isNaN(parsed.getTime())) return raw
+  const parsed = parseAnyDate(raw)
+  if (!parsed) return raw
   return parsed.toLocaleString(undefined, {
     day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit'
   })
@@ -43,18 +37,10 @@ export function formatStampDate (value) {
 export function useRequisitionView () {
   const { resourceRecord } = useRequisitionViewContext()
 
-  const requisitionItems = usePageRecord(CHILD)
-  const procurements = usePageRecord('Procurements')
-  const skus = usePageRecord('SKUs')
-  const products = usePageRecord('Products')
-  const warehouses = usePageRecord('Warehouses')
+  const { linesByRequisition, itemSummary } = usePurchaseRequisitionResource()
+  const { getProcurement } = useProcurementResource()
 
-  const { skuLabelOf } = useSkuResource()
   const { getWarehouse } = useWarehouseResource()
-
-  onMounted(() => {
-    ;[requisitionItems, procurements, skus, products, warehouses].forEach((resource) => resource.reload())
-  })
 
   const requisition = computed(() => resourceRecord?.record?.value || null)
   const loading = computed(() => resourceRecord?.loading?.value === true)
@@ -66,54 +52,26 @@ export function useRequisitionView () {
     return text(getWarehouse(code)?.name) || code
   })
 
-  const items = computed(() => {
-    const code = text(requisition.value?.Code)
-    if (!code) return []
-    return requisitionItems.items.value
-      .map(asRow)
-      .filter((row) => text(row.PurchaseRequisitionCode) === code && isActive(row) && text(row.Code))
-  })
-
-  // One projection every card reads, so no two cards can disagree on quantities.
-  const lines = computed(() => items.value.map((row) => {
-    const label = skuLabelOf(text(row.SKU))
-    const quantity = num(row.Quantity)
-    const rate = num(row.EstimatedRate)
-    return {
-      code: text(row.Code),
-      sku: text(row.SKU),
-      primary: label.primary,
-      secondary: label.secondary,
-      uom: text(row.UOM) || label.uom || DEFAULT_UOM,
-      quantity,
-      estimatedRate: rate,
-      estimatedValue: quantity * rate
-    }
-  }))
-
-  const totals = computed(() => lines.value.reduce((acc, line) => {
-    acc.lines += 1
-    acc.quantity += line.quantity
-    acc.value += line.estimatedValue
-    return acc
-  }, { lines: 0, quantity: 0, value: 0 }))
+  const lines = computed(() => linesByRequisition.value.get(text(requisition.value?.Code)) || [])
+  const totals = computed(() => itemSummary(lines.value))
 
   const procurement = computed(() => {
     const code = text(requisition.value?.ProcurementCode)
     if (!code) return null
-    return procurements.items.value.map(asRow).find((row) => text(row.Code) === code) || null
+    return getProcurement(code)
   })
 
   const procurementStage = computed(() => {
     const row = procurement.value
     if (!row) return null
-    return {
+    return Object.assign(Object.create(row), {
+      ...row, _raw: row,
       code: text(row.Code),
       label: procurementLabel(row.Progress),
       color: procurementColor(row.Progress),
       icon: procurementIcon(row.Progress),
       initiatedDate: text(row.InitiatedDate)
-    }
+    })
   })
 
   const revisionNote = computed(() => stampOf(requisition.value, 'ProgressRevisionRequired').comment)

@@ -11,13 +11,15 @@
 
 <script setup>
 import { computed } from 'vue'
-import { useRequisitionFormContext } from 'src/_ui/AQL/composables/Operation/PurchaseRequisitions/useRequisitionFormContext'
+import { useRequisitionFormContext, useRequisitionFormSeed } from 'src/_ui/AQL/composables/Operation/PurchaseRequisitions/useRequisitionFormContext'
 
 defineOptions({ name: 'PurchaseRequisitionsEditLockBanner', inheritAttrs: false })
 
 
-const { record, editable } = useRequisitionFormContext()
+useRequisitionFormSeed('edit')
+
+const { resourceRecord, editable } = useRequisitionFormContext()
 
 // A blank record is still hydrating — say nothing until there is something to lock.
-const locked = computed(() => !!record.value.Code && !editable.value)
+const locked = computed(() => !!resourceRecord?.record?.value?.Code && !editable.value)
 </script>

@@ -20,7 +20,7 @@
             <span :class="ui.detailKeyClass">Progress</span>
             <span class="col overflow-hidden flex justify-end items-center" :class="ui.detailValClass">
               <q-icon :name="statusIcon" size="16px" :color="statusColor" class="q-mr-xs" />
-              <q-badge rounded :color="statusColor" :label="statusLabel" />
+              <q-chip rounded :color="statusColor" :label="statusLabel" dark />
             </span>
           </div>
 

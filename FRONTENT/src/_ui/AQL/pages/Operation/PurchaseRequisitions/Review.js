@@ -1,11 +1,14 @@
-// `/operation/purchase-requisitions/{code}/_action/review`.
-// The reviewer reads the request, then decides. The sticky bar owns every verdict.
 export default {
   sections: ['PageHeader'],
-  contents: ['ReviewSummary', 'ReviewDecision'],
+  contents: [
+    'RequisitionReviewDetails',
+    'RequisitionReviewItems',
+    'RequisitionReviewDecision'
+  ],
 
   PropsPageHeader: {
-    title: 'Review Requisition',
+    title: 'Review Purchase Requisition',
+    subtitle: 'Review requested items and approve, request revision, or reject',
     reload: false
   }
 }

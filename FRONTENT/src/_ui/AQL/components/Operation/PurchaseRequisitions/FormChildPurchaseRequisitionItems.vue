@@ -26,59 +26,35 @@
       :parent-resource="parentResource"
       title=" "
       list-position="top"
+      :hide-fields="hiddenFields"
+      :field-props="fieldProps"
+      :item-label="(r) => skuLabelText(r?.SKU) || r?.SKU || 'Item'"
+      :item-caption="(r) => `Qty: ${r?.Quantity ?? 1} ${r?.UOM || ''}`"
     />
 
     <AqlSkuPicker
       v-model="showPicker"
       :preselected-codes="existingCodes"
-      @confirm="onSkusConfirmed"
+      @confirm="addItems"
     />
   </div>
 </template>
 
 <script setup>
-import { ref, computed, inject } from 'vue'
+import { ref } from 'vue'
 import FormChild from 'components/contents/FormChild.vue'
 import AqlSkuPicker from 'components/shared/AqlSkuPicker.vue'
+import { useRequisitionFormContext } from 'src/_ui/AQL/composables/Operation/PurchaseRequisitions/useRequisitionFormContext'
 
 defineOptions({ name: 'FormChildPurchaseRequisitionItems', inheritAttrs: false })
 
-const props = defineProps({
+defineProps({
   childResource: { type: Object, required: true },
   parentResource: { type: String, required: true }
 })
 
-const pageState = inject('pageState', null)
+const { existingCodes, skuLabelText, addItems } = useRequisitionFormContext()
 const showPicker = ref(false)
-
-const parentNode = pageState?.useNode(() => props.parentResource || 'PurchaseRequisitions')
-const childRecords = parentNode?.children(() => 'PurchaseRequisitionItems')
-
-const existingCodes = computed(() => {
-  const list = childRecords?.value || []
-  return list
-    .filter((r) => r._action !== 'deactivate')
-    .map((r) => r.SKU)
-    .filter(Boolean)
-})
-
-function onSkusConfirmed(selectedSkus) {
-  if (!pageState || !Array.isArray(selectedSkus)) return
-  const currentSet = new Set(existingCodes.value)
-
-  for (const sku of selectedSkus) {
-    if (!sku?.Code || currentSet.has(sku.Code)) continue
-    pageState.addChild(
-      'PurchaseRequisitionItems',
-      {
-        SKU: sku.Code,
-        UOM: sku.UOM || 'PCS',
-        Quantity: 1,
-        EstimatedRate: 0
-      },
-      props.parentResource || 'PurchaseRequisitions'
-    )
-    currentSet.add(sku.Code)
-  }
-}
+const hiddenFields = ['PurchaseRequisitionCode', 'Code', 'Status']
+const fieldProps = { SKU: { readonly: true } }
 </script>

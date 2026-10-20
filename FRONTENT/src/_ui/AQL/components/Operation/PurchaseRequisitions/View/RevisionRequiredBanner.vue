@@ -4,11 +4,11 @@
     <q-card flat bordered :class="[ui.cardClass, ui.accentCardClass]" :style="ui.accentBorderStyle">
       <q-card-section>
         <div class="row items-center no-wrap q-gutter-sm">
-          <q-icon :name="icon" size="24px" :color="color" />
           <div class="col" :class="ui.flexWrapTextClass">
             <div class="text-subtitle2 text-weight-bold">{{ headline }}</div>
             <div class="text-body2 q-mt-xs">{{ note }}</div>
           </div>
+          <q-icon :name="icon" size="24px" :color="color" />
         </div>
       </q-card-section>
     </q-card>
@@ -32,8 +32,6 @@ const { pending, needsRevision, rejected, revisionNote, rejectionNote } = useReq
 
 const finalTitle = computed(() => evaluate(props.title))
 
-// Hidden while loading too — flashing an instruction card in and out reads worse
-// than showing it a moment late.
 const visible = computed(() => !pending.value && (needsRevision.value || rejected.value))
 
 const headline = computed(() => (needsRevision.value ? 'Revision Required' : 'Requisition Rejected'))
@@ -46,4 +44,5 @@ const note = computed(() => {
     ? 'The approver asked for changes. Edit the requisition and resubmit it.'
     : 'This requisition was rejected. No reason was recorded.'
 })
+
 </script>

@@ -1,4 +1,4 @@
-import { daysFromToday } from 'src/utils/dateHelpers'
+import { daysFromToday, parseAnyDate } from 'src/utils/dateHelpers'
 import { sortByDate } from 'src/utils/sortHelpers'
 
 export { sortByDate }
@@ -10,6 +10,12 @@ export const REVISION_REQUIRED = 'Revision Required'
 export const APPROVED = 'Approved'
 export const REJECTED = 'Rejected'
 export const RFQ_PROCESSED = 'RFQ Processed'
+
+export const REVIEW_ACTIONS = {
+  [APPROVED]: 'approve',
+  [REVISION_REQUIRED]: 'sendBack',
+  [REJECTED]: 'reject'
+}
 
 export const WORKFLOW_STATES = [
   DRAFT,
@@ -42,8 +48,6 @@ export const PROGRESS_ICONS = Object.fromEntries(
 export const PROGRESS_LABELS = Object.fromEntries(
   Object.entries(PROGRESS_META).map(([state, meta]) => [state, meta.label]))
 
-// Requisition TYPE and PRIORITY are part of the requisition's own vocabulary, so their
-// icon and colour live here beside the progress map rather than in a UI file.
 export const TYPE_META = {
   STOCK: { label: 'Stock', icon: 'inventory_2', color: 'primary' },
   PROJECT: { label: 'Project', icon: 'architecture', color: 'info' },
@@ -57,6 +61,16 @@ export const PRIORITY_META = {
   High: { label: 'High', icon: 'arrow_upward', color: 'negative' },
   Urgent: { label: 'Urgent', icon: 'priority_high', color: 'purple' }
 }
+
+export const TYPE_OPTIONS = Object.keys(TYPE_META).map((key) => ({
+  label: TYPE_META[key].label,
+  value: key
+}))
+
+export const PRIORITY_OPTIONS = Object.keys(PRIORITY_META).map((key) => ({
+  label: PRIORITY_META[key].label,
+  value: key
+}))
 
 // A PROJECT or SALES requisition must name the job it is buying for.
 export const TYPES_NEEDING_REFERENCE = ['PROJECT', 'SALES']
@@ -161,8 +175,9 @@ export function stampOf (row, prefix) {
 // Pending Approval writes no stamp of its own, so a pending row ages from the day it
 // was raised rather than sinking to the end of an age-sorted queue.
 export function settledAt (row) {
-  const stamp = stampOf(row, PROGRESS_STAMP_PREFIX[progressOf(row)])
-  return stamp.at || text(row?.PRDate) || text(row?.RequiredDate) || row?.CreatedAt || ''
+  const progress = progressOf(row)
+  const stamp = stampOf(row, PROGRESS_STAMP_PREFIX[progress === RFQ_PROCESSED ? APPROVED : progress])
+  return stamp.at || row?.CreatedAt || text(row?.PRDate) || text(row?.RequiredDate) || ''
 }
 
 export function daysSince (stampValue) {
@@ -183,7 +198,7 @@ export function workflowStamps (record) {
   return WORKFLOW_STAMPS
     .map((stamp) => {
       const at = text(row[`${stamp.prefix}At`])
-      const parsed = at ? new Date(at) : null
+      const parsed = parseAnyDate(at)
       return {
         state: stamp.state,
         title: stamp.title,
@@ -193,7 +208,7 @@ export function workflowStamps (record) {
         icon: progressIcon(stamp.state),
         color: progressColor(stamp.state),
         label: progressLabel(stamp.state),
-        timestamp: parsed && !Number.isNaN(parsed.getTime()) ? parsed : null
+        timestamp: parsed
       }
     })
     .filter((event) => event.by || event.at)
@@ -214,58 +229,4 @@ export function ageBandOf (days) {
 
 export function ageColor (days) {
   return ageBandOf(days)?.color || FALLBACK_META.color
-}
-
-export function usePurchaseRequisitionProgress () {
-  return {
-    DRAFT,
-    PENDING_APPROVAL,
-    REVISION_REQUIRED,
-    APPROVED,
-    REJECTED,
-    RFQ_PROCESSED,
-    WORKFLOW_STATES,
-    EDITABLE_STATES,
-    TERMINAL_STATES,
-    IN_FLIGHT_STATES,
-    WORKFLOW_STAMPS,
-    PROGRESS_META,
-    PROGRESS_COLORS,
-    PROGRESS_ICONS,
-    PROGRESS_LABELS,
-    PROGRESS_STAMP_PREFIX,
-    TYPE_META,
-    PRIORITY_META,
-    AGE_BANDS,
-    progressOf,
-    progressColor,
-    progressIcon,
-    progressLabel,
-    typeMeta,
-    priorityMeta,
-    needsTypeReference,
-    isDraft,
-    isPendingApproval,
-    isRevisionRequired,
-    isApproved,
-    isRejected,
-    isRfqProcessed,
-    isTerminal,
-    isEditable,
-    isRfqEligible,
-    requisitionEditableProgress,
-    isActiveRow,
-    isOwnedBy,
-    isForeignDraft,
-    countsForUser,
-    stampOf,
-    settledAt,
-    daysSince,
-    daysToRequired,
-    isOverdue,
-    workflowStamps,
-    ageBandOf,
-    ageColor,
-    sortByDate
-  }
 }
