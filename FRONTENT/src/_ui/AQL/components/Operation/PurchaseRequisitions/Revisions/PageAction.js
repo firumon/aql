@@ -12,7 +12,7 @@ export default (props, { pageState, resourceConfig }) => {
       const source = getPurchaseRequisition(pageState.getControls('selectedCode', '', NODE))
       return isRevisionRequired(source) && resourceConfig.allowed('update', NODE, source)
     },
-    actions: ['cancel', 'submit'], submitLabel: 'Send Back to Approver',
+    actions: ['cancel', 'submit'], submitLabel: 'Send',
     cancel: (name, { nav }) => { nav.goTo('index'); return false },
     submit: () => {
       const source = getPurchaseRequisition(pageState.getControls('selectedCode', '', NODE))

@@ -14,7 +14,7 @@ export default (props, { pageState, resourceRecord, resourceConfig }) => {
     },
     actions: ['cancel', 'submit'],
     get submitLabel () {
-      return { approve: 'Approve Requisition', sendBack: 'Request Revision', reject: 'Reject Requisition' }[decision()] || 'Review'
+      return { approve: 'Approve', sendBack: 'Request', reject: 'Reject' }[decision()] || 'Review'
     },
     get submitColor () { return { approve: 'positive', sendBack: 'warning', reject: 'negative' }[decision()] || 'primary' },
     get submitIcon () { return { approve: 'check_circle', sendBack: 'undo', reject: 'cancel' }[decision()] || 'rate_review' },

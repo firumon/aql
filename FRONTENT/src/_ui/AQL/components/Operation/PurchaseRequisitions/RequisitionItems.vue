@@ -49,6 +49,7 @@
           btn="delete" btn-color="negative"
           @btn-click="(item) => removeItem(childIndexes[item.SKU])"
           @input-change="onQtyChange"
+          item-class="bg-transparent" :item-bordered="false" separator
         />
       </q-card-section>
 

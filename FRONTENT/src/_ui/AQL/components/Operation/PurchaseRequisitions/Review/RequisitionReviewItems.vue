@@ -4,11 +4,12 @@
       <div class="text-subtitle1 text-weight-bold">Requisition Items</div>
       <q-badge color="grey-7" :label="`${items.length} item(s)`" />
     </q-card-section>
+    <q-separator />
     <q-card-section v-if="!items.length" class="text-center text-grey-7">
       No items found. The request must contain products before it can be approved.
     </q-card-section>
     <AppList v-else :items="items" item-key="Code" :label="(item) => skuLabelText(item.SKU) || item.SKU"
-      :caption="(item) => `${item.Quantity} ${item.UOM || ''}`" />
+      :caption="(item) => `${item.Quantity} ${item.UOM || ''}`" item-class="bg-transparent" :item-bordered="false" separator  />
   </q-card>
 </template>
 
