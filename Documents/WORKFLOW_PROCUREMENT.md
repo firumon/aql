@@ -21,6 +21,34 @@ graph TD
 
 ---
 
+## Purchase Requisition review rights
+
+`PurchaseRequisitions` declares one `Review` action in `AdditionalActions`. The Review
+page, its progress choices, its PR nodes, and its Submit gate all check that same
+`review` right (`canReview`). Approved, Revision Required, and Rejected are the three
+outcomes of this action. Do not require old `canApprove`, `canSendBack`, or `canReject`
+flags on this page; the resource no longer declares those as separate actions.
+Related procurement nodes still check their own create or update rights.
+
+An empty progress is a form state. It must not call the review builder or show an
+unsupported-action notification at page load. Submit asks the user to choose a progress.
+
+The Revisions page accepts only a PR whose progress is Revision Required and whose
+user has update rights. Other direct links show a clear unavailable message. They
+must not show old feedback beside empty inputs or allow a revision save.
+
+A creator with Review rights may approve a new PR in the create save. Add starts
+with Draft off and Approve now on. Draft on clears approval and hides that toggle.
+Turning Draft off defaults approval on for a user with Review rights; that user
+may turn approval off to save as Pending Approval. A creator without Review rights
+starts with both toggles off and does not see Approve now. The PR node and Submit
+check Review rights for approval; the linked procurement keeps its own rights.
+Derives prepare the progress, stamps, and procurement nodes before Submit.
+
+Inactive rows are hidden from the frontend by design. Removing a saved PR item
+sets it inactive. Its disappearance, including from direct frontend item views,
+is expected and must not be reported as a display bug or missing browser proof.
+
 ## 2. Core Entities & Data Architecture
 
 | Entity | Role & Scope | Key State Column & Allowed Values |

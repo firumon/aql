@@ -25,7 +25,7 @@ function setup_getOperationSchemas() {
         },
         {
             resourceName: CONFIG.OPERATION_SHEETS.PURCHASE_REQUISITIONS,
-            headers: ['Code', 'ProcurementCode', 'PRDate', 'Type', 'Priority', 'RequiredDate', 'WarehouseCode', 'TypeReferenceCode', 'Progress',
+            headers: ['Code', 'ProcurementCode', 'PRDate', 'Username', 'Type', 'Priority', 'RequiredDate', 'WarehouseCode', 'TypeReferenceCode', 'Progress',
                       'ProgressRevisionRequiredAt', 'ProgressRevisionRequiredBy', 'ProgressRevisionRequiredComment',
                       'ProgressApprovedAt', 'ProgressApprovedBy', 'ProgressApprovedComment',
                       'ProgressRejectedAt', 'ProgressRejectedBy', 'ProgressRejectedComment',
@@ -33,7 +33,7 @@ function setup_getOperationSchemas() {
             statusDefault: 'Active',
             defaults: { Status: 'Active', Progress: 'Draft' },
             columnWidths: {
-                Code: 150, ProcurementCode: 150, PRDate: 130, Type: 100, Priority: 100,
+                Code: 150, ProcurementCode: 150, PRDate: 130, Username: 170, Type: 100, Priority: 100,
                 RequiredDate: 130, WarehouseCode: 140, TypeReferenceCode: 160, Progress: 130,
                 ProgressRevisionRequiredAt: 160, ProgressRevisionRequiredBy: 150, ProgressRevisionRequiredComment: 200,
                 ProgressApprovedAt: 160, ProgressApprovedBy: 150, ProgressApprovedComment: 200,
@@ -43,9 +43,10 @@ function setup_getOperationSchemas() {
         },
         {
             resourceName: CONFIG.OPERATION_SHEETS.PURCHASE_REQUISITION_ITEMS,
-            headers: ['Code','PurchaseRequisitionCode', 'SKU', 'UOM', 'Quantity'],
-            defaults: { Quantity: 1 },
-            columnWidths: { Code: 150, PurchaseRequisitionCode: 200, SKU: 150, UOM: 100, Quantity: 100 }
+            headers: ['Code','PurchaseRequisitionCode', 'SKU', 'UOM', 'Quantity', 'Status'],
+            statusDefault: 'Active',
+            defaults: { Quantity: 1, Status: 'Active' },
+            columnWidths: { Code: 150, PurchaseRequisitionCode: 200, SKU: 150, UOM: 100, Quantity: 100, Status: 100 }
         },
         {
             resourceName: CONFIG.OPERATION_SHEETS.RFQS,

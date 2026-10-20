@@ -29,54 +29,6 @@ function linkProcurementCodeToPurchaseRequisition_afterCreate(payload, result, a
   return result;
 }
 
-function handlePurchaseRequisitions_afterExecuteAction(payload, result, auth, action, meta, resourceName) {
-  var actionName = (meta && meta.actionName ? meta.actionName : (payload && payload.actionName ? payload.actionName : '')).toString().trim();
-  var savedRecord = meta && meta.savedRecord ? meta.savedRecord : null;
-  if (!savedRecord || !savedRecord.Code) return result;
-
-  var prCode = (savedRecord.Code || '').toString().trim();
-  var existingProcCode = (savedRecord.ProcurementCode || '').toString().trim();
-  var user = auth && auth.user ? (auth.user.Name || auth.user.UserID || '') : '';
-  var role = auth && auth.user ? (auth.user.Role || auth.user.RoleName || '') : '';
-
-  if (actionName.toLowerCase() === 'approve') {
-    if (!existingProcCode) {
-      var procPayload = {
-        resource: PROCUREMENT_RESOURCE_NAME,
-        record: {
-          Progress: 'PR_APPROVED',
-          InitiatedDate: formatDateTime24(),
-          CreatedUser: user,
-          CreatedRole: role,
-          Status: 'Active'
-        }
-      };
-      var createRes = handleResourceCreateRecord(auth, procPayload);
-      if (createRes && createRes.success && createRes.data && createRes.data.code) {
-        var newProcCode = createRes.data.code.toString().trim();
-        updateResourceRecordFieldsByCode(PURCHASE_REQUISITIONS_RESOURCE_NAME, prCode, {
-          ProcurementCode: newProcCode
-        }, auth);
-        if (result && result.data) {
-          result.data.procurementCode = newProcCode;
-        }
-      }
-    } else {
-      updateResourceRecordFieldsByCode(PROCUREMENT_RESOURCE_NAME, existingProcCode, {
-        Progress: 'PR_APPROVED'
-      }, auth);
-    }
-  } else if (actionName.toLowerCase() === 'reject') {
-    if (existingProcCode) {
-      updateResourceRecordFieldsByCode(PROCUREMENT_RESOURCE_NAME, existingProcCode, {
-        Progress: 'CANCELLED'
-      }, auth);
-    }
-  }
-
-  return result;
-}
-
 function resolveCreatedProcurementCode(result, meta) {
   if (meta && meta.savedRecord && meta.savedRecord.Code) {
     return meta.savedRecord.Code.toString().trim();
@@ -87,25 +39,6 @@ function resolveCreatedProcurementCode(result, meta) {
   }
 
   return '';
-}
-
-function updateResourceRecordFieldsByCode(resourceName, code, fields, auth) {
-  var context = getResourceRecordContextByCode(resourceName, code);
-  if (!context) return null;
-
-  var rowData = context.rowData.slice();
-  var fieldNames = Object.keys(fields || {});
-  for (var i = 0; i < fieldNames.length; i++) {
-    var fieldName = fieldNames[i];
-    if (context.idx[fieldName] !== undefined) {
-      rowData[context.idx[fieldName]] = fields[fieldName];
-    }
-  }
-
-  var recordTimestamp = applyAuditFields(rowData, context.idx, auth, context.resource.config, false);
-  context.sheet.getRange(context.rowNumber, 1, 1, context.headers.length).setValues([rowData]);
-  updateResourceSyncCursor(resourceName, recordTimestamp);
-  return rowArrayToObject(context.headers, rowData);
 }
 
 function getResourceRecordContextByCode(resourceName, code) {

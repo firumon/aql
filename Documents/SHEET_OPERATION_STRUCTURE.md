@@ -3,6 +3,11 @@
 ## Purpose
 This document describes the current operation-scope sheet families and their roles.
 
+## Purchase Requisition fields
+- `PurchaseRequisitions.Username` stores the creator's name. Layer 2 sets it when creating a PR. Editing a PR keeps this name.
+- `PurchaseRequisitionItems.Status` uses `Active` and `Inactive`. Edit keeps saved item codes and deactivates removed items through the composite save.
+- Apply both columns through the operation schema refactor. Older rows may have a blank `Username`; do not replace it with the name of an editor.
+
 ## Current Operation Resources
 - `Procurements`
 - `PurchaseRequisitions`

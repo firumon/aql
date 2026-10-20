@@ -637,9 +637,8 @@ function initAppResourcesCodeConfig() {
         AccessRegionSource: '{"subject":[{"column":"WarehouseCode","resource":"Warehouses","empty":"next","fail":"user"},{"column":"ProcurementCode","resource":"Procurements","empty":"next","fail":"user"},{"user":true}]}',
         OwnerUserField: 'CreatedBy',
         AdditionalActions: JSON.stringify([
-            {"action":"Approve","label":"Approve","icon":"check_circle","color":"positive","kind":"mutate","confirm":false,"column":"Progress","columnValue":"Approved","columnValueOptions":[],"fields":[{"name":"Comment","label":"Approval Comment","type":"textarea","required":false}],"visibleWhen":{"column":"Progress","op":"eq","value":"Pending Approval"}},
-            {"action":"SendBack","label":"Request Revision","icon":"undo","color":"warning","kind":"mutate","confirm":false,"column":"Progress","columnValue":"Revision Required","columnValueOptions":[],"fields":[{"name":"Comment","label":"Revision Instructions","type":"textarea","required":true}],"visibleWhen":{"column":"Progress","op":"eq","value":"Pending Approval"}},
-            {"action":"Reject","label":"Reject","icon":"cancel","color":"negative","kind":"mutate","confirm":false,"column":"Progress","columnValue":"Rejected","columnValueOptions":[],"fields":[{"name":"Comment","label":"Rejection Reason","type":"textarea","required":true}],"visibleWhen":{"column":"Progress","op":"eq","value":"Pending Approval"}}
+            {"action":"Review","label":"Review Requisition","icon":"rate_review","color":"primary","kind":"navigate","navigate":{"target":"action","pageSlug":"review"},"visibleWhen":{"column":"Progress","op":"eq","value":"Pending Approval"}},
+            {"action":"Revise","label":"Revise Requisition","icon":"rate_review","color":"warning","kind":"navigate","navigate":{"target":"resource","pageSlug":"revisions"},"visibleWhen":{"column":"Progress","op":"eq","value":"Revision Required"}}
         ]),
         Menu: JSON.stringify([
             {"group":["Purchase"],"order":2,"label":"Requisitions","icon":"request_quote","route":"/operation/purchase-requisitions","pageTitle":"Purchase Requisitions","pageDescription":"Internal requests for purchase","show":true},
@@ -648,6 +647,7 @@ function initAppResourcesCodeConfig() {
         UIFields: JSON.stringify([
             { header: 'ProcurementCode', label: 'Procurement Code', type: 'text' },
             { header: 'PRDate', label: 'PR Date', type: 'date' },
+            { header: 'Username', label: 'Created by', type: 'text' },
             { header: 'Type', label: 'Type', type: 'select' },
             { header: 'Priority', label: 'Priority', type: 'select' },
             { header: 'RequiredDate', label: 'Required Date', type: 'date' },
@@ -669,13 +669,13 @@ function initAppResourcesCodeConfig() {
         IncludeInAuthorizationPayload: 'TRUE',
         Functional: 'FALSE',
         PreAction: '',
-        PostAction: 'handlePurchaseRequisitions',
+        PostAction: '',
         Reports: '',
         CustomUIName: '',
         ListViews: JSON.stringify([
             { "name": "Recent", "label": "Recent", "icon": "history", "color": "primary", "default": true, "filter": { "type": "group", "logic": "AND", "items": [{ "type": "condition", "column": "Progress", "operator": "neq", "value": "RFQ Processed" }, { "type": "condition", "column": "Status", "operator": "eq", "value": "Active" }] } },
             { "name": "Drafts", "label": "My Drafts", "icon": "edit_note", "color": "grey-7", "default": false, "filter": { "type": "group", "logic": "AND", "items": [{ "type": "condition", "column": "Progress", "operator": "eq", "value": "Draft" }] } },
-            { "name": "PendingApproval", "label": "Awaiting Approval", "icon": "hourglass_top", "color": "warning", "default": false, "filter": { "type": "group", "logic": "AND", "items": [{ "type": "condition", "column": "Progress", "operator": "eq", "value": "Pending Approval" }] } },
+            { "name": "PendingApproval", "label": "Pending Approval", "icon": "hourglass_top", "color": "warning", "default": false, "filter": { "type": "group", "logic": "AND", "items": [{ "type": "condition", "column": "Progress", "operator": "eq", "value": "Pending Approval" }] } },
             { "name": "NeedsRevision", "label": "Needs Revision", "icon": "rate_review", "color": "orange", "default": false, "filter": { "type": "group", "logic": "AND", "items": [{ "type": "condition", "column": "Progress", "operator": "eq", "value": "Revision Required" }] } },
             { "name": "Approved", "label": "Approved", "icon": "task_alt", "color": "primary", "default": false, "filter": { "type": "group", "logic": "AND", "items": [{ "type": "condition", "column": "Progress", "operator": "eq", "value": "Approved" }] } },
             { "name": "RfqProcessed", "label": "RFQ Processed", "icon": "request_quote", "color": "positive", "default": false, "filter": { "type": "group", "logic": "AND", "items": [{ "type": "condition", "column": "Progress", "operator": "eq", "value": "RFQ Processed" }] } },
@@ -712,7 +712,8 @@ function initAppResourcesCodeConfig() {
             { header: 'PurchaseRequisitionCode', label: 'Purchase Requisition Code', type: 'text' },
             { header: 'SKU', label: 'SKU', type: 'text' },
             { header: 'UOM', label: 'Unit of Measure', type: 'text' },
-            { header: 'Quantity', label: 'Quantity', type: 'number' }
+            { header: 'Quantity', label: 'Quantity', type: 'number' },
+            { header: 'Status', label: 'Status', type: 'status' }
         ]),
         IncludeInAuthorizationPayload: 'TRUE',
         Functional: 'FALSE',

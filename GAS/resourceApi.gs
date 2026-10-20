@@ -1,9 +1,3 @@
-/**
- * ============================================================
- * AQL - Resource API Handlers (Generic)
- * ============================================================
- */
-
 // Memoized per execution: an initial sync spans only 3-4 files.
 var _file_last_updated_cache = {};
 
@@ -368,10 +362,6 @@ function handleResourceCreateRecord(auth, payload) {
     sideEffectResources.push('OutletStorages');
   } else if (resourceName === 'StockMovements') {
     sideEffectResources.push('WarehouseStorages');
-  } else if (resourceName === 'Procurements') {
-    var rawPayload = payload || {};
-    var prCode = (rawPayload.linkedPurchaseRequisitionCode || (rawPayload.record && rawPayload.record.PurchaseRequisitionCode) || '').toString().trim();
-    if (prCode) sideEffectResources.push('PurchaseRequisitions');
   }
   if (sideEffectResources.length) {
     var deltaPayloads = collectWriteDeltaResources(auth, payload, sideEffectResources);
@@ -1593,27 +1583,6 @@ function buildCompositeDirectWriteResources(parentResourceName, parentConfig, pa
   return resources;
 }
 
-/**
- * Handles bulk insert/update of master records.
- * Payload: { targetResource: 'Products', records: [{...}, {...}] }
- * The 'targetResource' field names the actual master (e.g. Products),
- * while 'resource' may refer to the caller (e.g. BulkUploadMasters).
- */
-/**
- * Handles composite (parent + children) save.
- * Validates ALL records first, then writes atomically.
- * Recursive — children can have their own children.
- *
- * Payload: {
- *   resource: 'Products',
- *   data: { Name: 'Widget', Status: 'Active' },
- *   code: 'PRD00001',               // present for edit, absent for create
- *   children: [{
- *     resource: 'SKUs',
- *     records: [{ data: {...}, _action: 'create'|'update'|'deactivate' }]
- *   }]
- * }
- */
 function handleCompositeSave(auth, payload) {
   var parentResourceName = (payload.resource || '').toString().trim();
   if (!parentResourceName) {
@@ -2098,8 +2067,6 @@ function handleExecuteAction(auth, payload) {
   var sideEffectResources = [];
   if (resourceName === 'WarehouseTransfers') {
     sideEffectResources.push('WarehouseTransferItems', 'StockMovements', 'WarehouseStorages');
-  } else if (resourceName === 'PurchaseRequisitions') {
-    sideEffectResources.push('Procurements');
   }
   if (sideEffectResources.length) {
     var deltaPayloads = collectWriteDeltaResources(auth, payload, sideEffectResources);
