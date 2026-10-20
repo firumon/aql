@@ -17,6 +17,12 @@
 - Do not use double-meaning sentences or hard grammar.
 - Keep everything direct, clear, and very easy to understand.
 
+## Line Endings (STRICT)
+- Use CRLF for working-tree text files. Keep `.sh` and `.bash` files in LF, as set in `.editorconfig` and `.gitattributes`.
+- Check the saved file after every patch, script write, or code generator run. These tools may ignore editor settings.
+- After GitNexus analysis, check `AGENTS.md`, `CLAUDE.md`, and generated skill files too. Restore CRLF without changing their content or encoding.
+- Git may store LF in its index. That is expected. Check the working file's bytes when verifying CRLF.
+
 ## Code Comments — Keep Them Rare (STRICT)
 Write code that explains itself. Do not narrate it.
 - **Default: no comment.** No JSDoc blocks, no file-header docblocks, no section banners.
@@ -178,7 +184,7 @@ Split hubs: `FEATURE_DASHBOARD_ENGINE.md`, `UI_MODULE_DEVELOPER_GUIDE.md`, `UI_P
 <!-- gitnexus:start -->
 # GitNexus — Code Intelligence
 
-This project is indexed by GitNexus as **aql** (24912 symbols, 43841 relationships, 300 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
+This project is indexed by GitNexus as **aql** (24072 symbols, 43188 relationships, 300 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
 
 > If any GitNexus tool warns the index is stale, run `npx gitnexus analyze` in terminal first.
 

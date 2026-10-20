@@ -11,9 +11,9 @@ Use this skill for AQL-specific frontend design judgment. It complements the can
 
 Canonical authority order:
 1. `AGENTS.md` / `CLAUDE.md`.
-2. `Documents/MULTI_AGENT_PROTOCOL.md`.
-3. `Documents/DOC_ROUTING.md`.
-4. `Documents/ARCHITECTURE RULES.md` for any `FRONTENT/` edit.
+2. `References/Prompt Library/MAP.md` or `MACP.md` only when invoked by the user.
+3. `Documents/CORE_DOC_ROUTING.md`.
+4. `Documents/CORE_ARCHITECTURE_RULES.md` for any `FRONTENT/` edit.
 5. `references/style-sources.md` in this skill for local style discovery.
 
 If this skill conflicts with the canonical docs, follow the docs.
@@ -21,10 +21,10 @@ If this skill conflicts with the canonical docs, follow the docs.
 ## Required Reads
 
 Before touching any file under `FRONTENT/`:
-1. Read `Documents/ARCHITECTURE RULES.md`.
-2. Read `Documents/AI_COLLABORATION_PROTOCOL.md` when implementing, not just discussing.
+1. Read `Documents/CORE_ARCHITECTURE_RULES.md`.
+2. Follow the startup routing in `AGENTS.md`; read a role protocol only when invoked.
 3. Read `references/style-sources.md` when making visual/design changes.
-4. Read only the specific frontend files and registries required by `Documents/DOC_ROUTING.md`.
+4. Read only the specific frontend files and registries required by `Documents/CORE_DOC_ROUTING.md`.
 
 ## Current Design Baseline
 
