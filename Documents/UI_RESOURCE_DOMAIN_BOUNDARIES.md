@@ -84,19 +84,10 @@ A resource-wide helper that has no page-specific injection needs may live direct
 subfolder is specifically for the injection relay and anything that depends on it.
 
 > [!IMPORTANT]
-> **`pageState` needs no relay — inject it.** The relay earns its place when a page's cards
-> need several injected handles wrapped into a settled shape. A card that only needs
-> `pageState` calls `inject('pageState')` itself: the relay would add an import and a file
-> for nothing, and a page relay with no other job attracts the state and arithmetic that
-> belong on the node and in Layer 2. That is exactly how `OutletConsumptions/Add` grew a
-> 552-line feature composable holding a second invoice calculation and a control array
-> mirroring rows that already lived on a node. Both are gone; the step cards inject
-> `pageState`, bind to the nodes, and call the Layer 2 builders directly.
->
-> What the cards genuinely share is *addresses*, not state — node names, roles, control
-> keys. Those go in a **plain constants module**
-> (`.../{Resource}/{Page}/nodes.js`): no refs, no injects, no computeds, nothing that can
-> drift from the nodes.
+> **Cards use the UI context relay for `pageState`.** The relay returns the shared
+> node handles. It must not keep a second copy of form rows or domain calculations.
+> A setup owner runs once per form. Other cards read the same node records and controls.
+> Domain builders stay behind the UI composable boundary.
 
 > [!NOTE]
 > **A composable that injects context and is shared by every card on one page still

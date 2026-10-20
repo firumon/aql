@@ -222,10 +222,11 @@ disagree (guide §7.4).
 2. Shared allocation/review cards at the resource tier. Hydration in the first content component.
 3. Sticky bar owns navigation and submission (guide §8.2–§8.5):
    - Zero UI Schema Invention: delegate cross-resource batch preparation to Layer 2 domain payload chain builder.
-   - `PageAction.js` handler invokes chain builder, checks `!result.valid`, gates with `resourceConfig.allowed(result.permissions)`, and returns `{ requests: result.requests, successMsg: result.successMsg }`.
+   - One setup owner mounts Layer 2 nodes at ready. Record and control derives keep the nodes current as inputs change.
+   - `PageAction.js` Submit only validates live nodes. It returns `{ valid: false, message }` or nothing; it builds no nodes or requests.
    - Validate downstream irreversibility: block rejection/reversal if child lines are already delivered.
    - Child-only action routes (`Reallocate`) isolate payloads and permissions to child lines and stock movements, without touching parent approval state.
-   - Append `resourceGetRequest(['WarehouseStorages'])` to refresh stock cache in the same round trip.
+   - Layer 2 nodes declare `reload` when related caches need a refresh. Do not build a get request in the page action.
    - Action `show` gates inspect live relation getters (`record?.$ChildItems`) where eligibility depends on child status.
 
 ---

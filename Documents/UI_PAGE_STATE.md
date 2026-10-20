@@ -109,11 +109,16 @@ Node
 ```
 
 `Bucket` is `{ resource, records: Row[] }`.
-`Row` is `{ _action: 'create'|'update'|'deactivate', data: {…} }`.
+`Row` is plain sheet data with an optional `_action`, for example
+`{ Code: 'PRI1', SKU: 'SKU1', Quantity: 2, _action: 'update' }`.
 
 `Row` is the one **public** data contract — FormChild renders it and
-`build()` ships it. Read it freely; change it only through `updateChild`
-(patches `data`) and `setChildAction` (sets `_action`).
+`build()` wraps it as `{ _action, data }` for GAS. Read it freely; change it through
+`updateChild` (patches the row) and `setChildAction` (sets `_action`). Keep `Code` on
+updated or removed rows. `_originalCode` is not a stored row code and does not ship.
+
+`applyNodes` accepts wrapped child rows too, but flattens them on entry. A wrapped
+row must put `Code` inside `data`. Parent nodes always use `record`, never `data`.
 
 ### 3.2 Addressing — resource plus ROLE
 

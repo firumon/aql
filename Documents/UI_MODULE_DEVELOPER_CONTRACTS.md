@@ -97,22 +97,10 @@ and component values in the file; anything read off the store in a `Props<Identi
 
 Four decisions recur on every page of every module. Make them the same way each time.
 
-**Head the file with a docblock stating what the page is for**, which placeholder belongs
-to which step, and why anything sits at the tier it sits at. A contract is the one file
-that explains a page's shape; a reader who has to open five components to learn the order
-of a wizard has been failed by the contract.
-
-**A multi-step contract carries the step map in that docblock** — every contract, including
-`Add.js`, not only the action routes. The contract is where the step *assignment* lives
-(`PropsAdjustItems: { step: 2 }`), so it is where the map is readable; `PageAction.js`'s own
-docblock (§13.6) carries the *button* table for each step. Two halves of one flow, each
-documented where it is decided:
-
-```
- * step 1  outlet + mode   →  [ Cancel ] [ Continue       ]
- * step 2  item lines      →  [ Back   ] [ Continue       ]
- * step 3  review + comment→  [ Back   ] [ Submit Request ]
-```
+Keep the page order and step assignments clear in `contents` and `Props<Identity>`.
+Use clear names. Do not add a file docblock or a step table in a comment.
+`CORE_ARCHITECTURE_RULES.md` §8 allows only a short comment when the code needs one.
+Data files and dashboard items keep their required descriptive JSDoc blocks.
 
 **Suppress the header's reload control on any page whose data is owned by `pageState`:**
 
@@ -133,8 +121,7 @@ humanize, and the reader arrived from a list and needs to know what they walked 
 has no `Create`/`Update` content to seed `pageState` — an approval does not edit the
 request's fields, it decides where its stock comes from. The page's composable owns both
 the fetch and the seeding, and the **first content the contract names** is where that
-composable is first called. State this in the contract's docblock, so the load order is
-readable without opening the card.
+composable is first called. Keep this order clear in `contents`. Add a short comment only when the order needs an explanation.
 
 ---
 

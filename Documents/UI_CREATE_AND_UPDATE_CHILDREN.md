@@ -161,7 +161,7 @@ pageState.addChild(child.name, { ...row }, name, null, { action: 'update' })
 ```
 
 - `defaultBuild` forwards this verbatim into the `compositeSave` child records array as `_action: 'update'`, and GAS's `handleCompositeSave` locates the sheet row by `data.Code` and merges it.
-- The spread is deliberate: enriched records expose relation/metadata keys (`_Children`, `$parent`, …) as **non-enumerable**, so `{ ...row }` yields only canonical schema headers and nothing leaks into the request payload.
+- A spread copies only enumerable keys. It does not keep virtual relation getters. Keep the full source record and its links in domain enrichment when consumers need them. The final request builder filters sheet fields; a spread is not a request-field filter.
 - Guarded per `${node.identifier}::${childName}` in a `Set`, so each bucket fills exactly once and the user's subsequent adds/edits/removals are never clobbered.
 - Child rows may arrive **after** mount (background resource fetch), so `childRecordsByResource` is watched and each bucket hydrates the first time its rows become available.
 
@@ -189,11 +189,13 @@ On a `Create` page every child row is new, so removing one just splices it out. 
 
 | Row state | Behaviour |
 |---|---|
-| `_action: 'update'` **and** a non-blank `data.Code` (hydrated by §13.2) | `_action` is flipped in place to `'deactivate'`. The row stays in the bucket, reaches the payload, and GAS's `handleCompositeSave` locates it by Code, sets `Status = 'Inactive'`, applies audit fields, and queues the update. |
+| `_action: 'update'` **and** a non-blank `Code` (hydrated by §13.2) | `pageState.setChildAction(...)` sets `_action` to `'deactivate'`. The row stays in the bucket, reaches the payload, and GAS's `handleCompositeSave` locates it by Code, sets `Status = 'Inactive'`, applies audit fields, and queues the update. |
 | `_action: 'create'` (added this session) | Spliced out via `pageState.removeChild(...)` — it was never persisted, so there is nothing to deactivate. |
 | `_action: 'update'` with **no** Code | Spliced out. GAS matches on `_originalCode \|\| data.Code`, and `defaultBuild` drops `_originalCode`; without a Code, GAS would fall through to its create branch and **duplicate** the row instead of deactivating it. |
 
-The flip is a direct mutation on the bucket record object (`records.value[i]._action = 'deactivate'`) rather than a `pageState` call, because `updateChild` merges only `data` and cannot set `_action`. This is reactive: the bucket lives inside `usePageState`'s `reactive()` tree, so the record is a reactive proxy and dependent computeds re-evaluate. No `usePageState.js` or GAS change was required for any of this — both already forwarded and handled `_action` verbatim.
+Use `pageState.setChildAction(childResource, index, 'deactivate', parentResource)`.
+To undo, use the same method with `'update'`. `updateChild` changes row data;
+`setChildAction` changes the row action. Do not assign `_action` on the row itself.
 
 ### 14.1 `visibleRecords` and the visible↔bucket index split
 
@@ -215,7 +217,7 @@ $q.notify({
 })
 ```
 
-`restore(row)` flips `_action` back to `'update'`, which returns the row to `visibleRecords` (with its stable `rowKey`, so the list transition plays in reverse) and to a normal merge on submit. Message, label, colours, timeout, and position are all props (see §3's `undoRemove`/`undoLabel`/`undoMessage`/`undoColor`/`undoTextColor`/`undoBtnColor`/`undoTimeout`/`undoPosition`), per the zero-hardcoding contract; `undoRemove: false` suppresses the notification while leaving the soft delete intact.
+`restore(row)` uses `pageState.setChildAction(...)` to set `_action` back to `'update'`, which returns the row to `visibleRecords` (with its stable `rowKey`, so the list transition plays in reverse) and to a normal merge on submit. Message, label, colours, timeout, and position are all props (see §3's `undoRemove`/`undoLabel`/`undoMessage`/`undoColor`/`undoTextColor`/`undoBtnColor`/`undoTimeout`/`undoPosition`), per the zero-hardcoding contract; `undoRemove: false` suppresses the notification while leaving the soft delete intact.
 
 ---
 

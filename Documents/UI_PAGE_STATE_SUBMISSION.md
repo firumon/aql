@@ -25,6 +25,18 @@ one `get` built from `state.reload`.
 nodes → actions → get
 ```
 
+The default builder sends only fields listed in each resource's login headers.
+This applies to parent, child, and bulk row data. Unknown fields and `_` fields
+stay out of the row data. Region stamps are added only when `AccessRegion` is a
+listed header. The builder does not add sheet defaults to a partial update.
+
+Each child keeps its `_action` outside `data`. Request codes, `$ref` objects,
+extra transport inputs, and queued action inputs keep their transport shape.
+If a row's header list is not loaded, the default builder returns no requests
+for the whole batch. The form data stays in pageState until the headers arrive.
+Custom build strategies and requests passed directly to `run()` bypass this
+default row filter.
+
 Actions come after the nodes so a `$ref` naming a record this batch creates
 resolves against a row that already exists. The `get` is last so it sees the
 finished batch.
@@ -71,12 +83,12 @@ In order, it:
 4. **Hoists** `actions` (inheriting each node's resource and role) and registers `derive`.
 5. **Cleans the re-read**, dropping any resource this batch already writes (§5.5).
 
-Each merged address is written with `setResource` (replace). A node carrying only `actions`
+Each merged address replaces its node by default. `merge: true` keeps the live node and merges the named data. A node carrying only `actions`
 or `reload` is hoisted WITHOUT attaching a node — an empty node ships nothing but would
 still be validated.
 
-**It replaces, so a builder must never return a node the page already owns.** On an Add
-wizard the page holds the form node; its builder returns only the extra nodes.
+**Keep live form data.** A derive that updates a node the page already owns uses
+`merge: true`. Leave `children` out when only header fields change, so typed child rows stay in place.
 
 ### `setReload(names)`
 
@@ -348,21 +360,18 @@ This only works if the data is in nodes. See §5A.
 
 ## 18. Debugging
 
-In dev, `window.pageState` is the live instance. It is deleted when the page
-unmounts, so it is never stale.
+Use the page's injected `pageState` and its public methods. Do not add a window helper.
 
 ```js
-pageState.snapshot()                    // whole tree as plain JSON, readable addresses
-pageState.state.nodes.size
-pageState.state.index                   // resource → role → uid
-pageState.build({ mode: 'submit' })     // what would be sent
-pageState.validationErrors.value        // note .value — it is a computed
+pageState.snapshot()                    // whole tree as plain JSON
+pageState.hasNode('PurchaseRequisitions')
+pageState.useNode('PurchaseRequisitions')
+pageState.build({ mode: 'submit' })      // what would be sent
+pageState.validationErrors.value
 pageState.getControls('NextVisitDays')
 ```
 
-`snapshot()` keys nodes by readable address (`OutletVisits:next`) and puts page
-controls, actions and reload under `$page`. Prefer it over `state.nodes`, which
-logs as opaque uid soup.
+`snapshot()` uses readable node addresses. Do not read `state.nodes` or `state.index`.
 
 ## 19. Rules
 

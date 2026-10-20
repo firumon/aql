@@ -158,22 +158,14 @@ export function buildAuditCompletionChainNodes ({ auditRecord, discrepancies, ac
 }
 ```
 
-Layer 3 then stays a thin adapter:
+Layer 3 mounts the chain at ready through one form setup owner. Input changes update
+live nodes before Submit. The Submit handler only validates; it must not rebuild nodes.
 
-```javascript
-// _ui/AQL/components/Operation/Audits/Complete/PageAction.js
-submit: () => {
-  const applied = pageState.applyNodes(buildAuditCompletionChainNodes({ ... }))
-  if (applied.valid === false) return false
-  return { successMsg: applied.successMsg }
-}
-```
-
-**A builder must not return a node for a record the PAGE already owns.** `applyNodes`
-replaces what it writes, so a payload naming the page's own form node would wipe the
-fields the user typed. A standalone Add wizard's builder returns only the EXTRA nodes and
-exposes its column decisions as a fields helper the page applies to its own node — see
-`restockCreateFields` / `buildRestockCreateChainNodes`.
+A builder may seed its own form node at ready. Later updates must keep fields and child
+rows already edited by the user. Use `merge: true` for a partial node update and omit
+child buckets that are not being changed. A supplied child bucket replaces that bucket.
+When a choice stops needing a secondary node, remove that old node explicitly; applying
+an array without it does not remove it.
 
 ---
 
@@ -409,7 +401,7 @@ Every payload chain builder in Layer 2 must adhere to the following strict guard
 6. **No positional promises**: never return "the code is at index N of the response". Name the RESOURCE and let the caller resolve the position off `pageState.build()` — a node that ships nothing is skipped, so positions are not knowable at build time.
 7. **A ledger module encapsulates its own row builder.** `StockMovements` and `OutletMovements` own the sign rule, the storage default and the reload their sheet needs. A calling module hands over the ITEM list and the reference, never a hand-built movement row: `stockMovementsNode(items, { warehouseCode, referenceCode, referenceType, direction, movementDate })` and `outletMovementsNode(items, { outletCode, referenceCode, referenceType, direction, movementDate })` return the complete, self-contained node — records built inside, `reload: ['WarehouseStorages']` / `['OutletStorages']` attached, permissions attached — or `null` when there is nothing to post. `stockMovementRow` / `outletMovementRow` stay exported only for the two chains that must decide a per-row sign or reference themselves (`OutletReturns`, the restock corrections); a new caller uses the node builder.
 8. **Cheap, idempotent and total.** A builder is the ONLY thing that turns user input into
-   sheet rows, and it may be called once at submit or repeatedly as the user works. The
+   sheet rows, and it is called at ready and as the user works, before Submit. The
    same inputs always give the same nodes, and a half-filled input gives a smaller node
    set rather than a throw.
 9. **Return the COMPLETE row.** A builder hands back the finished sheet record — stamps,

@@ -100,8 +100,8 @@ fixes both set and order.
 
 > [!IMPORTANT]
 > **A workflow stamp column (`Progress`, `...At`, `...By` audit trios) is never a form
-> field, in any state.** It is set once, programmatically, inside the `PageAction` submit
-> handler that causes the transition (§13.6) — never exposed via `fieldProps`, never
+> field, in any state.** Layer 2 sets it in the opening node or its `derive` handler
+> before submission (`UI_PAGE_STATE_NODES.md` §5.7D). Submit only validates. It is never exposed via `fieldProps`, never
 > re-admitted with `showFields`. Letting a user edit a stamp column directly breaks the
 > guarantee that "who did this, and when" reflects what actually happened rather than what a
 > form field said. This is exactly what `workflowFields`'s default-hide behavior exists to
@@ -202,8 +202,8 @@ export default {
 }
 ```
 
-Document the flow as a table in the file's docblock — `step 1 outlet + mode → [Cancel]
-[Continue]` — so the shape is readable without tracing the getter.
+Keep the step flow clear in the contract and action getter. Do not add a docblock;
+the comment rules in `CORE_ARCHITECTURE_RULES.md` §8 apply.
 
 **A step is a screen, not a file.** Two or more contents may share one `step` — split the
 step's blocks by job and list each in the contract (UI_CONTENT_SYSTEM §6). Step 4 of the
@@ -273,7 +273,7 @@ whole resulting picture.
 **Latch a value that describes how the record was entered, when the same action would change
 the field the value is derived from.** A submit button's label ("Submit" vs. "Resubmit") is
 captured **once**, in a closure variable set on first read — not recomputed live off
-`pageState` — because `submit()` rewrites the same field the label reads, and a live read
+`pageState` — because a domain derive can rewrite the same field the label reads, and a live read
 flips the label mid-submission while the request is still in flight:
 
 ```javascript

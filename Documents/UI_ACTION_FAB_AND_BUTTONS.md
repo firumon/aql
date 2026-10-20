@@ -51,7 +51,7 @@ grow multiple competing right-side FABs:
 |--------|-------|------|-------------------------|
 | Permissions | `ResourceActionAdd` | `permissions.canWrite` | `nav.goTo('add')` |
 | Permissions | `ResourceActionEdit` | `permissions.canUpdate` **and** a record in context | `nav.goTo('edit')` |
-| `useAdditionalActions().entriesFor(record)` | `ResourceAction<Name>` (e.g. `ResourceActionPostpone`) | applied by the composable — record in context, `can<Action>` not explicitly `false`, `visibleWhen` satisfied | the entry's bound `run()` — `navigate` routes, `mutate` opens the shared dialog |
+| `useAdditionalActions().entriesFor(record)` | `ResourceAction<Name>` (e.g. `ResourceActionPostpone`) | applied by the composable — record-aware `resourceConfig.allowed(action, resource, record)` passes, `visibleWhen` satisfied | the entry's bound `run()` — `navigate` routes, `mutate` opens the shared dialog |
 
 | Local `_ui/` files | `ResourceAction<Name>` discovered by `useLocalResourceActions` | the file's own `visibleWhen` / `show` / `hide`, evaluated against the record | `navigate` routes, else the file's `run` / `handler` |
 

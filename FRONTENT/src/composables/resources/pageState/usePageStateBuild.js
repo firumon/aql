@@ -7,6 +7,7 @@ import {
   resourceUpdateRequest
 } from '../resourceRequests'
 import { computeRegion } from '../useRegionCompute'
+import { findResourceConfig } from '../useResourceConfig'
 
 // Turns node state into GAS request envelopes. A `strategy.build` override
 // replaces `defaultBuild` and must append `additionalActionRequests()` itself.
@@ -39,16 +40,16 @@ export function usePageStateBuild ({ state, registry }) {
     return { ...request, payload: { ...request.payload, ...node.payload } }
   }
 
-  // `_`-prefixed keys are frontend-only. `_action` is the oldest of them; a live node
-  // also carries the tags that link a derived row back to the input it came from, and
-  // neither is a sheet column.
-  const wireData = (row) => {
+  const wireData = (row, headers) => {
     const data = {}
-    for (const key in row) { if (key.charAt(0) !== '_') data[key] = row[key] }
+    for (const key of Object.keys(row)) {
+      if (headers.has(key) && key.charAt(0) !== '_') data[key] = row[key]
+    }
     return data
   }
 
-  function stampRegion (res, data) {
+  function stampRegion (res, data, headers) {
+    if (!headers.has('AccessRegion')) return data
     const regionCode = computeRegion(res, data)
     if (regionCode && !data.AccessRegion) data.AccessRegion = regionCode
     return data
@@ -56,39 +57,36 @@ export function usePageStateBuild ({ state, registry }) {
 
   function requestForNode (node) {
     const resource = node.resource
+    const headers = new Set(findResourceConfig(resource)?.headers || [])
     if (node.many) {
-      const records = node.records.map((r) => stampRegion(resource, wireData(r)))
+      const records = node.records.map((r) => stampRegion(resource, wireData(r, headers), headers))
       return records.length ? resourceBulkRequest(resource, records) : null
     }
     if (node.children.length) {
-      // Rows are plain data in state; the GAS wire format is put on here.
-      const children = node.children.map(c => ({
-        resource: c.resource,
-        records: c.records.map((row) => ({
-          _action: row._action || 'create',
-          data: stampRegion(c.resource, wireData(row))
-        }))
-      }))
-      const data = wireData(node.record)
-      stampRegion(resource, data)
+      const children = node.children.map(c => {
+        const childHeaders = new Set(findResourceConfig(c.resource)?.headers || [])
+        return {
+          resource: c.resource,
+          records: c.records.map((row) => ({
+            _action: row._action || 'create',
+            data: stampRegion(c.resource, wireData(row, childHeaders), childHeaders)
+          }))
+        }
+      })
+      const data = wireData(node.record, headers)
+      stampRegion(resource, data, headers)
       return node.code
         ? compositeSaveRequest({ resource, code: node.code, data, children })
         : compositeSaveRequest({ resource, data, children })
     }
-    // An empty record writes nothing. A page keeps a coded node around as an ADDRESS —
-    // for `hasNodes`, for its controls, for hydration bookkeeping — and that node must
-    // not turn into an update with no columns in it.
-    const data = wireData(node.record)
+    const data = wireData(node.record, headers)
     if (!Object.keys(data).length) return null
-    stampRegion(resource, data)
+    stampRegion(resource, data, headers)
     return node.code
       ? resourceUpdateRequest(resource, node.code, data)
       : resourceCreateRequest(resource, data)
   }
 
-  // Every resource this batch already writes: the nodes that ship a request, the child
-  // buckets inside them, and the resource of every queued action. GAS returns a written
-  // row in the same response, so asking for it back is a wasted round trip.
   function writtenResources () {
     const names = new Set()
     registry.eachNode((node) => {
@@ -104,8 +102,6 @@ export function usePageStateBuild ({ state, registry }) {
     return names
   }
 
-  // `state.reload` plus anything this one call adds, deduped, in order, and minus
-  // everything the batch writes for itself.
   function reloadNames (extra = []) {
     const list = [...state.reload, ...actionReloadNames(), ...(Array.isArray(extra) ? extra : [extra])]
     const written = writtenResources()
@@ -114,10 +110,17 @@ export function usePageStateBuild ({ state, registry }) {
 
   function defaultBuild ({ reload } = {}) {
     const requests = []
+    let headersReady = true
     registry.eachNode((node) => {
+      const hasRows = node.many ? node.records.length > 0 : node.children.length > 0 || Object.keys(node.record).length > 0
+      if (hasRows && !findResourceConfig(node.resource)?.headers?.length) headersReady = false
+      for (const child of node.children) {
+        if (child.records.length && !findResourceConfig(child.resource)?.headers?.length) headersReady = false
+      }
       const request = withPayload(requestForNode(node), node)
       if (request) requests.push(request)
     })
+    if (!headersReady) return []
     // Queued actions go after every node, so a `$ref` naming a record this batch
     // creates resolves against a row that already exists.
     requests.push(...additionalActionRequests())
