@@ -1,8 +1,9 @@
-import { textOrRef } from 'src/utils/appHelpers'
+import { textOrRef, isBatchRef } from 'src/utils/appHelpers'
 import { toDateTime24 } from 'src/utils/dateHelpers'
-import { canAdvanceTo, progressOf, PR_CREATED, COMPLETED, CANCELLED } from './useProcurementProgress'
+import { canAdvanceTo, progressOf, PR_CREATED, PR_APPROVED, COMPLETED, CANCELLED } from './useProcurementProgress'
 
 const RESOURCE_NAME = 'Procurements'
+const PROCUREMENT_REF_PATH = `${RESOURCE_NAME}.latest.code`
 
 const text = (value) => String(value ?? '').trim()
 const asRow = (value) => (value && typeof value === 'object' ? value : {})
@@ -10,7 +11,7 @@ const asRow = (value) => (value && typeof value === 'object' ? value : {})
 const MOVE = { update: 'You are not allowed to move this procurement.' }
 const RAISE = { create: 'You are not allowed to raise a procurement.' }
 
-export { RESOURCE_NAME }
+export { RESOURCE_NAME, PROCUREMENT_REF_PATH }
 
 export function todayDashed () {
   const now = new Date()
@@ -18,23 +19,23 @@ export function todayDashed () {
   return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`
 }
 
-// The one writer of a procurement stage change. Null when the move is not a real
-// advance, so every caller can push the result unconditionally and filter nulls.
 export function buildProcurementProgressNode (procurement, nextProgress, reload = []) {
   const row = asRow(procurement)
-  const code = text(row.Code)
-  if (!code) return null
+  const rawCode = row.Code
+  if (!rawCode || isBatchRef(rawCode)) return null
+  const code = text(rawCode)
+  if (!code || code.startsWith('$ref:') || code.startsWith('[object')) return null
   if (!canAdvanceTo(row, nextProgress)) return null
   return { resource: RESOURCE_NAME, code: textOrRef(code), record: { Progress: text(nextProgress).toUpperCase() }, permissions: MOVE, reload: reload }
 }
 
-// A rollback is the one move that goes backwards. It refuses to touch a COMPLETED
-// procurement, which is settled.
 export function buildProcurementRollbackNode (procurement, previousProgress, reload = []) {
   const row = asRow(procurement)
-  const code = text(row.Code)
+  const rawCode = row.Code
+  if (!rawCode || isBatchRef(rawCode)) return null
+  const code = text(rawCode)
   const target = text(previousProgress).toUpperCase()
-  if (!code || !target) return null
+  if (!code || code.startsWith('$ref:') || code.startsWith('[object') || !target) return null
   const current = progressOf(row)
   if (!current || current === COMPLETED || current === target) return null
   return { resource: RESOURCE_NAME, code: textOrRef(code), record: { Progress: target }, permissions: MOVE, reload: reload }
@@ -42,21 +43,42 @@ export function buildProcurementRollbackNode (procurement, previousProgress, rel
 
 export function buildProcurementCancelNode (procurement, reload = []) {
   const row = asRow(procurement)
-  const code = text(row.Code)
-  if (!code || progressOf(row) === CANCELLED || progressOf(row) === COMPLETED) return null
+  const rawCode = row.Code
+  if (!rawCode || isBatchRef(rawCode)) return null
+  const code = text(rawCode)
+  if (!code || code.startsWith('$ref:') || code.startsWith('[object') || progressOf(row) === CANCELLED || progressOf(row) === COMPLETED) return null
   return { resource: RESOURCE_NAME, code: textOrRef(code), record: { Progress: CANCELLED }, permissions: MOVE, reload: reload }
 }
 
-// Raised alongside the first Purchase Requisition. linkedPurchaseRequisitionCode rides
-// on the request payload, not the record - the GAS post-write hook reads it there.
-export function buildProcurementCreateNode (purchaseRequisitionCode, actorName = '', actorRole = '') {
-  return { resource: RESOURCE_NAME, record: {
-    Progress: PR_CREATED,
-    InitiatedDate: todayDashed(),
-    CreatedUser: text(actorName),
-    CreatedRole: text(actorRole),
-    Status: 'Active'
-  }, permissions: RAISE, payload: { linkedPurchaseRequisitionCode: text(purchaseRequisitionCode) } }
+export function buildProcurementCreateNode (options = {}, actorName = '', actorRole = '') {
+  let progress = PR_APPROVED
+  let user = actorName
+  let role = actorRole
+  let status = 'Active'
+  let initiatedDate = todayDashed()
+
+  if (options && typeof options === 'object' && !Array.isArray(options) && !options.$ref) {
+    progress = options.progress || options.Progress || PR_APPROVED
+    user = options.actorName || options.CreatedUser || actorName
+    role = options.actorRole || options.CreatedRole || actorRole
+    status = options.status || options.Status || 'Active'
+    initiatedDate = options.initiatedDate || options.InitiatedDate || todayDashed()
+  } else if (typeof options === 'string' && options) {
+    progress = options
+  }
+
+  return {
+    resource: RESOURCE_NAME,
+    code: null,
+    record: {
+      Progress: text(progress).toUpperCase(),
+      InitiatedDate: text(initiatedDate) || todayDashed(),
+      CreatedUser: text(user),
+      CreatedRole: text(role),
+      Status: text(status) || 'Active'
+    },
+    permissions: RAISE
+  }
 }
 
 export function procurementStamp (prefix, actorName = '', comment = '') {
@@ -74,6 +96,7 @@ export function useProcurementPayload () {
     buildProcurementCancelNode,
     buildProcurementCreateNode,
     procurementStamp,
-    todayDashed
+    todayDashed,
+    PROCUREMENT_REF_PATH
   }
 }
