@@ -45,7 +45,7 @@ The **OutletPaymentHistory Report** calculates total payment counts and collecte
   HasData, AND(INDEX(MatchingPayments, 1, 1) <> "", INDEX(MatchingPayments, 1, 1) <> "#N/A"),
 
   TotalNumber, IF(HasData, ROWS(MatchingPayments), 0),
-  Amounts, IF(HasData, TOCOL(CHOOSECOLS(MatchingPayments, 6)), 0),
+  Amounts, IF(HasData, MAP(TOCOL(CHOOSECOLS(MatchingPayments, 6)), LAMBDA(v, VALUE(v))), 0),
   Progs, IF(HasData, TOCOL(CHOOSECOLS(MatchingPayments, 10)), ""),
   TotalAmountVal, IF(HasData, SUM(IFERROR(FILTER(Amounts, Progs <> "CANCELLED"), 0)), 0),
 
