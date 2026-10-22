@@ -396,7 +396,9 @@ export function parseToken(value) {
   if (!match) return null
   const spec = TOKEN_INDEX[match[1].toLowerCase()]
   if (!spec) return null
-  const params = match[2] ? match[2].slice(1).split(':') : []
+  const params = match[2]
+    ? match[2].slice(1).split(':')
+    : (spec.paramDefault !== undefined ? [spec.paramDefault] : [])
   return { spec, params }
 }
 
