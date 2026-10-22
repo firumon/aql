@@ -37,30 +37,38 @@ let queueTimerId = null
 let queueFlushPromise = null
 let queuedSyncHandler = null
 
-/**
- * Races a promise against a short timer so a wedged IndexedDB call cannot stall
- * a sync.
- *
- * A rejection is still absorbed — callers depend on the fallback — but it is
- * logged first. Silently equating "timed out" with "threw" is what hid a
- * DataCloneError on every resource-meta write, so the cursor never persisted
- * and the same resources resynced forever with no trace.
- */
-export async function withTimeout(promise, fallbackValue, label = '') {
+const TIMEOUT_TOKEN = Symbol('timeout')
+
+export async function withTimeoutDetailed(promise, fallbackValue, label = '') {
+  let timerId = null
   try {
-    return await Promise.race([
+    const result = await Promise.race([
       promise,
       new Promise((resolve) => {
-        setTimeout(() => resolve(fallbackValue), DB_TIMEOUT_MS)
+        timerId = setTimeout(() => resolve(TIMEOUT_TOKEN), DB_TIMEOUT_MS)
       })
     ])
+    if (result === TIMEOUT_TOKEN) {
+      logger.warn('Deferred operation timed out; using fallback', {
+        ...(label ? { operation: label } : {})
+      })
+      return { status: 'timeout', data: fallbackValue, error: 'Operation timed out' }
+    }
+    return { status: 'success', data: result, error: null }
   } catch (error) {
     logger.error('Deferred operation failed; using fallback', {
       ...(label ? { operation: label } : {}),
       error: error?.message || String(error)
     })
-    return fallbackValue
+    return { status: 'error', data: fallbackValue, error: error?.message || String(error) }
+  } finally {
+    if (timerId) clearTimeout(timerId)
   }
+}
+
+export async function withTimeout(promise, fallbackValue, label = '') {
+  const result = await withTimeoutDetailed(promise, fallbackValue, label)
+  return result.data
 }
 
 function normalizeName(value) {
@@ -112,9 +120,20 @@ function resolveHeadersFromContext(resourceName, meta = {}, authorizedResources 
 }
 
 export async function readCachedResourcePayload(resourceName, authorizedResources = [], source = 'cache') {
-  const meta = await withTimeout(getResourceMeta(resourceName), null)
+  const metaResult = await withTimeoutDetailed(getResourceMeta(resourceName), null, `meta:${resourceName}`)
+  const meta = metaResult.data
   const headers = resolveHeadersFromContext(resourceName, meta, authorizedResources)
-  const rows = await withTimeout(getResourceRows(resourceName), [])
+  const rowsResult = await withTimeoutDetailed(getResourceRows(resourceName), [], `rows:${resourceName}`)
+  const rows = rowsResult.data
+
+  const timedOut = metaResult.status === 'timeout' || rowsResult.status === 'timeout'
+  const failed = metaResult.status === 'error' || rowsResult.status === 'error'
+  const isSkipped = source === 'syncing-skip'
+  const validEmpty = !timedOut && !failed && rowsResult.status === 'success' && rows.length === 0
+
+  let effectiveSource = source
+  if (timedOut) effectiveSource = 'cache-timeout'
+  else if (failed) effectiveSource = 'cache-error'
 
   return {
     headers,
@@ -122,8 +141,11 @@ export async function readCachedResourcePayload(resourceName, authorizedResource
     records: headers.length ? mapRowsToObjects(rows, headers) : [],
     meta: {
       resource: resourceName,
-      source,
-      skipped: source === 'syncing-skip',
+      source: effectiveSource,
+      skipped: isSkipped,
+      timedOut,
+      failed,
+      validEmpty,
       lastSyncAt: normalizeCursorValue(meta?.lastSyncAt) || null,
       lastDataUpdatedAt: normalizeCursorValue(meta?.lastDataUpdatedAt) || null,
       lastFetchAt: getCacheRefreshedAt(meta)
@@ -190,8 +212,8 @@ async function buildLastUpdatedAtByResource(resourceNames = []) {
   for (const resourceName of uniqueNames) {
     try {
       const meta = await getResourceMeta(resourceName)
-      const cursor = normalizeCursorValue(meta?.lastSyncAt)
-      cursorMap[resourceName] = cursor || null
+      const cursor = normalizeCursorValue(meta?.lastDataUpdatedAt) || null
+      cursorMap[resourceName] = cursor
     } catch {
       cursorMap[resourceName] = null
     }
@@ -214,7 +236,10 @@ function collectBatchCursorResources(requests = []) {
 }
 
 async function persistBatchResourcePayload(resourceName, resourceData = {}) {
-  if (!resourceName || !Array.isArray(resourceData?.rows)) return
+  if (!resourceName || !resourceData || typeof resourceData !== 'object') return false
+  if (resourceData.error || resourceData.success === false) return false
+
+  if (!Array.isArray(resourceData.rows)) return false
 
   const responseHeaders = Array.isArray(resourceData.headers) && resourceData.headers.length
     ? resourceData.headers
@@ -223,21 +248,36 @@ async function persistBatchResourcePayload(resourceName, resourceData = {}) {
   const metaHeaders = Array.isArray(meta?.headers) && meta.headers.length ? meta.headers : []
   const headers = responseHeaders.length ? responseHeaders : metaHeaders
 
-  if (resourceData.rows.length && headers.length) {
-    await rowsUpsert(resourceName, headers, resourceData.rows)
+  if (!headers.length) return false
+
+  const rows = resourceData.rows
+  if (rows.length > 0) {
+    const writeResult = await withTimeoutDetailed(rowsUpsert(resourceName, headers, rows), 0, `rowsUpsert:${resourceName}`)
+    if (writeResult.status !== 'success' || !writeResult.data || writeResult.data.success !== true || writeResult.data.data?.affected !== rows.length) {
+      logger.error('Failed to store batch rows', { resource: resourceName, writeResult })
+      return false
+    }
   }
 
   if (resourceData.meta && typeof resourceData.meta === 'object') {
-    await metaSet(resourceName, {
+    const serverDataCursor = normalizeCursorValue(resourceData.meta.lastDataUpdatedAt)
+    const existingDataCursor = normalizeCursorValue(meta?.lastDataUpdatedAt)
+    const effectiveDataCursor = serverDataCursor || existingDataCursor || null
+
+    const metaResult = await withTimeoutDetailed(metaSet(resourceName, {
       ...(headers.length ? { headers } : {}),
-      lastSyncAt: normalizeCursorValue(resourceData.meta.lastSyncAt) || Date.now(),
-      ...(normalizeCursorValue(resourceData.meta.lastDataUpdatedAt)
-        ? { lastDataUpdatedAt: normalizeCursorValue(resourceData.meta.lastDataUpdatedAt) }
-        : {}),
+      lastSyncAt: Date.now(),
+      ...(effectiveDataCursor ? { lastDataUpdatedAt: effectiveDataCursor } : {}),
       lastFetchAt: Date.now(),
       hasHydratedOnce: true
-    })
+    }), null, `metaSet:${resourceName}`)
+
+    if (metaResult.status !== 'success' || !metaResult.data || metaResult.data.success !== true) {
+      return false
+    }
+    return true
   }
+  return true
 }
 
 export async function syncResourcesBatch(resourceNames = [], authorizedResources = [], appConfig = {}, options = {}) {
@@ -280,7 +320,20 @@ export async function syncResourcesBatch(resourceNames = [], authorizedResources
       }
 
       const meta = await withTimeout(getResourceMeta(resourceName), null)
-      const cursor = normalizeCursorValue(meta?.lastSyncAt)
+      const cachedRowsResult = await withTimeoutDetailed(getResourceRows(resourceName), [], `checkRows:${resourceName}`)
+      const rowCount = Array.isArray(cachedRowsResult.data) ? cachedRowsResult.data.length : 0
+      const hasHydratedOnce = meta?.hasHydratedOnce === true
+      const cacheTimedOut = cachedRowsResult.status === 'timeout' || cachedRowsResult.status === 'error'
+
+      let cursor = normalizeCursorValue(meta?.lastDataUpdatedAt) || null
+
+      const isRecoveringMissing = Array.isArray(options.recoveryResources)
+        ? options.recoveryResources.includes(resourceName)
+        : (options.recoverMissing === true || options.forceRecovery === true)
+      if ((rowCount === 0 && !cacheTimedOut && hasHydratedOnce) || isRecoveringMissing) {
+        cursor = null
+      }
+
       if (cursor) {
         cursorByResource[resourceName] = cursor
       }
@@ -297,7 +350,6 @@ export async function syncResourcesBatch(resourceNames = [], authorizedResources
     const response = await executeGasApi('get', payload, {
       showLoading: options.showLoading === true,
       showError: options.showError === true,
-      // Poll-driven syncs are not user activity — see executeGasApi.
       background: options.background === true
     })
 
@@ -316,6 +368,14 @@ export async function syncResourcesBatch(resourceNames = [], authorizedResources
 
     for (const resourceName of syncNames) {
       const resourceResponse = mergedResponseData[resourceName]
+      if (!resourceResponse || typeof resourceResponse !== 'object' || !Array.isArray(resourceResponse.rows) || resourceResponse.error || resourceResponse.success === false) {
+        logger.warn('Resource response missing or invalid in batch', { resource: resourceName })
+        if (!unavailableResources.includes(resourceName)) {
+          unavailableResources.push(resourceName)
+        }
+        continue
+      }
+
       const headers = headersByResource[resourceName] || (await ensureHeaders(resourceName, authorizedResources)).data
       if (!headers.length) {
         if (!unavailableResources.includes(resourceName)) {
@@ -328,41 +388,81 @@ export async function syncResourcesBatch(resourceNames = [], authorizedResources
         unavailableResources.splice(unavailableIndex, 1)
       }
 
-      const deltaRows = resolveSyncRows(resourceResponse, headers)
-      if (deltaRows.length) {
-        logger.debug('Upserting rows', { resource: resourceName, count: deltaRows.length })
-        await withTimeout(upsertResourceRows(resourceName, headers, deltaRows), 0)
+      let deltaRows = []
+      try {
+        deltaRows = resolveSyncRows(resourceResponse, headers)
+      } catch (err) {
+        logger.error('Failed to resolve sync rows', { resource: resourceName, error: err?.message })
+        if (!unavailableResources.includes(resourceName)) {
+          unavailableResources.push(resourceName)
+        }
+        continue
       }
+
+      let storageOk = true
+      if (deltaRows.length > 0) {
+        logger.debug('Upserting rows', { resource: resourceName, count: deltaRows.length })
+        const writeResult = await withTimeoutDetailed(upsertResourceRows(resourceName, headers, deltaRows), 0, `upsert:${resourceName}`)
+        if (writeResult.status !== 'success' || typeof writeResult.data !== 'number' || writeResult.data !== deltaRows.length) {
+          logger.error('Failed or timed out row storage', { resource: resourceName, status: writeResult.status })
+          storageOk = false
+        }
+      }
+
+      if (!storageOk) {
+        if (!unavailableResources.includes(resourceName)) {
+          unavailableResources.push(resourceName)
+        }
+        continue
+      }
+
+      const existingMeta = await withTimeout(getResourceMeta(resourceName), null)
+      const serverDataCursor = normalizeCursorValue(resourceResponse?.meta?.lastDataUpdatedAt)
+      const existingDataCursor = normalizeCursorValue(existingMeta?.lastDataUpdatedAt)
+      const effectiveDataCursor = serverDataCursor || existingDataCursor || null
 
       const nextMeta = {
         headers,
-        lastSyncAt: resourceResponse?.meta?.lastSyncAt || Date.now(),
-        // The `get` response carries the authoritative data cursor; this is the
-        // only place the client is allowed to advance it.
-        lastDataUpdatedAt: normalizeCursorValue(resourceResponse?.meta?.lastDataUpdatedAt)
-          || normalizeCursorValue(resourceResponse?.meta?.lastSyncAt)
-          || Date.now(),
+        lastSyncAt: Date.now(),
+        ...(effectiveDataCursor ? { lastDataUpdatedAt: effectiveDataCursor } : {}),
         lastFetchAt: Date.now(),
         hasHydratedOnce: true
       }
-      await withTimeout(setResourceMeta(resourceName, nextMeta), null, `setResourceMeta:${resourceName}`)
-      metaByResource[resourceName] = nextMeta
-      completedResources.push(resourceName)
+
+      const metaWriteResult = await withTimeoutDetailed(setResourceMeta(resourceName, nextMeta), null, `setResourceMeta:${resourceName}`)
+      if (metaWriteResult.status === 'success') {
+        metaByResource[resourceName] = nextMeta
+        completedResources.push(resourceName)
+      } else {
+        if (!unavailableResources.includes(resourceName)) {
+          unavailableResources.push(resourceName)
+        }
+      }
     }
 
     if (completedResources.length) {
       resourceStatus?.markSyncFinished?.(completedResources, metaByResource)
     }
     if (unavailableResources.length) {
-      resourceStatus?.markSyncFailed?.(unavailableResources, 'Headers unavailable')
+      resourceStatus?.markSyncFailed?.(unavailableResources, 'Sync failed or storage incomplete')
     }
 
-    logger.info('Batch sync completed', { resources: syncNames.length, skipped: skipped.length })
-    return standardizeResponse(true, {
-      resourceCount: completedResources.length,
-      synced: completedResources,
-      skipped
-    }, 'Batch sync completed')
+    const isFullSuccess = unavailableResources.length === 0 && completedResources.length > 0
+    const hasAnySuccess = completedResources.length > 0
+    const failMessage = unavailableResources.length ? `Sync failed for: ${unavailableResources.join(', ')}` : 'No resources synced'
+
+    return {
+      success: isFullSuccess,
+      data: {
+        resourceCount: completedResources.length,
+        synced: completedResources,
+        failed: unavailableResources,
+        skipped
+      },
+      error: isFullSuccess ? null : failMessage,
+      message: isFullSuccess ? 'Batch sync completed' : (hasAnySuccess ? 'Partial sync completed' : failMessage),
+      timestamp: Date.now()
+    }
   } catch (error) {
     logger.error('Batch sync error', { error: error.message })
     if (syncNames.length) {
@@ -380,6 +480,8 @@ export async function fetchResourceRecords(resourceName, authorizedResources = [
     if (resourceStatus?.isSyncing?.(resourceName)) {
       logger.debug('Skipping fetch; resource already syncing', { resource: resourceName })
       const cached = await readCachedResourcePayload(resourceName, authorizedResources, 'syncing-skip')
+      cached.meta.confirmedFull = false
+      cached.meta.isFallback = true
       return standardizeResponse(true, cached, 'Resource already syncing')
     }
 
@@ -388,32 +490,54 @@ export async function fetchResourceRecords(resourceName, authorizedResources = [
       if (isResourceInAuthorizedList(resourceName, authorizedResources)) {
         logger.warn('Headers not available', { resource: resourceName })
       }
-      return standardizeResponse(false, {
-        headers: [],
-        rows: [],
-        records: []
-      }, `Headers unavailable for ${resourceName}`)
+      return {
+        success: false,
+        data: {
+          headers: [],
+          rows: [],
+          records: [],
+          meta: {
+            resource: resourceName,
+            source: 'unavailable',
+            skipped: false,
+            timedOut: false,
+            failed: true,
+            validEmpty: false,
+            isFallback: false,
+            confirmedFull: false
+          }
+        },
+        error: `Headers unavailable for ${resourceName}`,
+        timestamp: Date.now()
+      }
     }
 
     const headers = headersResp.data
     resourceStatus?.setHeaders?.(resourceName, headers)
 
-    const meta = await withTimeout(getResourceMeta(resourceName), null)
+    const metaResult = await withTimeoutDetailed(getResourceMeta(resourceName), null, `meta:${resourceName}`)
+    const meta = metaResult.data
     resourceStatus?.applyResourceMeta?.(resourceName, meta || {})
-    const syncCursor = normalizeCursorValue(meta?.lastSyncAt)
+    const syncCursor = normalizeCursorValue(meta?.lastDataUpdatedAt) || null
     const cacheRefreshedAt = getCacheRefreshedAt(meta)
-    const cachedRows = await withTimeout(getResourceRows(resourceName), [])
+
+    const rowsResult = await withTimeoutDetailed(getResourceRows(resourceName), [], `rows:${resourceName}`)
+    const cachedRows = rowsResult.data
+    const cacheTimedOut = metaResult.status === 'timeout' || rowsResult.status === 'timeout'
+    const cacheFailed = metaResult.status === 'error' || rowsResult.status === 'error'
 
     const hasHydratedOnce = meta?.hasHydratedOnce === true
-    let effectiveCursor = syncCursor ?? null
-    if (!cachedRows.length && effectiveCursor && !hasHydratedOnce) {
-      effectiveCursor = null
-    }
-
     const ttlSec = getResourceSyncTtl(resourceName, authorizedResources, appConfig)
     const ttlMs = ttlSec * 1000
     const emptyCacheThrottleMs = Math.max(0, ttlMs / 10)
+    const isRecoveryTarget = Array.isArray(options.recoveryResources)
+      ? options.recoveryResources.includes(resourceName)
+      : (options.recoverMissing === true || options.forceRecovery === true)
+
     const emptyCacheFreshEnough =
+      !isRecoveryTarget &&
+      !cacheTimedOut &&
+      !cacheFailed &&
       !cachedRows.length &&
       hasHydratedOnce &&
       cacheRefreshedAt &&
@@ -422,80 +546,174 @@ export async function fetchResourceRecords(resourceName, authorizedResources = [
 
     if (emptyCacheFreshEnough) {
       logger.debug('Returning recently hydrated empty cache', { resource: resourceName })
-      return standardizeResponse(true, {
-        headers,
-        rows: [],
-        records: [],
-        meta: { resource: resourceName, source: 'cache-empty', lastSyncAt: effectiveCursor, lastFetchAt: cacheRefreshedAt }
-      })
+      return {
+        success: true,
+        data: {
+          headers,
+          rows: [],
+          records: [],
+          meta: {
+            resource: resourceName,
+            source: 'cache-empty',
+            lastSyncAt: normalizeCursorValue(meta?.lastSyncAt),
+            lastDataUpdatedAt: syncCursor,
+            lastFetchAt: cacheRefreshedAt,
+            skipped: false,
+            timedOut: false,
+            failed: false,
+            validEmpty: true,
+            isFallback: false,
+            confirmedFull: true
+          }
+        },
+        error: null,
+        timestamp: Date.now()
+      }
     }
 
     const populatedCacheFreshEnough =
+      !isRecoveryTarget &&
+      !cacheTimedOut &&
+      !cacheFailed &&
       cachedRows.length > 0 &&
+      !options.forceSync &&
       isWithinTtl(cacheRefreshedAt, ttlMs)
 
-    if (cachedRows.length > 0 && populatedCacheFreshEnough) {
+    if (populatedCacheFreshEnough) {
       logger.debug('Returning cached rows', { resource: resourceName, count: cachedRows.length })
-      return standardizeResponse(true, {
-        headers,
-        rows: cachedRows,
-        records: mapRowsToObjects(cachedRows, headers),
-        meta: { resource: resourceName, source: 'cache', lastSyncAt: effectiveCursor || null, lastFetchAt: cacheRefreshedAt }
-      })
+      return {
+        success: true,
+        data: {
+          headers,
+          rows: cachedRows,
+          records: mapRowsToObjects(cachedRows, headers),
+          meta: {
+            resource: resourceName,
+            source: 'cache',
+            lastSyncAt: normalizeCursorValue(meta?.lastSyncAt),
+            lastDataUpdatedAt: syncCursor,
+            lastFetchAt: cacheRefreshedAt,
+            skipped: false,
+            timedOut: false,
+            failed: false,
+            validEmpty: false,
+            isFallback: false,
+            confirmedFull: true
+          }
+        },
+        error: null,
+        timestamp: Date.now()
+      }
     }
 
-    let stale = false
-    let staleMessage = ''
+    const isRecoveringMissing = options.recoverMissing === true || options.forceRecovery === true
+    const isMissingCache = (!cacheTimedOut && !cacheFailed && !cachedRows.length && (hasHydratedOnce || !!syncCursor)) || isRecoveringMissing
+    if (isMissingCache) {
+      await withTimeout(setResourceMeta(resourceName, { lastSyncAt: null, lastDataUpdatedAt: null }), null, `recoverCache:${resourceName}`)
+    }
 
-    const hasUsableHydration = hasHydratedOnce || !!effectiveCursor
+    const hasUsableHydration = !cacheTimedOut && !cacheFailed && !isMissingCache && (hasHydratedOnce || !!syncCursor)
     const isManualReload = options.forceSync === true
-    const shouldImmediateSync = !hasUsableHydration || isManualReload
+    const shouldImmediateSync = !hasUsableHydration || isManualReload || isRecoveringMissing
 
     logger.debug('Determining sync strategy', { resource: resourceName, shouldSync: shouldImmediateSync })
 
-    if (shouldImmediateSync) {
-      if (!cachedRows.length && syncCursor) {
-        await setResourceMeta(resourceName, { lastSyncAt: null })
-      }
+    let syncAttempted = false
+    let syncSuccess = false
+    let syncError = ''
 
+    if (shouldImmediateSync) {
+      syncAttempted = true
       const batchSyncResponse = await syncResourcesBatch([resourceName], authorizedResources, appConfig, {
         showError: !cachedRows.length,
         showLoading: !cachedRows.length,
-        forceSync: isManualReload,
+        forceSync: isManualReload || isMissingCache,
+        recoverMissing: isRecoveringMissing,
+        recoveryResources: options.recoveryResources,
         resourceStatus
       })
 
-      if (!batchSyncResponse.success) {
-        stale = true
-        staleMessage = batchSyncResponse.error || `Failed to sync ${resourceName}`
+      if (batchSyncResponse.success) {
+        syncSuccess = true
+      } else {
+        syncError = batchSyncResponse.error || `Failed to sync ${resourceName}`
       }
     }
 
-    const freshRows = await withTimeout(getResourceRows(resourceName), [])
-    const effectiveRows = freshRows.length ? freshRows : cachedRows
-    const latestMeta = await withTimeout(getResourceMeta(resourceName), null)
+    const freshRowsResult = await withTimeoutDetailed(getResourceRows(resourceName), [], `freshRows:${resourceName}`)
+    const freshRows = freshRowsResult.data
+    const freshTimedOut = freshRowsResult.status === 'timeout'
+    const freshFailed = freshRowsResult.status === 'error'
 
-    logger.debug('Fetch completed', { resource: resourceName, rowCount: effectiveRows.length, stale })
+    const latestMetaResult = await withTimeoutDetailed(getResourceMeta(resourceName), null, `latestMeta:${resourceName}`)
+    const latestMeta = latestMetaResult.data
 
-    return standardizeResponse(!stale || effectiveRows.length > 0, {
-      headers,
-      rows: effectiveRows,
-      records: mapRowsToObjects(effectiveRows, headers),
-      meta: {
-        resource: resourceName,
-        source: effectiveRows.length ? (freshRows.length ? 'cache+sync' : 'cache') : 'sync',
-        lastSyncAt: normalizeCursorValue(latestMeta?.lastSyncAt) || effectiveCursor || null,
-        lastDataUpdatedAt: normalizeCursorValue(latestMeta?.lastDataUpdatedAt) || null,
-        lastFetchAt: getCacheRefreshedAt(latestMeta) || cacheRefreshedAt
-      }
-    }, staleMessage)
+    logger.debug('Fetch completed', { resource: resourceName, rowCount: freshRows.length, cachedCount: cachedRows.length })
+
+    const hasFreshRows = freshRows.length > 0
+    const hasCachedRows = cachedRows.length > 0
+    const effectiveRows = hasFreshRows ? freshRows : (hasCachedRows ? cachedRows : [])
+
+    const timedOut = freshTimedOut || (syncAttempted && !syncSuccess && cacheTimedOut)
+    const failed = (syncAttempted && !syncSuccess) || freshFailed || (cacheFailed && !hasFreshRows)
+
+    const isFallback = (timedOut || failed) && hasCachedRows && !hasFreshRows
+    const validEmpty = !effectiveRows.length && !timedOut && !failed && (syncSuccess || emptyCacheFreshEnough)
+    const confirmedFull = !timedOut && !failed && !isFallback && (hasFreshRows || (hasCachedRows && !syncAttempted) || validEmpty)
+
+    const isSuccess = !timedOut && !failed
+
+    let source = 'cache'
+    if (timedOut) source = 'cache-timeout'
+    else if (failed) source = 'cache-error'
+    else if (validEmpty) source = syncSuccess ? 'sync' : 'cache-empty'
+    else if (hasFreshRows) source = syncSuccess ? 'sync' : 'cache'
+
+    return {
+      success: isSuccess,
+      data: {
+        headers,
+        rows: effectiveRows,
+        records: mapRowsToObjects(effectiveRows, headers),
+        meta: {
+          resource: resourceName,
+          source,
+          skipped: false,
+          timedOut,
+          failed,
+          validEmpty,
+          isFallback,
+          confirmedFull,
+          lastSyncAt: normalizeCursorValue(latestMeta?.lastSyncAt) || normalizeCursorValue(meta?.lastSyncAt),
+          lastDataUpdatedAt: normalizeCursorValue(latestMeta?.lastDataUpdatedAt) || syncCursor,
+          lastFetchAt: getCacheRefreshedAt(latestMeta) || cacheRefreshedAt
+        }
+      },
+      error: isSuccess ? null : (syncError || (timedOut ? `Cache read timed out for ${resourceName}` : `Failed to load ${resourceName}`)),
+      timestamp: Date.now()
+    }
   } catch (error) {
     logger.error('Fetch failed', { resource: resourceName, error: error.message })
-    return standardizeResponse(false, {
-      headers: [],
-      rows: [],
-      records: []
-    }, error.message)
+    return {
+      success: false,
+      data: {
+        headers: [],
+        rows: [],
+        records: [],
+        meta: {
+          resource: resourceName,
+          source: 'error',
+          skipped: false,
+          timedOut: false,
+          failed: true,
+          validEmpty: false,
+          isFallback: false,
+          confirmedFull: false
+        }
+      },
+      error: error.message,
+      timestamp: Date.now()
+    }
   }
 }
 
@@ -515,6 +733,7 @@ export async function fetchResourceRecordsBatch(resourceNames = [], authorizedRe
     const stateByResource = {}
     const syncNames = []
     let syncedNames = []
+    let failedNames = []
     const resources = {}
     const errors = []
 
@@ -531,18 +750,30 @@ export async function fetchResourceRecordsBatch(resourceNames = [], authorizedRe
           headers: [],
           rows: [],
           records: [],
-          meta: { resource: resourceName, source: 'unavailable', stale: true }
+          meta: {
+            resource: resourceName,
+            source: 'unavailable',
+            stale: true,
+            failed: true,
+            skipped: false,
+            timedOut: false,
+            validEmpty: false
+          }
         }
         continue
       }
 
       const headers = headersResp.data
       resourceStatus?.setHeaders?.(resourceName, headers)
-      const meta = await withTimeout(getResourceMeta(resourceName), null)
+      const metaResult = await withTimeoutDetailed(getResourceMeta(resourceName), null, `meta:${resourceName}`)
+      const meta = metaResult.data
       resourceStatus?.applyResourceMeta?.(resourceName, meta || {})
-      const syncCursor = normalizeCursorValue(meta?.lastSyncAt)
+      const syncCursor = normalizeCursorValue(meta?.lastDataUpdatedAt) || null
       const cacheRefreshedAt = getCacheRefreshedAt(meta)
-      const cachedRows = await withTimeout(getResourceRows(resourceName), [])
+      const rowsResult = await withTimeoutDetailed(getResourceRows(resourceName), [], `rows:${resourceName}`)
+      const cachedRows = rowsResult.data
+      const cacheTimedOut = metaResult.status === 'timeout' || rowsResult.status === 'timeout'
+      const cacheFailed = metaResult.status === 'error' || rowsResult.status === 'error'
 
       const hasHydratedOnce = meta?.hasHydratedOnce === true
       let effectiveCursor = syncCursor ?? null
@@ -550,19 +781,26 @@ export async function fetchResourceRecordsBatch(resourceNames = [], authorizedRe
         effectiveCursor = null
       }
 
+      const isRecoveryTarget = Array.isArray(options.recoveryResources)
+        ? options.recoveryResources.includes(resourceName)
+        : (options.recoverMissing === true || options.forceRecovery === true)
+
       const ttlSec = getResourceSyncTtl(resourceName, authorizedResources, appConfig)
       const ttlMs = ttlSec * 1000
       const emptyCacheThrottleMs = Math.max(0, ttlMs / 10)
       const emptyCacheFreshEnough =
+        !isRecoveryTarget &&
+        !cacheTimedOut &&
+        !cacheFailed &&
         !cachedRows.length &&
         hasHydratedOnce &&
         cacheRefreshedAt &&
         emptyCacheThrottleMs > 0 &&
         now < cacheRefreshedAt + emptyCacheThrottleMs
 
-      const hasUsableHydration = hasHydratedOnce || !!effectiveCursor
+      const hasUsableHydration = !isRecoveryTarget && !cacheTimedOut && !cacheFailed && (hasHydratedOnce || !!effectiveCursor)
       const isManualReload = options.forceSync === true
-      const shouldSync = !hasUsableHydration || isManualReload
+      const shouldSync = !hasUsableHydration || isManualReload || isRecoveryTarget
 
       if (shouldSync) {
         syncNames.push(resourceName)
@@ -575,14 +813,16 @@ export async function fetchResourceRecordsBatch(resourceNames = [], authorizedRe
         effectiveCursor,
         cacheRefreshedAt,
         hasHydratedOnce,
-        emptyCacheFreshEnough
+        emptyCacheFreshEnough,
+        cacheTimedOut,
+        cacheFailed
       }
     }
 
     if (syncNames.length) {
       for (const resourceName of syncNames) {
         const state = stateByResource[resourceName]
-        if (!state?.cachedRows?.length && state?.syncCursor && !state.hasHydratedOnce) {
+        if (!state?.cachedRows?.length && state?.syncCursor && !state.hasHydratedOnce && !state.cacheTimedOut) {
           await withTimeout(setResourceMeta(resourceName, { lastSyncAt: null }), null, `resetCursor:${resourceName}`)
         }
       }
@@ -591,15 +831,26 @@ export async function fetchResourceRecordsBatch(resourceNames = [], authorizedRe
         showError: options.showError === true,
         showLoading: options.showLoading === true,
         forceSync: options.forceSync === true,
+        recoverMissing: options.recoverMissing === true,
+        recoveryResources: options.recoveryResources,
         resourceStatus
       })
 
+      const batchSynced = Array.isArray(syncResponse.data?.synced) ? syncResponse.data.synced : []
+      const batchFailed = Array.isArray(syncResponse.data?.failed) ? syncResponse.data.failed : []
+      const batchSkipped = Array.isArray(syncResponse.data?.skipped) ? syncResponse.data.skipped : []
+
+      syncedNames = Array.from(new Set([...syncedNames, ...batchSynced]))
+      failedNames = Array.from(new Set([...failedNames, ...batchFailed]))
+      skipped = Array.from(new Set([...skipped, ...batchSkipped]))
+
       if (!syncResponse.success) {
         errors.push(syncResponse.error || syncResponse.message || 'Failed to sync resources')
-      } else {
-        syncedNames = Array.isArray(syncResponse.data?.synced) ? syncResponse.data.synced : []
-        const syncSkipped = Array.isArray(syncResponse.data?.skipped) ? syncResponse.data.skipped : []
-        skipped = Array.from(new Set([...skipped, ...syncSkipped]))
+        for (const name of syncNames) {
+          if (!syncedNames.includes(name) && !failedNames.includes(name)) {
+            failedNames.push(name)
+          }
+        }
       }
     }
 
@@ -607,12 +858,36 @@ export async function fetchResourceRecordsBatch(resourceNames = [], authorizedRe
       const state = stateByResource[resourceName]
       if (!state) continue
 
-      const meta = await withTimeout(getResourceMeta(resourceName), null)
-      const freshRows = await withTimeout(getResourceRows(resourceName), [])
-      const rows = freshRows.length ? freshRows : state.cachedRows
-      const lastSyncAt = normalizeCursorValue(meta?.lastSyncAt) || state.effectiveCursor || null
-      const lastDataUpdatedAt = normalizeCursorValue(meta?.lastDataUpdatedAt) || null
+      const metaResult = await withTimeoutDetailed(getResourceMeta(resourceName), null, `meta:${resourceName}`)
+      const meta = metaResult.data
+      const freshRowsResult = await withTimeoutDetailed(getResourceRows(resourceName), [], `freshRows:${resourceName}`)
+      const freshRows = freshRowsResult.data
+      const freshTimedOut = freshRowsResult.status === 'timeout'
+      const freshFailed = freshRowsResult.status === 'error'
+
+      const hasFreshRows = freshRows.length > 0
+      const hasCachedRows = (state.cachedRows || []).length > 0
+      const rows = hasFreshRows ? freshRows : (hasCachedRows ? state.cachedRows : [])
+      const lastSyncAt = normalizeCursorValue(meta?.lastSyncAt) || null
+      const lastDataUpdatedAt = normalizeCursorValue(meta?.lastDataUpdatedAt) || state.effectiveCursor || null
       const lastFetchAt = getCacheRefreshedAt(meta) || state.cacheRefreshedAt || null
+
+      const isResourceSkipped = skipped.includes(resourceName)
+      const wasSynced = syncedNames.includes(resourceName)
+
+      const timedOut = freshTimedOut || (syncNames.includes(resourceName) && !wasSynced && state.cacheTimedOut)
+      const failed = (syncNames.includes(resourceName) && !wasSynced) || freshFailed || (state.cacheFailed && !hasFreshRows)
+
+      const isFallback = (timedOut || failed) && hasCachedRows && !hasFreshRows
+      const validEmpty = !rows.length && !timedOut && !failed && (wasSynced || state.emptyCacheFreshEnough)
+      const confirmedFull = !timedOut && !failed && !isFallback && (hasFreshRows || (hasCachedRows && !syncNames.includes(resourceName)) || validEmpty)
+
+      let source = 'cache'
+      if (isResourceSkipped) source = 'syncing-skip'
+      else if (timedOut) source = 'cache-timeout'
+      else if (failed) source = 'cache-error'
+      else if (validEmpty) source = wasSynced ? 'sync' : 'cache-empty'
+      else if (wasSynced) source = 'sync'
 
       resources[resourceName] = {
         headers: state.headers,
@@ -620,9 +895,13 @@ export async function fetchResourceRecordsBatch(resourceNames = [], authorizedRe
         records: mapRowsToObjects(rows, state.headers),
         meta: {
           resource: resourceName,
-          source: state.emptyCacheFreshEnough
-            ? 'cache-empty'
-            : (syncedNames.includes(resourceName) ? 'sync' : 'cache'),
+          source,
+          skipped: isResourceSkipped,
+          timedOut,
+          failed,
+          validEmpty,
+          isFallback,
+          confirmedFull,
           lastSyncAt,
           lastDataUpdatedAt,
           lastFetchAt
@@ -630,11 +909,29 @@ export async function fetchResourceRecordsBatch(resourceNames = [], authorizedRe
       }
     }
 
-    return standardizeResponse(errors.length === 0, {
-      resources,
-      synced: syncedNames,
-      skipped
-    }, errors.join('; '))
+    const hasErrors = errors.length > 0 || failedNames.length > 0
+    if (!hasErrors) {
+      return standardizeResponse(true, {
+        resources,
+        synced: syncedNames,
+        failed: [],
+        skipped
+      }, null)
+    }
+
+    return {
+      success: false,
+      partial: syncedNames.length > 0,
+      data: {
+        resources,
+        synced: syncedNames,
+        failed: failedNames,
+        skipped
+      },
+      error: errors.join('; ') || `Failed to sync: ${failedNames.join(', ')}`,
+      message: errors.join('; ') || `Failed to sync: ${failedNames.join(', ')}`,
+      timestamp: Date.now()
+    }
   } catch (error) {
     logger.error('Batch fetch failed', { error: error.message })
     return standardizeResponse(false, { resources: {}, synced: [] }, error.message)
@@ -766,15 +1063,19 @@ export async function runBatchRequests(requests = []) {
       ? response.data.resources
       : {}
 
+    const failedPersist = []
     for (const [resourceName, resourceData] of Object.entries(resourcePayload)) {
-      await persistBatchResourcePayload(resourceName, resourceData)
+      const ok = await persistBatchResourcePayload(resourceName, resourceData)
+      if (!ok) failedPersist.push(resourceName)
     }
+    const allPersisted = failedPersist.length === 0
 
     return {
-      success: response?.success === true,
+      success: response?.success === true && allPersisted,
       data: responses,
       resources: resourcePayload,
-      error: response?.success === true ? null : (response?.error || response?.message || 'Batch request failed'),
+      failedPersist,
+      error: response?.success === true && allPersisted ? null : (failedPersist.length ? `Failed to persist: ${failedPersist.join(', ')}` : (response?.error || response?.message || 'Batch request failed')),
       message: response?.message || ''
     }
   } catch (error) {

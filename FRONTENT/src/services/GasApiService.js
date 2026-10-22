@@ -147,14 +147,21 @@ async function ingestResourcePayloads(resourcesPayload, token) {
     : {}
 
   const names = Object.keys(resources)
-  if (!names.length) return
+  if (!names.length) return { success: true, savedResources: [], failedResources: [] }
 
   let fallbackResources = []
   const missingHeaders = []
+  const savedResources = []
+  const failedResources = []
 
   for (const resourceName of names) {
-    const payload = resources[resourceName] || {}
-    const rows = Array.isArray(payload.rows) ? payload.rows : []
+    const payload = resources[resourceName]
+    if (!payload || typeof payload !== 'object' || !Array.isArray(payload.rows) || payload.error || payload.success === false) {
+      failedResources.push(resourceName)
+      continue
+    }
+
+    const rows = payload.rows
     let headers = Array.isArray(payload.headers) && payload.headers.length
       ? payload.headers
       : await resolveHeaders(resourceName, fallbackResources)
@@ -164,52 +171,104 @@ async function ingestResourcePayloads(resourcesPayload, token) {
       continue
     }
 
-    if (rows.length) {
-      await upsertResourceRows(resourceName, headers, rows)
+    let saveSuccess = true
+    if (rows.length > 0) {
+      try {
+        const stored = await upsertResourceRows(resourceName, headers, rows)
+        if (typeof stored !== 'number' || stored !== rows.length) {
+          saveSuccess = false
+        }
+      } catch {
+        saveSuccess = false
+      }
     }
 
-    const lastSyncAt = payload?.meta?.lastSyncAt || Date.now()
-    // Data cursor (max UpdatedAt on the server) — distinct from lastSyncAt,
-    // which is only a "when did we last talk to the server" stamp.
-    const lastDataUpdatedAt = payload?.meta?.lastDataUpdatedAt || lastSyncAt
-    await setResourceMeta(resourceName, {
-      headers,
-      lastSyncAt,
-      lastDataUpdatedAt,
-      lastFetchAt: Date.now(),
-      hasHydratedOnce: true
-    })
-  }
-
-  if (!missingHeaders.length || !token) {
-    return
-  }
-
-  fallbackResources = await fetchAuthorizedHeaders(token)
-  for (const resourceName of missingHeaders) {
-    const payload = resources[resourceName] || {}
-    const rows = Array.isArray(payload.rows) ? payload.rows : []
-    const headers = await resolveHeaders(resourceName, fallbackResources)
-    if (!headers.length) {
-      logger.warn('Skipping resource ingestion due to missing headers', { resource: resourceName })
+    if (!saveSuccess) {
+      failedResources.push(resourceName)
       continue
     }
 
-    if (rows.length) {
-      await upsertResourceRows(resourceName, headers, rows)
-    }
+    const existingMeta = await getResourceMeta(resourceName).catch(() => null)
+    const serverDataCursor = payload?.meta?.lastDataUpdatedAt ? Number(payload.meta.lastDataUpdatedAt) : null
+    const existingDataCursor = existingMeta?.lastDataUpdatedAt ? Number(existingMeta.lastDataUpdatedAt) : null
+    const lastDataUpdatedAt = serverDataCursor || existingDataCursor || null
 
-    const lastSyncAt = payload?.meta?.lastSyncAt || Date.now()
-    // Data cursor (max UpdatedAt on the server) — distinct from lastSyncAt,
-    // which is only a "when did we last talk to the server" stamp.
-    const lastDataUpdatedAt = payload?.meta?.lastDataUpdatedAt || lastSyncAt
-    await setResourceMeta(resourceName, {
-      headers,
-      lastSyncAt,
-      lastDataUpdatedAt,
-      lastFetchAt: Date.now(),
-      hasHydratedOnce: true
-    })
+    try {
+      await setResourceMeta(resourceName, {
+        headers,
+        lastSyncAt: Date.now(),
+        ...(lastDataUpdatedAt ? { lastDataUpdatedAt } : {}),
+        lastFetchAt: Date.now(),
+        hasHydratedOnce: true
+      })
+      savedResources.push(resourceName)
+    } catch {
+      failedResources.push(resourceName)
+    }
+  }
+
+  if (missingHeaders.length) {
+    if (token) {
+      fallbackResources = await fetchAuthorizedHeaders(token)
+    }
+    for (const resourceName of missingHeaders) {
+      const payload = resources[resourceName]
+      if (!payload || typeof payload !== 'object' || !Array.isArray(payload.rows) || payload.error || payload.success === false) {
+        failedResources.push(resourceName)
+        continue
+      }
+
+      const rows = payload.rows
+      const headers = await resolveHeaders(resourceName, fallbackResources)
+      if (!headers.length) {
+        logger.warn('Resource ingestion failed due to missing headers', { resource: resourceName })
+        failedResources.push(resourceName)
+        continue
+      }
+
+      let saveSuccess = true
+      if (rows.length > 0) {
+        try {
+          const stored = await upsertResourceRows(resourceName, headers, rows)
+          if (typeof stored !== 'number' || stored !== rows.length) {
+            saveSuccess = false
+          }
+        } catch {
+          saveSuccess = false
+        }
+      }
+
+      if (!saveSuccess) {
+        failedResources.push(resourceName)
+        continue
+      }
+
+      const existingMeta = await getResourceMeta(resourceName).catch(() => null)
+      const serverDataCursor = payload?.meta?.lastDataUpdatedAt ? Number(payload.meta.lastDataUpdatedAt) : null
+      const existingDataCursor = existingMeta?.lastDataUpdatedAt ? Number(existingMeta.lastDataUpdatedAt) : null
+      const lastDataUpdatedAt = serverDataCursor || existingDataCursor || null
+
+      try {
+        await setResourceMeta(resourceName, {
+          headers,
+          lastSyncAt: Date.now(),
+          ...(lastDataUpdatedAt ? { lastDataUpdatedAt } : {}),
+          lastFetchAt: Date.now(),
+          hasHydratedOnce: true
+        })
+        savedResources.push(resourceName)
+      } catch {
+        failedResources.push(resourceName)
+      }
+    }
+  }
+
+  const isCompleteSuccess = failedResources.length === 0
+  return {
+    success: isCompleteSuccess,
+    savedResources,
+    failedResources,
+    error: isCompleteSuccess ? null : `Failed to ingest cache for: ${failedResources.join(', ')}`
   }
 }
 
@@ -276,14 +335,21 @@ async function executeGasApiCall(action, payload = {}, options = {}) {
           return standardizeResponse(false, null, 'Invalid service response envelope')
         }
 
+        let ingestionStatus = { success: true, savedResources: [], failedResources: [] }
         try {
-          await ingestResourcePayloads(data.data?.resources || {}, authToken)
+          ingestionStatus = await ingestResourcePayloads(data.data?.resources || {}, authToken)
         } catch (ingestError) {
           logger.warn('Resource ingestion warning', {
             action,
             requestId: data.requestId,
             error: ingestError?.message || String(ingestError)
           })
+          ingestionStatus = {
+            success: false,
+            failedResources: Object.keys(data.data?.resources || {}),
+            savedResources: [],
+            error: ingestError?.message || String(ingestError)
+          }
         }
 
         const result = {
@@ -293,7 +359,12 @@ async function executeGasApiCall(action, payload = {}, options = {}) {
           data: data.data,
           error: data.error || null,
           message: data.message || '',
-          meta: data.meta || { version: API_VERSION }
+          cacheSaved: ingestionStatus.success === true,
+          cacheError: ingestionStatus.error || null,
+          meta: {
+            ...(data.meta || { version: API_VERSION }),
+            ingestion: ingestionStatus
+          }
         }
         logger.debug('GAS API response', { action, requestId: data.requestId, success: result.success })
         return result

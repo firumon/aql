@@ -16,7 +16,8 @@ export function createSync(state, relations) {
     replaceRows,
     headers,
     setRows,
-    initResource
+    initResource,
+    _bump
   } = state
   const { _deriveAllRelations } = relations
 
@@ -61,26 +62,64 @@ export function createSync(state, relations) {
     ensureResourceState(resourceName)
 
     if (!options.force) {
-      // Raw rows, not `getRows()`, so the projection stays lazy.
-      if (_seeded.has(resourceName)) return Array.from(rows[resourceName].values())
-      // Concurrent callers join the read in flight instead of issuing their own.
       const inFlight = _seedInFlight.get(resourceName)
       if (inFlight) return inFlight
+      if (_seeded.has(resourceName) && !options.recoverMissing) {
+        return Array.from(rows[resourceName]?.values() || [])
+      }
     }
 
     const read = (async () => {
+      let response
       try {
-        const response = await getResourceRowsCached(resourceName)
-        const idbRows = Array.isArray(response?.data) ? response.data : []
-        if (idbRows.length) {
-          replaceRows(resourceName, idbRows)
+        response = await getResourceRowsCached(resourceName)
+      } catch (err) {
+        return Array.from(rows[resourceName]?.values() || [])
+      }
+
+      const isSuccess = response && response.success !== false && !response.error
+      if (!isSuccess) {
+        return Array.from(rows[resourceName]?.values() || [])
+      }
+
+      const idbRows = Array.isArray(response?.data) ? response.data : []
+      if (idbRows.length) {
+        const map = rows[resourceName]
+        const resourceHeaders = headers[resourceName] || []
+        const updatedAtIndex = resourceHeaders.indexOf('UpdatedAt')
+        let changed = false
+
+        for (const row of idbRows) {
+          if (!row || !row.length) continue
+          const code = row[0]
+          const existing = map.get(code)
+
+          if (!existing) {
+            map.set(code, row)
+            changed = true
+          } else if (updatedAtIndex !== -1) {
+            const cachedTime = new Date(row[updatedAtIndex] || 0).getTime()
+            const existingTime = new Date(existing[updatedAtIndex] || 0).getTime()
+            if (cachedTime > existingTime) {
+              map.set(code, row)
+              changed = true
+            }
+          }
+        }
+
+        if (changed && typeof _bump === 'function') {
+          _bump(resourceName)
         }
         _seeded.add(resourceName)
-        return idbRows
-      } finally {
-        _seedInFlight.delete(resourceName)
+      } else if (_seeded.has(resourceName)) {
+        // Already marked
+      } else {
+        _seeded.add(resourceName)
       }
-    })()
+      return Array.from(rows[resourceName]?.values() || [])
+    })().finally(() => {
+      _seedInFlight.delete(resourceName)
+    })
 
     _seedInFlight.set(resourceName, read)
     return read
