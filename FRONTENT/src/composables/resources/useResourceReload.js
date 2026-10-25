@@ -15,13 +15,16 @@ export function useResourceReload() {
   const resourceIo = useResourceIoStore()
   const resourceStatus = useResourceStatusStore()
   const dataStore = useDataStore()
-  const { resourceName } = useResourceConfig()
+  const { resourceName, scope } = useResourceConfig()
   const { parentResource, childResources } = usePageRecord(resourceName)
 
   const authorizedResources = computed(() => Array.isArray(auth.resources) ? auth.resources : [])
 
   const allowedResourceNames = computed(() => {
-    return new Set(authorizedResources.value.map((r) => normalizeName(r?.name)).filter(Boolean))
+    const masterOnly = normalizeName(scope.value).toLowerCase() === 'master'
+    return new Set(authorizedResources.value
+      .filter((r) => !masterOnly || normalizeName(r?.scope).toLowerCase() === 'master')
+      .map((r) => normalizeName(r?.name)).filter(Boolean))
   })
 
   const dependencyResourceNames = computed(() => {

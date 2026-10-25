@@ -31,7 +31,22 @@ The orchestrator resolves properties in this priority order, evaluating function
 | **`caption`** | `localConfig.caption` (or function) | `config.description` | `"Create a new entry"` | `"[Code] - Modify"` | `"[Code] - Details"` / action suffix |
 | **`icon`** | `localConfig.icon` | `null` (hidden) | `null` (hidden) | `null` (hidden) | `null` (hidden) |
 | **`back`** | `localConfig.back` (Boolean/String/Function) | `false` (hidden) | `true` (shown) | `true` (shown) | `true` (shown) |
-| **`reload`** | `localConfig.reload` | `true` (shown) | `false` (hidden) | `false` (hidden) | `false` (hidden) |
+| **`reload`** | `localConfig.reload` | `true` (shown) | `true` (shown) | `true` (shown) | `true` (shown) |
+
+### Reload button and resource list
+
+`PageHeader.vue` shows reload by default on every page. Set `reload: false` or `reload: 'false'` to hide it.
+
+The shared `ReloadButton.vue` calls `useResourceReload().reloadDependencies()`. The list comes from `dependencyResourceNames` in `FRONTENT/src/composables/resources/useResourceReload.js`.
+
+- On a `master` page, only resources with scope `master` may enter the list.
+- On an `operation`, `accounts`, or any other scope page, linked resources from all scopes may enter the list.
+- Every resource must be in the user's allowed resource list. Repeated names are kept once.
+- Start with the current resource. Add its page parent and direct children. Then add its relation parents, children, and links.
+- For each direct child, add its parents and links. For each resource added by this step, add its parents and links once more. Stop there; do not keep following all links.
+- A skipped resource is not followed to find more resources. If the current resource is not allowed, the list is empty.
+
+Before sync, the code checks cached rows for missing linked records within this list. It marks those target resources for recovery. It passes the list to `resourceIo.syncResources()` with `forceSync: true`. The service skips resources that are already syncing and sends `action: 'get'` for the rest. It uses saved update times where present, but clears them for recovery targets. The button shows loading while any resource in the list is loading or syncing.
 
 ---
 
