@@ -57,7 +57,8 @@ Write code that explains itself. Do not narrate it.
 ## Startup Sequence
 - Read this file.
 - **Protocol check first**:
-  - If the request mentions **MACP**, the Multi-Agent Collaborative Protocol, the Architect/Builder relay workflow, or asks you to act as the **Architect Agent**, read [MACP.md](file:///f:/AQL/References/Prompt%20Library/MACP.md) in full first.
+  - If the request invokes **AGLP** or the **Assisted Goal Loop Protocol**, read [AGLP.md](file:///f:/AQL/References/Prompt%20Library/AGLP.md) in full first. Reuse known task context. Agree on the goal, finish the needed agent setup, and wait for the user's start signal before automatic execution. Discussion or edits to the protocol do not activate a loop or resume paused work.
+  - If the request invokes **MACP**, the Multi-Agent Collaborative Protocol, or the Architect/Builder relay workflow, read [MACP.md](file:///f:/AQL/References/Prompt%20Library/MACP.md) in full first. A request to act as the **Architect Agent** uses MACP when no other protocol is named or already active. Keep the active protocol when continuing known work.
   - If the request explicitly invokes an AQL role mode (**Guide**, **Solo**, **Brain**, or **Build**), read [MAP.md](file:///f:/AQL/References/Prompt%20Library/MAP.md) and execute its role handshake:
     - **Guide / Solo**: Ask directly what task is being discussed or implemented.
     - **Brain**: Prompt for the Building Agent's Capability Tier first, then prompt for the task to plan.
@@ -71,7 +72,7 @@ Classify the user's request into one of these categories:
 
 | Category | Rule | Action |
 |---|---|---|
-| **MACP / Protocol Session (takes precedence)** | The query mentions MACP, role modes (Guide, Brain, Build, Solo), or asks you to act under a protocol | Read [MACP.md](file:///f:/AQL/References/Prompt%20Library/MACP.md) or [MAP.md](file:///f:/AQL/References/Prompt%20Library/MAP.md) and follow its handshake and execution boundaries. |
+| **Protocol Session (takes precedence)** | The query invokes AGLP, MACP, role modes (Guide, Brain, Build, Solo), or asks you to act under a protocol | Read the named protocol: [AGLP.md](file:///f:/AQL/References/Prompt%20Library/AGLP.md), [MACP.md](file:///f:/AQL/References/Prompt%20Library/MACP.md), or [MAP.md](file:///f:/AQL/References/Prompt%20Library/MAP.md). Follow its start steps and role limits. Do not switch an existing goal to another protocol without the user's agreement. |
 | **Resource UI Module Generation / 3-Layer UI (takes precedence over Single-category)** | Any request to build, generate, create, extend, or change a resource's UI or module under the 3-Layer UI Architecture | Load [resource_ui_module_developer.md](file:///f:/AQL/References/Prompt%20Library/Initialization/resource_ui_module_developer.md) FIRST. |
 | **Single-category match** | The query maps cleanly to exactly ONE routing category below | Load ONLY that one init prompt. Do NOT load related prompts speculatively. |
 | **Multi-category match** | The query explicitly spans multiple distinct domains | Load ONLY the prompts that match the explicit scope. Do NOT load transitive dependencies. |
@@ -125,8 +126,10 @@ Load the matching initialization document from [References/Prompt Library/Initia
 > If the user's request doesn't cleanly match any category above, consult [CORE_DOC_ROUTING.md](file:///f:/AQL/Documents/CORE_DOC_ROUTING.md) to identify the correct canonical documents for the task.
 
 ## Multi-Agent Collaboration Frameworks
+- **Assisted Goal Loop Protocol (AGLP)**: Canonical doc at [AGLP.md](file:///f:/AQL/References/Prompt%20Library/AGLP.md). Four roles: Conductor, Architect, Builder, and Browser Test Agent. The Architect runs agreed task/review loops after setup and the user's start signal. The Architect does not write production code.
 - **Multi-Agent Collaborative Protocol (MACP)**: Canonical doc at [MACP.md](file:///f:/AQL/References/Prompt%20Library/MACP.md).
 - **AQL Multi-Agent Protocol (Guide, Solo, Brain, Build)**: Canonical doc at [MAP.md](file:///f:/AQL/References/Prompt%20Library/MAP.md).
+- Each protocol keeps its own rules. AGLP does not change MAP, MACP, or an existing loop. A paused goal stays paused until the user asks to resume it.
 - Protocol rules govern conversation and execution flow. Repository knowledge comes from Query Classification and the initialization prompts above.
 
 ## Repo-Local Skills
@@ -134,7 +137,7 @@ Load the matching initialization document from [References/Prompt Library/Initia
 - `aql-expert`: AQL domain work across frontend, GAS, sheet metadata, resources, permissions, and workflows.
 - `aql-frontend-design`: AQL-specific Quasar UI design, prototypes, and frontend visual refinement.
 - `aql-coding-patterns`: Maintaining consistent formatting, syntax, and styling across JS, Vue, and GS files.
-- These skills must defer to this file, [MAP.md](file:///f:/AQL/References/Prompt%20Library/MAP.md), and [CORE_DOC_ROUTING.md](file:///f:/AQL/Documents/CORE_DOC_ROUTING.md).
+- These skills must defer to this file, the active protocol ([AGLP.md](file:///f:/AQL/References/Prompt%20Library/AGLP.md), [MACP.md](file:///f:/AQL/References/Prompt%20Library/MACP.md), or [MAP.md](file:///f:/AQL/References/Prompt%20Library/MAP.md)), and [CORE_DOC_ROUTING.md](file:///f:/AQL/Documents/CORE_DOC_ROUTING.md).
 - If a skill conflicts with canonical docs, follow the canonical docs and update the skill.
 
 ## Split Canonical Docs (read this before citing a §)
@@ -184,7 +187,7 @@ Split hubs: `FEATURE_DASHBOARD_ENGINE.md`, `UI_MODULE_DEVELOPER_GUIDE.md`, `UI_P
 <!-- gitnexus:start -->
 # GitNexus — Code Intelligence
 
-This project is indexed by GitNexus as **aql** (24072 symbols, 43188 relationships, 300 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
+This project is indexed by GitNexus as **aql** (24120 symbols, 43282 relationships, 300 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
 
 > If any GitNexus tool warns the index is stale, run `npx gitnexus analyze` in terminal first.
 
