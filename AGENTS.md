@@ -57,7 +57,7 @@ Write code that explains itself. Do not narrate it.
 ## Startup Sequence
 - Read this file.
 - **Protocol check first**:
-  - If the request invokes **AGLP** or the **Assisted Goal Loop Protocol**, read [AGLP.md](file:///f:/AQL/References/Prompt%20Library/AGLP.md) in full first. Reuse known task context. Agree on the goal, finish the needed agent setup, and wait for the user's start signal before automatic execution. Discussion or edits to the protocol do not activate a loop or resume paused work.
+  - If the request invokes **AGLP** or the **Assisted Goal Loop Protocol**, follow [AGLP.md](file:///f:/AQL/References/Prompt%20Library/AGLP.md), including its reading rules for each role.
   - If the request invokes **MACP**, the Multi-Agent Collaborative Protocol, or the Architect/Builder relay workflow, read [MACP.md](file:///f:/AQL/References/Prompt%20Library/MACP.md) in full first. A request to act as the **Architect Agent** uses MACP when no other protocol is named or already active. Keep the active protocol when continuing known work.
   - If the request explicitly invokes an AQL role mode (**Guide**, **Solo**, **Brain**, or **Build**), read [MAP.md](file:///f:/AQL/References/Prompt%20Library/MAP.md) and execute its role handshake:
     - **Guide / Solo**: Ask directly what task is being discussed or implemented.
@@ -72,7 +72,7 @@ Classify the user's request into one of these categories:
 
 | Category | Rule | Action |
 |---|---|---|
-| **Protocol Session (takes precedence)** | The query invokes AGLP, MACP, role modes (Guide, Brain, Build, Solo), or asks you to act under a protocol | Read the named protocol: [AGLP.md](file:///f:/AQL/References/Prompt%20Library/AGLP.md), [MACP.md](file:///f:/AQL/References/Prompt%20Library/MACP.md), or [MAP.md](file:///f:/AQL/References/Prompt%20Library/MAP.md). Follow its start steps and role limits. Do not switch an existing goal to another protocol without the user's agreement. |
+| **Protocol Session (takes precedence)** | The query invokes AGLP, MACP, role modes (Guide, Brain, Build, Solo), or asks you to act under a protocol | Follow the named protocol: [AGLP.md](file:///f:/AQL/References/Prompt%20Library/AGLP.md), [MACP.md](file:///f:/AQL/References/Prompt%20Library/MACP.md), or [MAP.md](file:///f:/AQL/References/Prompt%20Library/MAP.md). Follow its reading rules, start steps, and role limits. Do not switch an existing goal to another protocol without the user's agreement. |
 | **Resource UI Module Generation / 3-Layer UI (takes precedence over Single-category)** | Any request to build, generate, create, extend, or change a resource's UI or module under the 3-Layer UI Architecture | Load [resource_ui_module_developer.md](file:///f:/AQL/References/Prompt%20Library/Initialization/resource_ui_module_developer.md) FIRST. |
 | **Single-category match** | The query maps cleanly to exactly ONE routing category below | Load ONLY that one init prompt. Do NOT load related prompts speculatively. |
 | **Multi-category match** | The query explicitly spans multiple distinct domains | Load ONLY the prompts that match the explicit scope. Do NOT load transitive dependencies. |
@@ -126,7 +126,7 @@ Load the matching initialization document from [References/Prompt Library/Initia
 > If the user's request doesn't cleanly match any category above, consult [CORE_DOC_ROUTING.md](file:///f:/AQL/Documents/CORE_DOC_ROUTING.md) to identify the correct canonical documents for the task.
 
 ## Multi-Agent Collaboration Frameworks
-- **Assisted Goal Loop Protocol (AGLP)**: Canonical doc at [AGLP.md](file:///f:/AQL/References/Prompt%20Library/AGLP.md). Four roles: Conductor, Architect, Builder, and Browser Test Agent. The Architect runs agreed task/review loops after setup and the user's start signal. The Architect does not write production code.
+- **Assisted Goal Loop Protocol (AGLP)**: [AGLP.md](file:///f:/AQL/References/Prompt%20Library/AGLP.md).
 - **Multi-Agent Collaborative Protocol (MACP)**: Canonical doc at [MACP.md](file:///f:/AQL/References/Prompt%20Library/MACP.md).
 - **AQL Multi-Agent Protocol (Guide, Solo, Brain, Build)**: Canonical doc at [MAP.md](file:///f:/AQL/References/Prompt%20Library/MAP.md).
 - Each protocol keeps its own rules. AGLP does not change MAP, MACP, or an existing loop. A paused goal stays paused until the user asks to resume it.
