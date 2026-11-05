@@ -1,13 +1,3 @@
-/**
- * ============================================================
- * AQL - OPERATION Sheet Setup (Resources Driven)
- * ============================================================
- * Run this function in APP Apps Script project only.
- * It reads APP.Resources, opens target files by FileID,
- * and creates/updates configured OPERATION sheets there.
- *
- * Shared helpers: setupSheetUtils.gs (setup_* functions)
- */
 
 var OPERATION_HEADER_COLOR = '#2E7D32';
 var OPERATION_ALT_ROW_COLOR = '#f0f7f1';
@@ -43,32 +33,41 @@ function setup_getOperationSchemas() {
         },
         {
             resourceName: CONFIG.OPERATION_SHEETS.PURCHASE_REQUISITION_ITEMS,
-            headers: ['Code','PurchaseRequisitionCode', 'SKU', 'UOM', 'Quantity', 'Status'],
+            headers: ['Code', 'PurchaseRequisitionCode', 'SKU', 'UOM', 'Quantity', 'Status', 'Description'],
             statusDefault: 'Active',
             defaults: { Quantity: 1, Status: 'Active' },
-            columnWidths: { Code: 150, PurchaseRequisitionCode: 200, SKU: 150, UOM: 100, Quantity: 100, Status: 100 }
+            columnWidths: { Code: 150, PurchaseRequisitionCode: 200, SKU: 150, UOM: 100, Quantity: 100, Status: 100, Description: 240 }
         },
         {
             resourceName: CONFIG.OPERATION_SHEETS.RFQS,
-            headers: ['Code', 'ProcurementCode','PurchaseRequisitionCode','PurchaseRequisitionItemsCode','RFQDate','LeadTimeDays','LeadTimeType','ShippingTermMode','ShippingTerm','PaymentTermMode','PaymentTerm','PaymentTermDetail','QuotationValidityDays','QuotationValidityMode','DeliveryMode','AllowPartialDelivery','AllowSplitShipment','SubmissionDeadline','Progress',
-                'ProgressClosedComment', 'ProgressClosedAt', 'ProgressClosedBy',
+            headers: ['Code', 'ProcurementCode', 'PurchaseRequisitionCode', 'RFQDate', 'QuotationSubmissionDeadline', 'User',
+                'Progress', 'ProgressClosedComment', 'ProgressClosedAt', 'ProgressClosedBy',
+                'CriterionPrice', 'CriterionPackaging', 'CriterionPaymentTerms', 'CriterionCreditPeriod',
+                'CriterionShippingTerms', 'CriterionLeadTime', 'CriterionQuotationValidity',
+                'CriterionShipmentGrouping', 'CriterionExtraCharges', 'CriterionRefundableTaxAmount',
+                'CriterionItemAvailability', 'CriterionPartialOrderAcceptance',
                 'Status', 'AccessRegion'].concat(commonAuditColumns),
             statusDefault: 'Active',
             defaults: { Status: 'Active', Progress: 'DRAFT' },
-            columnWidths: { Code: 150, ProcurementCode: 150, PurchaseRequisitionCode: 120,
-            PurchaseRequisitionItemsCode: 120, RFQDate: 120, LeadTimeDays: 120, LeadTimeType: 120,
-            ShippingTermMode: 120, ShippingTerm: 120, PaymentTermMode: 120, PaymentTerm: 120, PaymentTermDetail: 120,
-            QuotationValidityDays: 120, QuotationValidityMode: 120, DeliveryMode: 120, AllowPartialDelivery: 120,
-            AllowSplitShipment: 120, SubmissionDeadline: 120, Progress: 120,
-            ProgressClosedComment: 220, ProgressClosedAt: 160, ProgressClosedBy: 150,
-            Status: 100, AccessRegion: 130 }
+            columnWidths: {
+                Code: 150, ProcurementCode: 150, PurchaseRequisitionCode: 180, RFQDate: 120, QuotationSubmissionDeadline: 200, User: 150,
+                Progress: 120, ProgressClosedComment: 220, ProgressClosedAt: 160, ProgressClosedBy: 150,
+                CriterionPrice: 200, CriterionPackaging: 200, CriterionPaymentTerms: 200, CriterionCreditPeriod: 200,
+                CriterionShippingTerms: 200, CriterionLeadTime: 200, CriterionQuotationValidity: 200,
+                CriterionShipmentGrouping: 200, CriterionExtraCharges: 200, CriterionRefundableTaxAmount: 220,
+                CriterionItemAvailability: 220, CriterionPartialOrderAcceptance: 220, Status: 100, AccessRegion: 130
+            }
         },
         {
             resourceName: CONFIG.OPERATION_SHEETS.RFQ_SUPPLIERS,
-            headers: ['Code', 'ProcurementCode', 'RFQCode', 'SupplierCode', 'SentDate', 'Progress', 'Status', 'AccessRegion'].concat(commonAuditColumns),
+            headers: ['Code', 'ProcurementCode', 'RFQCode', 'SupplierCode', 'SentDate', 'ProgressSentAt', 'ProgressSentBy', 'ProgressSentComment',
+                'ProgressRespondedAt', 'ProgressRespondedBy', 'ProgressRespondedComment',
+                'ProgressCancelledAt', 'ProgressCancelledBy', 'ProgressCancelledComment', 'Progress', 'Status', 'AccessRegion'].concat(commonAuditColumns),
             statusDefault: 'Active',
             defaults: { Status: 'Active', Progress: 'ASSIGNED' },
-            columnWidths: { Code: 150, ProcurementCode: 150, RFQCode: 150, SupplierCode: 150, SentDate: 150,
+            columnWidths: { Code: 150, ProcurementCode: 150, RFQCode: 150, SupplierCode: 150, SentDate: 150, ProgressSentAt: 170, ProgressSentBy: 150, ProgressSentComment: 220,
+            ProgressRespondedAt: 170, ProgressRespondedBy: 150, ProgressRespondedComment: 220,
+            ProgressCancelledAt: 170, ProgressCancelledBy: 150, ProgressCancelledComment: 220,
             Progress: 150, Status: 100, AccessRegion: 130 }
         },
         {
@@ -77,7 +76,8 @@ function setup_getOperationSchemas() {
                 'AllowPartialPO', 'SupplierQuotationReference',
                 'LeadTimeDays', 'LeadTimeType', 'DeliveryMode', 'AllowPartialDelivery', 'AllowSplitShipment',
                 'ShippingTerm', 'PaymentTerm', 'PaymentTermDetail', 'QuotationValidityDays', 'ValidUntilDate',
-                'Currency', 'TotalAmount', 'ExtraChargesBreakup', 'Remarks', 'Progress',
+                'Currency', 'TotalAmount', 'ExtraChargesBreakup', 'Remarks',
+                'CriteriaResponses', 'Progress',
                 'ProgressRejectedComment', 'ProgressRejectedAt', 'ProgressRejectedBy',
                 'ResponseRecordedAt', 'ResponseRecordedBy', 'Status', 'AccessRegion'].concat(commonAuditColumns),
             statusDefault: 'Active',
@@ -88,7 +88,7 @@ function setup_getOperationSchemas() {
                 DeliveryMode: 130, AllowPartialDelivery: 150, AllowSplitShipment: 150,
                 ShippingTerm: 120, PaymentTerm: 130, PaymentTermDetail: 220,
                 QuotationValidityDays: 160, ValidUntilDate: 130, Currency: 100, TotalAmount: 130,
-                ExtraChargesBreakup: 260, Remarks: 240, Progress: 130,
+                ExtraChargesBreakup: 260, Remarks: 240, CriteriaResponses: 260, Progress: 130,
                 ProgressRejectedComment: 220, ProgressRejectedAt: 160, ProgressRejectedBy: 150,
                 ResponseRecordedAt: 160, ResponseRecordedBy: 150, Status: 100, AccessRegion: 130
             }

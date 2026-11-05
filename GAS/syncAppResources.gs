@@ -1,11 +1,3 @@
-/**
- * ============================================================
- * AQL - Sync APP.Resources from Code
- * ============================================================
- * Defines the default registry of APP.Resources in code so they can
- * be synced to the Google Sheet with one click.
- */
-
 var APP_RESOURCES_CODE_CONFIG = null;
 
 function initAppResourcesCodeConfig() {
@@ -391,18 +383,9 @@ function initAppResourcesCodeConfig() {
             {"id":"rep_1776000000011","name":"outlet-stock-detail","label":"Stock Detail","templateSheet":"OutletStockDetail","isRecordLevel":true,"inputs":[{"targetCell":"AB6","field":"Code"}],"pdfOptions":{}}
         ]),
         CustomUIName: '',
-        // Six queues, declared here so `AllOutlets` is the page's DEFAULT view and every pill
-        // resolves its `Index/List<Name>.vue` override. Without this row the resource falls
-        // through to auto-derived views (one per `Status` value — "Active", "Inactive"), and
-        // the Index opens on a view no override is registered for.
-        //
-        // Five of the six are defined by events in OTHER resources — an Outlets row cannot
-        // state when it was last paid — so the filters below are never what fills them; the
-        // `.vue` override reads the Layer 2 aggregate. The entries exist for the NAME, the
-        // default flag and the pill order; labels, icons and counts come from
-        // `Index/ListSwitcher.js`.
         ListViews: JSON.stringify([
-            { "name": "AllOutlets", "label": "All Outlets", "icon": "storefront", "color": "primary", "default": true, "filter": { "type": "group", "logic": "AND", "items": [{ "type": "condition", "column": "Status", "operator": "eq", "value": "Active" }] } },
+            { "name": "Recent", "label": "Recent", "icon": "history", "color": "primary", "default": true, "filter": { "type": "group", "logic": "AND", "items": [{ "type": "condition", "column": "Status", "operator": "eq", "value": "Active" }] } },
+            { "name": "AllOutlets", "label": "All Outlets", "icon": "storefront", "color": "primary", "default": false, "filter": { "type": "group", "logic": "AND", "items": [{ "type": "condition", "column": "Status", "operator": "eq", "value": "Active" }] } },
             { "name": "NoUpdates", "label": "No Updates", "icon": "running_with_errors", "color": "negative", "default": false, "filter": { "type": "group", "logic": "AND", "items": [{ "type": "condition", "column": "Status", "operator": "eq", "value": "Active" }] } },
             { "name": "RecentlyRestocked", "label": "Restocked", "icon": "inventory_2", "color": "teal-7", "default": false, "filter": { "type": "group", "logic": "AND", "items": [{ "type": "condition", "column": "Status", "operator": "eq", "value": "Active" }] } },
             { "name": "RecentlyConsumed", "label": "Consumed", "icon": "point_of_sale", "color": "deep-orange", "default": false, "filter": { "type": "group", "logic": "AND", "items": [{ "type": "condition", "column": "Status", "operator": "eq", "value": "Active" }] } },
@@ -711,6 +694,7 @@ function initAppResourcesCodeConfig() {
         UIFields: JSON.stringify([
             { header: 'PurchaseRequisitionCode', label: 'Purchase Requisition Code', type: 'text' },
             { header: 'SKU', label: 'SKU', type: 'text' },
+            { header: 'Description', label: 'Description', type: 'textarea' },
             { header: 'UOM', label: 'Unit of Measure', type: 'text' },
             { header: 'Quantity', label: 'Quantity', type: 'number' },
             { header: 'Status', label: 'Status', type: 'status' }
@@ -737,7 +721,7 @@ function initAppResourcesCodeConfig() {
         CodeSequenceLength: 5,
         LastDataUpdatedAt: 0,
         Audit: 'TRUE',
-        RequiredHeaders: 'ProcurementCode',
+        RequiredHeaders: 'ProcurementCode,PurchaseRequisitionCode,RFQDate,QuotationSubmissionDeadline',
         UniqueHeaders: '',
         UniqueCompositeHeaders: '',
         DefaultValues: '{"Status":"Active","Progress":"DRAFT"}',
@@ -751,28 +735,39 @@ function initAppResourcesCodeConfig() {
         Menu: JSON.stringify([
             {"group":["Purchase"],"order":4,"label":"Request For Quotations","icon":"request_quote","route":"/operation/rfqs","pageTitle":"Request for Quotations","pageDescription":"Manage requests for quotation","show":true}
         ]),
+        Settings: JSON.stringify([{
+            name: 'RFQCriteria', type: 'textarea', detail: 'Available RFQ criterion names. Rules and descriptions are in the RFQ form code.',
+            value: JSON.stringify([
+                'Price', 'Packaging', 'Payment terms', 'Credit period', 'Shipping terms', 'Lead time',
+                'Quotation validity', 'Number of shipments', 'Charges', 'Refundable tax amount',
+                'Item availability', 'Partial order acceptance'
+            ])
+        }, {
+            name: 'DefaultQuotationSubmissionDays', type: 'number', detail: 'Default quotation submission deadline in days from RFQ date',
+            value: 14
+        }]),
         UIFields: JSON.stringify([
             { header: 'ProcurementCode', label: 'Procurement Code', type: 'text' },
             { header: 'PurchaseRequisitionCode', label: 'Purchase Requisition Code', type: 'text' },
-            { header: 'PurchaseRequisitionItemsCode', label: 'Purchase Requisition Items Code', type: 'textarea' },
             { header: 'RFQDate', label: 'RFQ Date', type: 'date' },
-            { header: 'LeadTimeDays', label: 'Lead Time Days', type: 'number' },
-            { header: 'LeadTimeType', label: 'Lead Time Type', type: 'select' },
-            { header: 'ShippingTermMode', label: 'Shipping Term Mode', type: 'select' },
-            { header: 'ShippingTerm', label: 'Shipping Term', type: 'text' },
-            { header: 'PaymentTermMode', label: 'Payment Term Mode', type: 'select' },
-            { header: 'PaymentTerm', label: 'Payment Term', type: 'text' },
-            { header: 'PaymentTermDetail', label: 'Payment Term Detail', type: 'textarea' },
-            { header: 'QuotationValidityDays', label: 'Quotation Validity Days', type: 'number' },
-            { header: 'QuotationValidityMode', label: 'Quotation Validity Mode', type: 'select' },
-            { header: 'DeliveryMode', label: 'Delivery Mode', type: 'select' },
-            { header: 'AllowPartialDelivery', label: 'Allow Partial Delivery', type: 'text' },
-            { header: 'AllowSplitShipment', label: 'Allow Split Shipment', type: 'text' },
-            { header: 'SubmissionDeadline', label: 'Submission Deadline', type: 'date' },
+            { header: 'QuotationSubmissionDeadline', label: 'Quotation Submission Deadline', type: 'date' },
+            { header: 'User', label: 'User', type: 'text' },
             { header: 'Progress', label: 'Progress', type: 'status' },
             { header: 'ProgressClosedComment', label: 'Closed Comment', type: 'textarea' },
             { header: 'ProgressClosedAt', label: 'Closed At', type: 'datetime' },
             { header: 'ProgressClosedBy', label: 'Closed By', type: 'text' },
+            { header: 'CriterionPrice', label: 'Criterion Price', type: 'textarea' },
+            { header: 'CriterionPackaging', label: 'Criterion Packaging', type: 'textarea' },
+            { header: 'CriterionPaymentTerms', label: 'Criterion Payment Terms', type: 'textarea' },
+            { header: 'CriterionCreditPeriod', label: 'Criterion Credit Period', type: 'textarea' },
+            { header: 'CriterionShippingTerms', label: 'Criterion Shipping Terms', type: 'textarea' },
+            { header: 'CriterionLeadTime', label: 'Criterion Lead Time', type: 'textarea' },
+            { header: 'CriterionQuotationValidity', label: 'Criterion Quotation Validity', type: 'textarea' },
+            { header: 'CriterionShipmentGrouping', label: 'Criterion Shipment Grouping', type: 'textarea' },
+            { header: 'CriterionExtraCharges', label: 'Criterion Extra Charges', type: 'textarea' },
+            { header: 'CriterionRefundableTaxAmount', label: 'Criterion Refundable Tax Amount', type: 'textarea' },
+            { header: 'CriterionItemAvailability', label: 'Criterion Item Availability', type: 'textarea' },
+            { header: 'CriterionPartialOrderAcceptance', label: 'Criterion Partial Order Acceptance', type: 'textarea' },
             { header: 'Status', label: 'Status', type: 'status' },
             { header: 'AccessRegion', label: 'Access Region', type: 'text' }
         ]),
@@ -788,6 +783,10 @@ function initAppResourcesCodeConfig() {
             { "name": "Closed", "label": "Closed", "icon": "lock", "color": "positive", "default": false, "filter": { "type": "group", "logic": "AND", "items": [{ "type": "condition", "column": "Progress", "operator": "eq", "value": "CLOSED" }] } },
             { "name": "Cancelled", "label": "Cancelled", "icon": "block", "color": "negative", "default": false, "filter": { "type": "group", "logic": "AND", "items": [{ "type": "condition", "column": "Progress", "operator": "eq", "value": "CANCELLED" }] } }
         ]),
+        Relations: JSON.stringify({
+            ProcurementCode: CONFIG.OPERATION_SHEETS.PROCUREMENTS,
+            PurchaseRequisitionCode: CONFIG.OPERATION_SHEETS.PURCHASE_REQUISITIONS
+        }),
         Options: JSON.stringify({
             Progress: ['DRAFT', 'SENT', 'CLOSED', 'CANCELLED'],
             LeadTimeType: ['FLEXIBLE', 'STRICT', 'RANGE_10', 'RANGE_25'],
@@ -796,7 +795,7 @@ function initAppResourcesCodeConfig() {
             PaymentTermMode: ['ANY', 'FIXED'],
             PaymentTerm: ['ADVANCE', 'PARTIAL', 'CAD', 'LC', 'CREDIT'],
             QuotationValidityMode: ['MIN_REQUIRED', 'MAX_ALLOWED', 'FLEXIBLE'],
-            DeliveryMode: ['ANY', 'FIXED']
+            DeliveryMode: ['ANY', 'FIXED'],
         })
     },
     {
@@ -815,13 +814,36 @@ function initAppResourcesCodeConfig() {
         DefaultValues: '{"Status":"Active","Progress":"ASSIGNED"}',
         AccessRegionSource: '{"subject":[{"column":"RFQCode","resource":"RFQs","empty":"next","fail":"user"},{"user":true}]}',
         OwnerUserField: 'CreatedBy',
-        AdditionalActions: '',
+        AdditionalActions: JSON.stringify([
+            {
+                action: 'Cancel',
+                label: 'Cancel Supplier',
+                icon: 'cancel',
+                color: 'negative',
+                kind: 'mutate',
+                confirm: false,
+                column: 'Progress',
+                columnValue: 'CANCELLED',
+                columnValueOptions: [],
+                fields: [{ name: 'Comment', label: 'Cancellation Reason', type: 'textarea', required: true }],
+                visibleWhen: { column: 'Progress', op: 'nin', value: ['CANCELLED'] }
+            }
+        ]),
         Menu: JSON.stringify([]),
         UIFields: JSON.stringify([
             { header: 'ProcurementCode', label: 'Procurement Code', type: 'text' },
             { header: 'RFQCode', label: 'RFQ Code', type: 'text' },
             { header: 'SupplierCode', label: 'Supplier Code', type: 'text' },
             { header: 'SentDate', label: 'Sent Date', type: 'date' },
+            { header: 'ProgressSentAt', label: 'Send Recorded At', type: 'datetime' },
+            { header: 'ProgressSentBy', label: 'Send Recorded By', type: 'text' },
+            { header: 'ProgressSentComment', label: 'Send Comment', type: 'text' },
+            { header: 'ProgressRespondedAt', label: 'Reply Recorded At', type: 'datetime' },
+            { header: 'ProgressRespondedBy', label: 'Reply Recorded By', type: 'text' },
+            { header: 'ProgressRespondedComment', label: 'Reply Comment', type: 'text' },
+            { header: 'ProgressCancelledAt', label: 'Cancelled At', type: 'datetime' },
+            { header: 'ProgressCancelledBy', label: 'Cancelled By', type: 'text' },
+            { header: 'ProgressCancelledComment', label: 'Cancel Comment', type: 'text' },
             { header: 'Progress', label: 'Progress', type: 'status' },
             { header: 'Status', label: 'Status', type: 'status' },
             { header: 'AccessRegion', label: 'Access Region', type: 'text' }
@@ -885,6 +907,7 @@ function initAppResourcesCodeConfig() {
             { header: 'TotalAmount', label: 'Total Amount', type: 'currency' },
             { header: 'ExtraChargesBreakup', label: 'Extra Charges Breakup', type: 'textarea' },
             { header: 'Remarks', label: 'Remarks', type: 'textarea' },
+            { header: 'CriteriaResponses', label: 'Criteria Responses', type: 'textarea' },
             { header: 'Progress', label: 'Progress', type: 'status' },
             { header: 'ProgressRejectedComment', label: 'Rejected Comment', type: 'textarea' },
             { header: 'ProgressRejectedAt', label: 'Rejected At', type: 'datetime' },

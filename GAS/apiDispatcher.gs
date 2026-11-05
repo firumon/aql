@@ -1,11 +1,5 @@
-/**
- * ============================================================
- * AQL - API Dispatcher
- * ============================================================
- * Owns doPost and action routing across auth/resource scopes.
- */
-
 const JSON_MIME_TYPE = ContentService.MimeType.JSON;
+let _activeBatchWritePlan = null;
 
 function doPost(e) {
   var request;
@@ -267,22 +261,22 @@ function buildApiEnvelope(request, rawResult) {
 }
 
 function normalizeActionData(action, requestResource, requestPayload, rawResult) {
-  var resources = {};
-  var result = {};
-  var artifacts = {};
+  let resources = {};
+  let result = {};
+  let artifacts = {};
 
   if (action === 'batch') {
-    var requests = Array.isArray(requestPayload && requestPayload.requests) ? requestPayload.requests : [];
-    var rawItems = Array.isArray(rawResult && rawResult.data) ? rawResult.data : [];
+    let requests = Array.isArray(requestPayload && requestPayload.requests) ? requestPayload.requests : [];
+    let rawItems = Array.isArray(rawResult && rawResult.data) ? rawResult.data : [];
     result.responses = rawItems.map(function (entry, index) {
-      var subReq = requests[index] || {};
-      var normalizedReq = {
+      let subReq = requests[index] || {};
+      let normalizedReq = {
         requestId: subReq.requestId || Utilities.getUuid(),
         action: (subReq.action || '').toString().trim(),
         resource: subReq.resource || '',
         payload: subReq
       };
-      var envelope = buildApiEnvelope(normalizedReq, entry || { success: false, message: 'Empty batch item result' });
+      let envelope = buildApiEnvelope(normalizedReq, entry || { success: false, message: 'Empty batch item result' });
       mergeResourcePayloadMap(resources, envelope && envelope.data ? envelope.data.resources : {});
       if (envelope && envelope.data && envelope.data.resources) {
         delete envelope.data.resources;
@@ -290,11 +284,14 @@ function normalizeActionData(action, requestResource, requestPayload, rawResult)
       return envelope;
     });
 
-    var deltas = rawResult && rawResult.deltaResources;
+    ['retryUnsafe', 'committedFiles', 'unconfirmedFile', 'inProgress', 'replayed'].forEach(function(key) {
+      if (rawResult && rawResult[key] !== undefined) result[key] = rawResult[key];
+    });
+    let deltas = rawResult && rawResult.deltaResources;
     if (deltas && typeof deltas === 'object') {
-      var deltaPayloads = {};
+      let deltaPayloads = {};
       Object.keys(deltas).forEach(function (resourceName) {
-        var delta = deltas[resourceName];
+        let delta = deltas[resourceName];
         if (!delta || !Array.isArray(delta.rows)) return;
         deltaPayloads[resourceName] = buildResourcePayload(
           resourceName, delta.rows, delta.meta, delta.headers, requestPayload
@@ -307,7 +304,7 @@ function normalizeActionData(action, requestResource, requestPayload, rawResult)
 
   extractResourcePayloads(resources, requestResource, rawResult, requestPayload);
 
-  var topLevelResultKeys = ['token', 'user', 'resources', 'appConfig', 'avatarUrl', 'name', 'email', 'archived'];
+  let topLevelResultKeys = ['token', 'user', 'resources', 'appConfig', 'avatarUrl', 'name', 'email', 'archived'];
   topLevelResultKeys.forEach(function (key) {
     if (rawResult && rawResult[key] !== undefined) {
       result[key] = rawResult[key];
@@ -318,10 +315,10 @@ function normalizeActionData(action, requestResource, requestPayload, rawResult)
     result.errors = rawResult.errors;
   }
 
-  var data = rawResult ? rawResult.data : null;
+  let data = rawResult ? rawResult.data : null;
   if (data !== null && data !== undefined) {
     if (typeof data === 'object' && !Array.isArray(data)) {
-      var sanitized = stripResourceFields(data);
+      let sanitized = stripResourceFields(data);
       Object.keys(sanitized).forEach(function (key) {
         result[key] = sanitized[key];
       });
@@ -601,44 +598,53 @@ var FT_STALE_HEARTBEAT_MS = 45000;
 var FT_POLL_INTERVAL_MS = 2500;
 var FT_POLL_CEILING_MS = 20000;
 
-/**
- * Handles batching multiple API actions together sequentially.
- */
 function handleBatchActions(auth, payload) {
-  var requests = Array.isArray(payload.requests) ? payload.requests : [];
+  let requests = Array.isArray(payload.requests) ? payload.requests : [];
   if (!requests.length) {
     return { success: false, message: 'No requests provided for batch action' };
   }
 
-  // Same ticket means the same form submission. The ticket owns its own cache
-  // key, so two different forms never wait on each other and no script lock is
-  // taken anywhere in this path.
-  var formTicket = normalizeFormTicket(payload.formTicket);
+  let formTicket = normalizeFormTicket(payload.formTicket);
   if (!formTicket) {
     return runBatchQueue(auth, payload, requests, null, null, null);
   }
 
-  var cacheKey = 'FT_' + formTicket;
-  var cache = openScriptCache();
-  var state = cache ? readFormTicketState(cache, cacheKey, requests.length) : null;
+  const requestHash = Utilities.base64Encode(Utilities.computeDigest(
+    Utilities.DigestAlgorithm.SHA_256, JSON.stringify([auth && auth.user ? auth.user.UserID : '', requests])
+  ));
+  let cacheKey = 'FT_' + formTicket;
+  let cache = openScriptCache();
+  let state = cache ? readFormTicketState(cache, cacheKey, requests.length) : null;
 
   if (!state) {
     state = createFormTicketState(requests);
+    state.requestHash = requestHash;
     writeFormTicketState(cache, cacheKey, state);
     return runBatchQueue(auth, payload, requests, cache, cacheKey, state);
   }
 
+  if (state.requestHash && state.requestHash !== requestHash) {
+    return { success: false, retryUnsafe: true, message: 'This save ticket belongs to another submission.', data: [] };
+  }
   if (state.finished) {
     return buildFormTicketReplayResult(auth, payload, requests, state);
   }
 
-  var idleFor = Date.now() - Number(state.lastUpdatedAt || 0);
+  if (state.phase === 'committing' || state.phase === 'review' || state.completed.length) {
+    return {
+      success: false, retryUnsafe: true, committedFiles: state.committedFiles || [],
+      message: 'This save needs review before retry. Some file writes may already have finished.', data: []
+    };
+  }
+  if (state.phase === 'ready') return runBatchQueue(auth, payload, requests, cache, cacheKey, state);
+
+  let idleFor = Date.now() - Number(state.lastUpdatedAt || 0);
   if (idleFor < FT_STALE_HEARTBEAT_MS) {
-    var waited = 0;
+    let waited = 0;
     while (waited < FT_POLL_CEILING_MS) {
       Utilities.sleep(FT_POLL_INTERVAL_MS);
       waited += FT_POLL_INTERVAL_MS;
-      var fresh = cache ? readFormTicketState(cache, cacheKey, requests.length) : null;
+      let fresh = cache ? readFormTicketState(cache, cacheKey, requests.length) : null;
       if (!fresh) break;
       if (fresh.finished) {
         return buildFormTicketReplayResult(auth, payload, requests, fresh);
@@ -652,8 +658,6 @@ function handleBatchActions(auth, payload) {
     };
   }
 
-  // The heartbeat went quiet, so the first run died mid-flight. Put back what it
-  // had claimed and take over the rest of the queue.
   state.queue = state.processing.concat(state.queue);
   state.processing = [];
   return runBatchQueue(auth, payload, requests, cache, cacheKey, state);
@@ -680,19 +684,19 @@ function createFormTicketState(requests) {
 // cached state past its size budget for nothing.
 function readFormTicketState(cache, cacheKey, requestCount) {
   try {
-    var raw = cache.get(cacheKey);
+    let raw = cache.get(cacheKey);
     if (!raw) return null;
-    var parsed = JSON.parse(raw);
+    let parsed = JSON.parse(raw);
     if (!parsed || typeof parsed !== 'object') return null;
     if (!Array.isArray(parsed.queue) || !Array.isArray(parsed.completed)) return null;
     parsed.processing = Array.isArray(parsed.processing) ? parsed.processing : [];
     parsed.resources = Array.isArray(parsed.resources) ? parsed.resources : [];
     parsed.refs = parsed.refs && typeof parsed.refs === 'object' ? parsed.refs : {};
     parsed.finished = parsed.finished === true;
-    var pending = parsed.queue.concat(parsed.processing);
-    for (var i = 0; i < pending.length; i++) {
-      var index = Number(pending[i]);
-      if (!(index >= 0 && index < requestCount)) return null;
+    let pending = parsed.queue.concat(parsed.processing);
+    for (let i = 0; i < pending.length; i++) {
+      let index = Number(pending[i]);
+      if (!(index >= 0 && index < requestCount)) parsed.phase = 'review';
     }
     return parsed;
   } catch (readErr) {
@@ -832,88 +836,105 @@ function buildFormTicketReplayResult(auth, payload, requests, state) {
 }
 
 function runBatchQueue(auth, payload, requests, cache, cacheKey, state) {
-  var tracked = !!state;
-  if (!tracked) state = createFormTicketState(requests);
-
-  var batchContext = createBatchContext();
+  if (_activeBatchWritePlan) return { success: false, message: 'Nested batches are not supported.', data: [] };
+  const allowed = ['get', 'create', 'update', 'bulk', 'compositeSave', 'executeAction', 'record'];
+  const unsupported = requests.find(function(request) { return !request || allowed.indexOf(request.action) === -1; });
+  if (unsupported || requests.some(function(request) { return !request; })) {
+    return { success: false, message: 'Batch supports resource reads and writes only.', data: [] };
+  }
+  const tracked = !!state;
+  state = state || createFormTicketState(requests);
+  const pending = state.queue.slice();
+  const plan = createBatchWritePlan();
+  const cursorSnapshot = Object.assign({}, _resource_cursor_cache);
+  const pendingCursorSnapshot = Object.assign({}, _pending_cursor_writes);
+  const batchContext = createBatchContext();
   seedBatchContextFromRefs(batchContext, state.refs);
-
-  var liveResults = {};
-  var failure = null;
-
-  while (state.queue.length) {
-    var index = Number(state.queue.shift());
-    state.processing = [index];
-    if (tracked) stampFormTicketState(cache, cacheKey, state);
-
-    var stepResult;
-    var resolvedReq = null;
-    try {
-      resolvedReq = resolveBatchReferencesDeep(requests[index], batchContext);
-      var action = (resolvedReq.action || '').toString().trim();
-      if (!action) throw new Error('Action is required');
-      stepResult = dispatchProtectedAction(action, auth, resolvedReq);
-    } catch (e) {
-      stepResult = { success: false, message: e && e.message ? e.message : e.toString() };
-    }
-
-    if (!stepResult || stepResult.success !== true) {
-      state.processing = [];
-      state.queue.unshift(index);
-      if (tracked) stampFormTicketState(cache, cacheKey, state);
-      failure = { index: index, result: stepResult || { success: false, message: 'Batch action failed' } };
-      break;
-    }
-
-    updateBatchContextFromResult(batchContext, resolvedReq, stepResult);
-    refreshResolvedRefs(state.refs, batchContext);
-
-    var stepCode = extractStepCode(stepResult);
-    state.processing = [];
-    state.completed.push({
-      index: index,
-      action: (resolvedReq.action || '').toString().trim(),
-      resource: resolvedReq.resource || '',
-      code: stepCode ? stepCode.code : '',
-      codeKey: stepCode ? stepCode.key : '',
-      message: stepResult.message || '',
-      success: true
-    });
-    if (tracked) stampFormTicketState(cache, cacheKey, state);
-
-    liveResults[index] = stepResult;
-  }
-
-  var liveCount = Object.keys(liveResults).length;
-  var results = buildFormTicketStepResults(requests, state, liveResults);
-
-  if (failure) {
-    results[failure.index] = failure.result;
-    var result = {
-      success: false,
-      message: 'One or more batch actions failed',
-      data: results
-    };
-    // Steps replayed from cache carry no rows, so the client needs a read delta.
-    if (liveCount < (state.completed || []).length) {
-      result.deltaResources = collectWriteDeltaResources(auth, payload, state.resources || []);
-    }
-    return result;
-  }
-
-  state.finished = true;
+  const liveResults = {};
+  const prepared = [];
+  let failure = null;
+  state.phase = 'preparing';
+  state.queue = [];
+  state.processing = pending.slice();
   if (tracked) stampFormTicketState(cache, cacheKey, state);
+  _activeBatchWritePlan = plan;
 
-  var finalResult = {
-    success: true,
-    message: 'Batch actions completed successfully',
-    data: results
-  };
-  if (liveCount < requests.length) {
-    if (liveCount === 0) finalResult.replayed = true;
-    finalResult.deltaResources = collectWriteDeltaResources(auth, payload, state.resources || []);
+  try {
+    for (const index of pending) {
+      let resolvedReq;
+      let stepResult;
+      try {
+        resolvedReq = resolveBatchReferencesDeep(requests[index], batchContext);
+        stepResult = dispatchProtectedAction(resolvedReq.action, auth, resolvedReq);
+        if (plan.failure) throw plan.failure;
+      } catch (error) {
+        stepResult = { success: false, message: error.message || String(error) };
+      }
+      if (!stepResult || stepResult.success !== true) {
+        failure = { index, result: stepResult || { success: false, message: 'Batch action failed.' } };
+        break;
+      }
+      updateBatchContextFromResult(batchContext, resolvedReq, stepResult);
+      const code = extractStepCode(stepResult);
+      prepared.push({
+        index, action: resolvedReq.action, resource: resolvedReq.resource || '',
+        code: code ? code.code : '', codeKey: code ? code.key : '', message: stepResult.message || '', success: true
+      });
+      liveResults[index] = stepResult;
+      if (tracked) stampFormTicketState(cache, cacheKey, state);
+    }
+    if (!failure) {
+      state.phase = 'committing';
+      if (tracked) stampFormTicketState(cache, cacheKey, state);
+      commitBatchWritePlan(plan);
+      state.completed = state.completed.concat(prepared);
+      refreshResolvedRefs(state.refs, batchContext);
+      state.processing = [];
+      state.finished = true;
+      state.phase = 'committed';
+      state.committedFiles = plan.committedFiles.slice();
+      if (tracked) stampFormTicketState(cache, cacheKey, state);
+      return {
+        success: true, message: 'Batch actions completed successfully',
+        data: buildFormTicketStepResults(requests, state, liveResults)
+      };
+    }
+  } catch (error) {
+    failure = { index: -1, result: { success: false, message: error.message || String(error) } };
+  } finally {
+    _activeBatchWritePlan = null;
+    const stagedCursorWrites = _pending_cursor_writes;
+    _pending_cursor_writes = pendingCursorSnapshot;
+    if (plan.state === 'committed') {
+      Object.assign(_pending_cursor_writes, stagedCursorWrites);
+      Object.keys(plan.cursors).forEach(function(name) {
+        _pending_cursor_writes[buildResourceCursorCacheKey(name)] = String(plan.cursors[name]);
+      });
+    } else {
+      _resource_cursor_cache = cursorSnapshot;
+    }
+    _resource_registry_context_cache = null;
+    if (plan.state === 'open') discardBatchWritePlan(plan);
   }
-  return finalResult;
+
+  const retryUnsafe = plan.state === 'failed' || plan.state === 'committing' || plan.state === 'committed';
+  state.processing = [];
+  state.queue = pending;
+  state.phase = retryUnsafe ? 'review' : 'ready';
+  state.committedFiles = plan.committedFiles.slice();
+  if (tracked) stampFormTicketState(cache, cacheKey, state);
+  const results = requests.map(function(_, index) {
+    if (failure && (failure.index === index || (failure.index === -1 && index === 0))) return failure.result;
+    return {
+      success: false, rolledBack: !retryUnsafe,
+      message: failure ? failure.result.message : 'Batch not saved.',
+      errors: failure && Array.isArray(failure.result.errors) ? failure.result.errors : []
+    };
+  });
+  return {
+    success: false, retryUnsafe, committedFiles: plan.committedFiles.slice(), unconfirmedFile: plan.unconfirmedFile || '',
+    message: failure ? failure.result.message : 'Batch not saved.', data: results
+  };
 }
 
 function openScriptCache() {
@@ -1205,4 +1226,212 @@ function handlePollAction(auth, payload) {
       serverTime: serverTime
     }
   };
+}
+
+function createBatchWritePlan() {
+  return { files: new Map(), sheets: new Map(), state: 'open', committedFiles: [], cursors: {}, cursorFileId: '' };
+}
+
+function getBatchSheetView(plan, sheet) {
+  if (!plan || plan.state !== 'open') throw new Error('Batch write plan is not open.');
+  const file = sheet.getParent();
+  const fileId = file.getId();
+  const sheetId = sheet.getSheetId();
+  const key = fileId + ':' + sheetId;
+  if (plan.sheets.has(key)) return plan.sheets.get(key).view;
+  const values = sheet.getDataRange().getValues().map(function(row) { return row.slice(); });
+  const entry = {
+    sheet, file, fileId, sheetId, values, writes: [],
+    maxRows: sheet.getMaxRows(), maxColumns: sheet.getMaxColumns()
+  };
+  function range(row, column, height, width) {
+    height = height === undefined ? 1 : height;
+    width = width === undefined ? 1 : width;
+    if (![row, column, height, width].every(function(value) { return Number.isInteger(value) && value > 0; })) {
+      throw new Error('Batch ranges need positive row and column numbers.');
+    }
+    function read() {
+      return Array.from({ length: height }, function(_, y) {
+        return Array.from({ length: width }, function(_, x) {
+          const value = values[row - 1 + y] && values[row - 1 + y][column - 1 + x];
+          return value === undefined ? '' : value;
+        });
+      });
+    }
+    function write(input) {
+      if (plan.state !== 'open') throw new Error('Batch write plan is not open.');
+      if (!Array.isArray(input) || input.length !== height ||
+          input.some(function(line) { return !Array.isArray(line) || line.length !== width; })) {
+        throw new Error('Batch values do not match the range size.');
+      }
+      const copied = input.map(function(line) { return line.slice(); });
+      copied.forEach(function(line, y) {
+        if (!values[row - 1 + y]) values[row - 1 + y] = [];
+        line.forEach(function(value, x) { values[row - 1 + y][column - 1 + x] = value; });
+      });
+      entry.writes.push({ row, column, values: copied });
+      return result;
+    }
+    const result = {
+      getValues: read,
+      getValue: function() { return read()[0][0]; },
+      setValues: write,
+      setValue: function(value) {
+        if (height !== 1 || width !== 1) throw new Error('Batch setValue needs a single cell.');
+        return write([[value]]);
+      },
+      getRow: function() { return row; },
+      getColumn: function() { return column; },
+      getNumRows: function() { return height; },
+      getNumColumns: function() { return width; },
+      getSheet: function() { return entry.view; },
+      createTextFinder: function(text) {
+        let whole = false;
+        let sensitive = false;
+        const finder = {
+          matchEntireCell: function(value) { whole = value; return finder; },
+          matchCase: function(value) { sensitive = value; return finder; },
+          findNext: function() {
+            const target = sensitive ? String(text) : String(text).toLowerCase();
+            const cells = read();
+            for (let y = 0; y < height; y++) {
+              for (let x = 0; x < width; x++) {
+                const value = sensitive ? String(cells[y][x]) : String(cells[y][x]).toLowerCase();
+                if (whole ? value === target : value.indexOf(target) !== -1) return range(row + y, column + x);
+              }
+            }
+            return null;
+          }
+        };
+        return finder;
+      }
+    };
+    return result;
+  }
+  entry.view = {
+    getParent: function() { return file; },
+    getName: function() { return sheet.getName(); },
+    getSheetId: function() { return sheetId; },
+    getMaxRows: function() { return entry.maxRows; },
+    getMaxColumns: function() { return entry.maxColumns; },
+    getLastRow: function() {
+      for (let index = values.length - 1; index >= 0; index--) {
+        if ((values[index] || []).some(function(value) { return value !== '' && value != null; })) return index + 1;
+      }
+      return 0;
+    },
+    getLastColumn: function() {
+      return values.reduce(function(last, line) {
+        for (let index = line.length - 1; index >= last; index--) {
+          if (line[index] !== '' && line[index] != null) return index + 1;
+        }
+        return last;
+      }, 0);
+    },
+    getRange: range,
+    getDataRange: function() {
+      return range(1, 1, Math.max(1, entry.view.getLastRow()), Math.max(1, entry.view.getLastColumn()));
+    }
+  };
+  if (!plan.files.has(fileId)) plan.files.set(fileId, []);
+  plan.files.get(fileId).push(entry);
+  plan.sheets.set(key, entry);
+  return entry.view;
+}
+
+function batchCellValue(value, timeZone) {
+  if (value === '' || value == null) return {};
+  if (value instanceof Date) {
+    if (!Number.isFinite(value.getTime())) throw new Error('Batch contains an invalid date.');
+    const local = Utilities.formatDate(value, timeZone, "yyyy-MM-dd'T'HH:mm:ss.SSS");
+    return { numberValue: Date.parse(local + 'Z') / 86400000 + 25569 };
+  }
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value)) throw new Error('Batch contains an invalid number.');
+    return { numberValue: value };
+  }
+  if (typeof value === 'boolean') return { boolValue: value };
+  if (typeof value !== 'string') throw new Error('Batch cells must contain plain sheet values.');
+  return value.charAt(0) === '=' ? { formulaValue: value } : { stringValue: value };
+}
+
+function batchFileRequests(entries) {
+  const requests = [];
+  entries.forEach(function(entry) {
+    if (!entry.writes.length) return;
+    const lastRow = entry.writes.reduce(function(last, write) {
+      return Math.max(last, write.row - 1 + write.values.length);
+    }, 0);
+    const lastColumn = entry.writes.reduce(function(last, write) {
+      return Math.max(last, write.column - 1 + write.values[0].length);
+    }, 0);
+    if (lastRow > entry.maxRows) {
+      requests.push({ appendDimension: { sheetId: entry.sheetId, dimension: 'ROWS', length: lastRow - entry.maxRows } });
+    }
+    if (lastColumn > entry.maxColumns) {
+      requests.push({ appendDimension: { sheetId: entry.sheetId, dimension: 'COLUMNS', length: lastColumn - entry.maxColumns } });
+    }
+    const timeZone = entry.file.getSpreadsheetTimeZone();
+    entry.writes.forEach(function(write) {
+      requests.push({
+        updateCells: {
+          start: { sheetId: entry.sheetId, rowIndex: write.row - 1, columnIndex: write.column - 1 },
+          rows: write.values.map(function(line) {
+            return { values: line.map(function(value) { return { userEnteredValue: batchCellValue(value, timeZone) }; }) };
+          }),
+          fields: 'userEnteredValue'
+        }
+      });
+    });
+  });
+  return requests;
+}
+
+function commitBatchWritePlan(plan) {
+  if (!plan || plan.state === 'discarded') throw new Error('Batch write plan was discarded.');
+  if (plan.state === 'committed') return { success: true, committedFiles: plan.committedFiles.slice() };
+  if (plan.state !== 'open') throw new Error('Batch write outcome needs review before retry.');
+  const files = Array.from(plan.files, function(pair) {
+    return { fileId: pair[0], requests: batchFileRequests(pair[1]) };
+  }).filter(function(file) { return file.requests.length > 0; }).sort(function(a, b) {
+    return Number(a.fileId === plan.cursorFileId) - Number(b.fileId === plan.cursorFileId);
+  });
+  const bodies = files.map(function(file) { return JSON.stringify({ requests: file.requests }); });
+  plan.state = 'committing';
+  try {
+    files.forEach(function(file, index) {
+      plan.unconfirmedFile = file.fileId;
+      const response = UrlFetchApp.fetch(
+        'https://sheets.googleapis.com/v4/spreadsheets/' + encodeURIComponent(file.fileId) + ':batchUpdate', {
+          method: 'post', contentType: 'application/json',
+          headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() },
+          payload: bodies[index], muteHttpExceptions: true
+        });
+      const status = response.getResponseCode();
+      if (status < 200 || status >= 300) {
+        let message = 'Sheets batch write failed (HTTP ' + status + ').';
+        try {
+          const body = JSON.parse(response.getContentText());
+          if (body.error && body.error.message) message = body.error.message;
+        } catch (error) {}
+        throw new Error(message);
+      }
+      plan.committedFiles.push(file.fileId);
+      plan.unconfirmedFile = '';
+    });
+    plan.state = 'committed';
+    return { success: true, committedFiles: plan.committedFiles.slice() };
+  } catch (error) {
+    plan.state = 'failed';
+    error.committedFiles = plan.committedFiles.slice();
+    error.unconfirmedFile = plan.unconfirmedFile;
+    throw error;
+  }
+}
+
+function discardBatchWritePlan(plan) {
+  if (!plan || plan.state !== 'open') throw new Error('Only an uncommitted batch plan can be discarded.');
+  plan.files.clear();
+  plan.sheets.clear();
+  plan.state = 'discarded';
 }

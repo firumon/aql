@@ -370,12 +370,6 @@ function handleResourceCreateRecord(auth, payload) {
   return result;
 }
 
-/**
- * Resolves the strict postAction suffix for supported actions only.
- *
- * @param {string} action
- * @returns {string}
- */
 function getPostActionSuffix(action) {
   switch ((action || '').toString().trim()) {
     case 'create': return 'Create';
@@ -387,62 +381,43 @@ function getPostActionSuffix(action) {
   }
 }
 
-/**
- * Centralized postAction dispatcher.
- * Resolution order:
- *   1. {postAction}_after<Action>
- *   2. {postAction}
- *
- * Hook failures are logged and never fail the API response.
- *
- * @param {Object} config
- * @param {Object} payload
- * @param {Object} result
- * @param {Object} auth
- * @param {string} action
- * @param {Object} meta
- * @param {string} resourceName
- */
 function dispatchPostActionHook(config, payload, result, auth, action, meta, resourceName) {
-  var normalizedAction = (action || '').toString().trim();
+  let normalizedAction = (action || '').toString().trim();
   if (!normalizedAction || normalizedAction === 'get' || normalizedAction === 'batch') return;
 
-  var suffix = getPostActionSuffix(normalizedAction);
+  let suffix = getPostActionSuffix(normalizedAction);
   if (!suffix) return;
 
-  var postAction = config && config.postAction ? config.postAction.toString().trim() : '';
+  let postAction = config && config.postAction ? config.postAction.toString().trim() : '';
   if (!postAction) return;
 
-  var candidates = [postAction + '_after' + suffix, postAction];
+  if (_activeBatchWritePlan && [
+    'handleStockMovementsBulkSave', 'handleOutletMovementsBulkSave',
+    'handleWarehouseTransfers', 'handleWarehouseTransferItems', 'linkProcurementCodeToPurchaseRequisition'
+  ].indexOf(postAction) === -1) {
+    throw new Error('PostAction is not supported in a staged batch: ' + postAction);
+  }
+  const candidates = [postAction + '_after' + suffix, postAction];
   try {
-    for (var i = 0; i < candidates.length; i++) {
-      var fn = this[candidates[i]];
+    for (let i = 0; i < candidates.length; i++) {
+      let fn = this[candidates[i]];
       if (typeof fn === 'function') {
-        fn(payload || {}, result || {}, auth || {}, normalizedAction, meta || {}, resourceName || '');
+        const outcome = fn(payload || {}, result || {}, auth || {}, normalizedAction, meta || {}, resourceName || '');
+        if (_activeBatchWritePlan && outcome && outcome.success === false) {
+          throw new Error(outcome.message || outcome.error || 'PostAction failed: ' + postAction);
+        }
         return;
       }
     }
   } catch (e) {
+    if (_activeBatchWritePlan) {
+      _activeBatchWritePlan.failure = e;
+      throw e;
+    }
     Logger.log('dispatchPostActionHook error for "' + postAction + '" (' + normalizedAction + '): ' + String(e));
   }
 }
 
-/**
- * Handles create/update when payload.records is an array.
- *
- * Called by dispatchGenericMasterCrudAction when action=create or action=update
- * and payload.records is a non-empty array. Keeps action=bulk exclusively for the
- * Bulk Upload UI (BulkUploadMasters).
- *
- * Flow:
- *   1. Always write rows via handleResourceBulkUpsertRecords (generic bulk upsert).
- *   2. The generic bulk handler dispatches postAction exactly once as a side-effect.
- *
- * PostAction is a SIDE-EFFECT hook here, not a primary write handler.
- *
- * @param {Object} auth
- * @param {Object} payload - Must contain .resource and .records[]
- */
 function dispatchBulkCreateRecords(auth, payload) {
   var resourceName = '';
   try {
@@ -741,11 +716,6 @@ function buildResourceRowsResponse(auth, resourceName, resource, rows, lastUpdat
   };
 }
 
-/**
- * Coerces an UpdatedAt cell to epoch millis.
- * Rows written by applyAuditFields hold a raw number; legacy/manual rows may
- * hold a Date or a date string.
- */
 function normalizeUpdatedAtMillis(value) {
   if (value === '' || value === null || value === undefined) return 0;
   if (typeof value === 'number') return isFinite(value) ? value : 0;
@@ -1095,14 +1065,6 @@ function normalizeValueByHeader(header, value) {
   return value;
 }
 
-/**
- * Stamps audit columns and returns the timestamp used, so write handlers can
- * advance the resource sync cursor with the exact same value that landed in
- * the row's UpdatedAt cell (a cursor ahead of the row would hide the write
- * from the very next poll).
- *
- * @return {number} epoch millis
- */
 function applyAuditFields(row, idx, auth, resourceConfig, isCreate) {
   const now = Date.now();
 
@@ -1233,11 +1195,6 @@ function generateNextCode(values, idx, prefix, sequenceLength) {
   return prefix + padSequence(nextNum, sequenceLength);
 }
 
-/**
- * Generates a year-scoped code: <Prefix><2DigitYear><PaddedSequence>
- * Scans only codes matching the current year to determine next sequence.
- * Example: PR26000001, PR26000002, ... PR27000001 (year rollover)
- */
 function generateNextYearScopedCode(values, idx, prefix, sequenceLength) {
   var year2 = new Date().getFullYear().toString().slice(-2);
   var escapedPrefix = escapeRegex(prefix);
@@ -1688,7 +1645,6 @@ function handleCompositeSave(auth, payload) {
     var childRecords = Array.isArray(childGroup.records) ? childGroup.records : [];
     if (!childRecords.length) continue;
 
-
     var childResource = openResourceSheet(childResourceName);
     var childSchema = buildMasterSchemaFromResourceConfig(childResource.config);
     var childSheet = childResource.sheet;
@@ -1846,10 +1802,6 @@ function handleCompositeSave(auth, payload) {
   return result;
 }
 
-/**
- * Resolves the parent code field name in a child resource's headers.
- * Convention: ParentCode or {SingularParentName}Code (e.g., ProductCode).
- */
 function resolveParentCodeField(childHeaders, parentResourceName) {
   if (childHeaders.indexOf('ParentCode') !== -1) return 'ParentCode';
   var singular = parentResourceName.replace(/s$/, '');
@@ -1858,13 +1810,6 @@ function resolveParentCodeField(childHeaders, parentResourceName) {
   return '';
 }
 
-/**
- * Zips a headers array and a row data array into a plain object.
- * Used to pass a record to post-insert hooks without re-reading the sheet.
- * @param {string[]} headers - Column header names
- * @param {Array}    rowData - Parallel array of cell values
- * @returns {Object} Plain { [header]: value } object
- */
 function rowArrayToObject(headers, rowData) {
   var obj = {};
   for (var i = 0; i < headers.length; i++) {
@@ -1884,30 +1829,6 @@ function toActionHeaderSuffix(value) {
     .join('');
 }
 
-/**
- * Handles additional action execution (Approve, Reject, Postpone, etc.)
- * Updates the record's column + auto-fill fields + user-provided fields, then
- * runs any `targets[]` the action config declares (see actionTargets.gs).
- *
- * Payload: {
- *   resource: 'OutletVisits',
- *   code: 'OV00123',
- *   actionName: 'Postpone',
- *   column: 'Progress',
- *   columnValue: 'Postponed',
- *   fields: { ProgressPostponedComment: 'Outlet closed' },
- *   targetFields: { newVisit: { Date: '2026-08-20' } }
- * }
- *
- * `fields` is keyed by DERIVED header ({column}{PascalCase(columnValue)}{name}),
- * the long-standing contract for the action's own columns. `targetFields` is
- * keyed by target key then LITERAL column name — a target writes real columns on
- * another record, so nothing is derived there.
- *
- * Only fields the user can actually edit travel on the wire. Everything a target
- * copies or defaults is resolved server-side from the trusted config, so the
- * client cannot write a column the action does not declare.
- */
 function handleExecuteAction(auth, payload) {
   var resourceName = (payload.resource || '').toString().trim();
   if (!resourceName) return { success: false, message: 'Resource is required' };
@@ -2271,5 +2192,4 @@ function formatBulkErrorMessage(errorEntry) {
   message = message.replace(/^Error:\s*/i, '');
   return 'row ' + rowNumber + ': ' + message;
 }
-
 

@@ -1,47 +1,28 @@
-/**
- * ============================================================
- * AQL - Warehouse Transfers Hooks
- * ============================================================
- * Handles business logic and StockMovements integration for:
- * - WarehouseTransfers
- * - WarehouseTransferItems
- *
- * Rules:
- * - Hooks must NEVER throw errors to the caller (use try/catch).
- * - All stock deductions and additions are written to StockMovements.
- * - Semicolons must terminate all statements.
- * ============================================================
- */
-
-// ---------------------------------------------------------------------------
 // PARENT AFTER-COMPOSITE-SAVE HOOK
-// ---------------------------------------------------------------------------
 
 function handleWarehouseTransfers_afterCompositeSave(payload, result, auth, action, meta, resourceName) {
   // All initial save stock movements and transitions are managed by the frontend composable
   return result;
 }
 
-// ---------------------------------------------------------------------------
 // PARENT AFTER-EXECUTE-ACTION HOOK
-// ---------------------------------------------------------------------------
 
 function handleWarehouseTransfers_afterExecuteAction(payload, result, auth, action, meta, resourceName) {
   try {
     if (!result || result.success !== true) return result;
 
-    var parentRecord = meta.savedRecord;
-    var actionName = meta.actionName;
+    let parentRecord = meta.savedRecord;
+    let actionName = meta.actionName;
     if (!parentRecord || !actionName) return result;
 
-    var wtCode = parentRecord.Code;
-    var items = getWarehouseTransferItems(wtCode);
+    let wtCode = parentRecord.Code;
+    let items = getWarehouseTransferItems(wtCode);
 
     if (actionName === 'Reject') {
       // 1. Return/reverse stock to Source Warehouse
-      var returnMovements = [];
-      for (var i = 0; i < items.length; i++) {
-        var item = items[i];
+      let returnMovements = [];
+      for (let i = 0; i < items.length; i++) {
+        let item = items[i];
         if (item.Progress !== 'CANCELLED') {
           returnMovements.push({
             WarehouseCode: parentRecord.SourceWarehouseCode,
@@ -62,19 +43,19 @@ function handleWarehouseTransfers_afterExecuteAction(payload, result, auth, acti
       }
     }
     else if (actionName === 'Complete' || actionName === 'ClaimAndComplete') {
-      var destWH = parentRecord.DestinationWarehouseCode;
+      let destWH = parentRecord.DestinationWarehouseCode;
       if (!destWH) {
         Logger.log('handleWarehouseTransfers_afterExecuteAction: DestinationWarehouseCode must be set for completion.');
         return result;
       }
 
-      var completeMovements = [];
-      var itemsToUpdate = [];
+      let completeMovements = [];
+      let itemsToUpdate = [];
 
-      for (var j = 0; j < items.length; j++) {
-        var itemToComplete = items[j];
+      for (let j = 0; j < items.length; j++) {
+        let itemToComplete = items[j];
         if (itemToComplete.Progress === 'PENDING') {
-          var destStorage = itemToComplete.DestinationStorageName || '_default';
+          let destStorage = itemToComplete.DestinationStorageName || '_default';
           completeMovements.push({
             WarehouseCode: destWH,
             StorageName: destStorage,
@@ -96,41 +77,43 @@ function handleWarehouseTransfers_afterExecuteAction(payload, result, auth, acti
     }
 
   } catch (e) {
+    if (_activeBatchWritePlan) {
+      _activeBatchWritePlan.failure = e;
+      throw e;
+    }
     Logger.log('handleWarehouseTransfers_afterExecuteAction ERROR: ' + String(e));
   }
   return result;
 }
 
-// ---------------------------------------------------------------------------
 // CHILD ITEM AFTER-UPDATE HOOK (Item-by-item completion support)
-// ---------------------------------------------------------------------------
 
 function handleWarehouseTransferItems_afterUpdate(payload, result, auth, action, meta, resourceName) {
   try {
     if (!result || result.success !== true) return result;
 
-    var prevRecord = meta.previousRecord;
-    var savedRecord = meta.savedRecord;
+    let prevRecord = meta.previousRecord;
+    let savedRecord = meta.savedRecord;
     if (!prevRecord || !savedRecord) return result;
 
     // Check if progress transitioned from PENDING to TRANSFERRED
     if (prevRecord.Progress !== 'TRANSFERRED' && savedRecord.Progress === 'TRANSFERRED') {
-      var wtCode = savedRecord.WarehouseTransferCode;
-      
+      let wtCode = savedRecord.WarehouseTransferCode;
+
       // Get destination warehouse code from parent record
-      var parentContext = getResourceRecordContextByCode('WarehouseTransfers', wtCode);
+      let parentContext = getResourceRecordContextByCode('WarehouseTransfers', wtCode);
       if (!parentContext) return result;
-      
-      var parentObj = rowArrayToObject(parentContext.headers, parentContext.rowData);
-      var destWH = parentObj.DestinationWarehouseCode;
-      
+
+      let parentObj = rowArrayToObject(parentContext.headers, parentContext.rowData);
+      let destWH = parentObj.DestinationWarehouseCode;
+
       if (!destWH) {
         Logger.log('handleWarehouseTransferItems_afterUpdate ERROR: DestinationWarehouseCode is not set on parent WT ' + wtCode);
         return result;
       }
 
       // Write positive stock movement for this completed item
-      var movement = {
+      let movement = {
         WarehouseCode: destWH,
         StorageName: savedRecord.DestinationStorageName || '_default',
         SKU: savedRecord.SKUCode,
@@ -142,8 +125,8 @@ function handleWarehouseTransferItems_afterUpdate(payload, result, auth, action,
       writeStockMovements([movement], auth);
 
       // Check if all items for the parent are now TRANSFERRED or CANCELLED
-      var siblingItems = getWarehouseTransferItems(wtCode);
-      var allCompleted = siblingItems.every(function(item) {
+      let siblingItems = getWarehouseTransferItems(wtCode);
+      let allCompleted = siblingItems.every(function(item) {
         return item.Progress === 'TRANSFERRED' || item.Progress === 'CANCELLED';
       });
 
@@ -153,18 +136,17 @@ function handleWarehouseTransferItems_afterUpdate(payload, result, auth, action,
     }
 
   } catch (e) {
+    if (_activeBatchWritePlan) {
+      _activeBatchWritePlan.failure = e;
+      throw e;
+    }
     Logger.log('handleWarehouseTransferItems_afterUpdate ERROR: ' + String(e));
   }
   return result;
 }
 
-// ---------------------------------------------------------------------------
 // GENERAL INTERNAL HELPERS
-// ---------------------------------------------------------------------------
 
-/**
- * Bulk writes StockMovements records to the sheet and triggers WarehouseStorages updates.
- */
 function writeStockMovements(movements, auth) {
   if (!movements || movements.length === 0) return;
 
@@ -185,7 +167,7 @@ function writeStockMovements(movements, auth) {
   for (var i = 0; i < movements.length; i++) {
     var mov = movements[i];
     var row = new Array(headers.length).fill('');
-    
+
     // Generate code using values already in sheet + rows generated in this loop
     row[idx.Code] = generateNextCode(values.concat(rowsToWrite), idx, codePrefix, codeSeqLength);
     row[idx.WarehouseCode] = mov.WarehouseCode;
@@ -215,13 +197,10 @@ function writeStockMovements(movements, auth) {
       qtyChange: mov.QtyChange
     };
   });
-  
+
   applyBatchStockMovementsToWarehouseStorages(storageRecords, auth);
 }
 
-/**
- * Retrieves all items associated with a WarehouseTransfer code.
- */
 function getWarehouseTransferItems(wtCode) {
   var resource = openResourceSheet('WarehouseTransferItems');
   var sheet = resource.sheet;
@@ -242,9 +221,6 @@ function getWarehouseTransferItems(wtCode) {
   return items;
 }
 
-/**
- * Updates the progress of a list of WT items.
- */
 function updateWarehouseTransferItemsProgress(items, progress, auth, storageField, storageValue) {
   if (!items || items.length === 0) return;
 
@@ -282,9 +258,6 @@ function updateWarehouseTransferItemsProgress(items, progress, auth, storageFiel
   updateResourceSyncCursor('WarehouseTransferItems', maxItemTimestamp);
 }
 
-/**
- * Updates the progress and action stamps for a WarehouseTransfer header.
- */
 function updateWarehouseTransferProgress(wtCode, progress, auth, fieldsToUpdate) {
   var context = getResourceRecordContextByCode('WarehouseTransfers', wtCode);
   if (!context) return null;
@@ -310,5 +283,4 @@ function updateWarehouseTransferProgress(wtCode, progress, auth, fieldsToUpdate)
   updateResourceSyncCursor('WarehouseTransfers', transferTimestamp);
   return rowArrayToObject(context.headers, rowData);
 }
-
 

@@ -100,7 +100,7 @@ function app_executeRolesSetupStep(stepId) {
     } else if (roleName === 'ProcurementManager') {
       resources = [
         'Procurements', 'PurchaseRequisitions', 'PurchaseRequisitionItems',
-        'RFQs', 'RFQItems', 'RFQSuppliers', 'SupplierQuotations', 'SupplierQuotationItems',
+        'RFQs', 'RFQSuppliers', 'SupplierQuotations', 'SupplierQuotationItems',
         'PurchaseOrders', 'PurchaseOrderItems', 'POFulfillments', 'Suppliers', 'Products', 'SKUs'
       ];
     } else if (roleName === 'StoreKeeper') {

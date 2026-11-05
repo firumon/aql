@@ -1,10 +1,3 @@
-/**
- * ============================================================
- * AQL - Resource Registry Helpers
- * ============================================================
- * Reads the APP.Resources sheet to resolve target file/sheet dynamically.
- */
-
 var _resource_file_cache = {};
 var _resource_sheet_cache = {};
 var _resource_registry_context_cache = null;
@@ -87,11 +80,6 @@ function getResourceRegistryContext() {
   return _resource_registry_context_cache;
 }
 
-/**
- * Builds and caches a map of resourceName -> config for all resources.
- * Uses getResourceRegistryContext() (itself cached) as the data source.
- * Parses each resource row exactly once.
- */
 function getResourceConfigMap() {
   if (_resource_config_map_cache) return _resource_config_map_cache;
 
@@ -253,10 +241,6 @@ function getResourceConfigMap() {
   return map;
 }
 
-/**
- * Clears the cached resource config map from both memory and CacheService.
- * Call after any write to the Resources sheet (setup, sync, manual edits).
- */
 function clearResourceConfigCache() {
   _resource_config_map_cache = null;
   _resource_registry_context_cache = null;
@@ -310,16 +294,17 @@ function getResourceConfig(resourceName) {
 function openResourceSheet(resourceName) {
   const config = getResourceConfig(resourceName);
   if (!config.fileId) {
-    throw new Error('Resource fileId could not be resolved for: ' + resourceName + ' (scope=' + config.scope + '). Check Resources.FileID or Config[' + config.scope.charAt(0).toUpperCase() + config.scope.slice(1) + 'FileID].');
+    throw new Error('Resource fileId could not be resolved for: ' + resourceName + ' (scope=' + config.scope +
+      '). Check Resources.FileID or Config[' + config.scope.charAt(0).toUpperCase() + config.scope.slice(1) + 'FileID].');
   }
   if (!config.sheetName) {
     throw new Error('Resource sheetName is missing for: ' + resourceName + '. Set SheetName in APP.Resources.');
   }
 
-  var file = openSpreadsheetById(config.fileId);
+  let file = openSpreadsheetById(config.fileId);
 
   const sheetCacheKey = config.fileId + '::' + config.sheetName;
-  var sheet = _resource_sheet_cache[sheetCacheKey];
+  let sheet = _resource_sheet_cache[sheetCacheKey];
   if (!sheet) {
     sheet = file.getSheetByName(config.sheetName);
     if (sheet) {
@@ -330,25 +315,10 @@ function openResourceSheet(resourceName) {
     throw new Error('Sheet not found for resource ' + resourceName + ': ' + config.sheetName);
   }
 
+  if (_activeBatchWritePlan) sheet = getBatchSheetView(_activeBatchWritePlan, sheet);
   return { config, file, sheet };
 }
 
-/**
- * ------------------------------------------------------------
- * Dynamic sync cursor store
- * ------------------------------------------------------------
- * The data cursor (`LastDataUpdatedAt`) changes on every write, so it is kept
- * OUT of the heavy, long-lived resource config snapshot
- * (AQL_RESOURCE_CONFIG_MAP_V3 / permanent metadata) which is intentionally
- * frozen. Cursors live in their own CacheService keys:
- *
- *   AQL_CURSOR_<SpreadsheetId>_<ResourceName>
- *
- * The spreadsheet id is part of the key so standalone (AqlCore) deployments
- * shared across tenants cannot collide. APP.Resources remains the durable
- * store; CacheService is the fast path with a 6h TTL and a sheet-backed
- * fallback on cold start.
- */
 var CURSOR_CACHE_PREFIX = 'AQL_CURSOR_';
 var CURSOR_CACHE_TTL_SEC = 21600; // 6 hours
 var _resource_cursor_cache = {};
@@ -359,14 +329,6 @@ function buildResourceCursorCacheKey(resourceName) {
   return CURSOR_CACHE_PREFIX + getAppSpreadsheet().getId() + '_' + resourceName;
 }
 
-/**
- * Reads sync cursors for the given resource names.
- * Fast path: CacheService (one batched getAll). Cold start falls back to the
- * LastDataUpdatedAt cell in APP.Resources and re-populates the cache.
- *
- * @param {string[]} resourceNames
- * @return {Object} map of resourceName -> epoch millis (0 when unknown)
- */
 function getResourceSyncCursors(resourceNames) {
   var names = [];
   var out = {};
@@ -462,18 +424,12 @@ function getResourceSyncCursors(resourceNames) {
   return out;
 }
 
-/** Single-resource convenience wrapper around getResourceSyncCursors(). */
 function getResourceSyncCursor(resourceName) {
   var name = (resourceName || '').toString().trim();
   if (!name) return 0;
   return getResourceSyncCursors([name])[name] || 0;
 }
 
-/**
- * Writes a cursor to CacheService (and the in-memory mirror) without touching
- * the sheet. Monotonic: an older timestamp never rewinds a newer one.
- * Used by read paths that derive max(UpdatedAt) from the rows they just read.
- */
 function bumpResourceSyncCursorCache(resourceName, timestamp) {
   var name = (resourceName || '').toString().trim();
   var ts = Number(timestamp) || 0;
@@ -493,10 +449,6 @@ function bumpResourceSyncCursorCache(resourceName, timestamp) {
   return ts;
 }
 
-/**
- * Flushes queued cursor bumps in a single putAll. Called once per request from
- * doPost; safe to call when nothing is queued.
- */
 function flushPendingCursorWrites() {
   var keys = Object.keys(_pending_cursor_writes);
   if (!keys.length) return;
@@ -528,34 +480,32 @@ function flushPendingCursorWrites() {
   } catch (e) { /* cache is best-effort */ }
 }
 
-/**
- * Advances the durable sync cursor for a resource.
- * Writes APP.Resources.LastDataUpdatedAt and immediately refreshes the
- * CacheService key so the very next poll execution observes the change.
- *
- * @param {string} resourceName
- * @param {number} [timestamp] epoch millis; defaults to Date.now(). Callers
- *   that just stamped audit fields should pass the identical timestamp so the
- *   cursor and the row's UpdatedAt cannot disagree.
- */
 function updateResourceSyncCursor(resourceName, timestamp) {
-  var name = (resourceName || '').toString().trim();
+  let name = (resourceName || '').toString().trim();
   if (!name) {
     throw new Error('Resource name is required');
   }
 
-  var now = Number(timestamp) || Date.now();
+  let now = Number(timestamp) || Date.now();
 
-  var registry = getResourceRegistryContext();
+  let registry = getResourceRegistryContext();
   if (registry.idx.LastDataUpdatedAt === undefined) {
     return;
   }
 
-  for (var i = 1; i < registry.values.length; i++) {
-    var row = registry.values[i];
-    var rowName = (row[registry.idx.Name] || '').toString().trim();
+  for (let i = 1; i < registry.values.length; i++) {
+    let row = registry.values[i];
+    let rowName = (row[registry.idx.Name] || '').toString().trim();
     if (rowName !== name) continue;
 
+    if (_activeBatchWritePlan) {
+      const plan = _activeBatchWritePlan;
+      getBatchSheetView(plan, registry.appSheet).getRange(i + 1, registry.idx.LastDataUpdatedAt + 1).setValue(now);
+      plan.cursorFileId = registry.appSheet.getParent().getId();
+      plan.cursors[name] = now;
+      _resource_cursor_cache[name] = now;
+      return;
+    }
     registry.appSheet.getRange(i + 1, registry.idx.LastDataUpdatedAt + 1).setValue(now);
     // Keep the cached registry values in step so a later read in this same
     // execution does not resurrect the pre-write value.
@@ -578,14 +528,6 @@ function updateResourceSyncCursor(resourceName, timestamp) {
   throw new Error('Resource not configured: ' + name);
 }
 
-/**
- * Advances the durable sync cursor for multiple resources in a single batch write.
- * Writes APP.Resources.LastDataUpdatedAt and immediately refreshes the
- * CacheService keys so poll executions observe the changes.
- *
- * @param {Object} cursorMap Map of resourceName -> timestamp (epoch millis)
- * @return {Object} summary of updated resources
- */
 function updateMultipleResourceSyncCursors(cursorMap) {
   if (!cursorMap || typeof cursorMap !== 'object') {
     return { updated: 0, resources: [] };
@@ -636,20 +578,6 @@ function updateMultipleResourceSyncCursors(cursorMap) {
   return { updated: updatedNames.length, resources: updatedNames };
 }
 
-/**
- * Scans each active, sheet-backed resource in APP.Resources, finds its maximum
- * UpdatedAt timestamp, and updates both APP.Resources.LastDataUpdatedAt and CacheService
- * in a single batch operation.
- *
- * WARNING — MAINTENANCE ONLY. This opens and fully reads EVERY active
- * sheet-backed resource in one execution. Its cost grows with total row count
- * across the whole tenant and it will approach the 6-minute execution ceiling
- * on large datasets, holding the user's single-threaded quota for the duration.
- * Invoke it only from the sheet menu, during a quiet window. Do NOT attach it
- * to a time-driven trigger, doPost, or any API action.
- *
- * @return {Object} execution summary
- */
 function recalculateAllResourcesLastDataUpdatedAt() {
   var registry = getResourceRegistryContext();
   if (registry.idx.LastDataUpdatedAt === undefined) {
@@ -813,13 +741,6 @@ function parseJsonCell(value, fallback) {
   }
 }
 
-/**
- * ListViews mode contract from a single cell:
- * - "" (blank) => auto
- * - [] => off
- * - [ ...non-empty ] => custom
- * - invalid => auto (safe fallback)
- */
 function parseListViewsCell(value) {
   if (value === undefined || value === null) {
     return { mode: 'auto', views: [] };
@@ -872,10 +793,6 @@ function parseStringList(value) {
   });
 }
 
-/**
- * Parses AdditionalActions JSON from the resource config cell.
- * Always JSON: [{action:"Approve",label:"Approve",column:"Progress",...}]
- */
 function parseAdditionalActions(value) {
   if (!value) return [];
   var str = (value || '').toString().trim();
@@ -883,16 +800,6 @@ function parseAdditionalActions(value) {
   try { return JSON.parse(str); } catch (e) { return []; }
 }
 
-/**
- * Parses the APP.Resources.Relations cell into a header -> relation map.
- *
- * Accepted entry shapes:
- *   "SupplierCode": "Suppliers"                                  (shorthand)
- *   "ParentCode": { resource, targetHeader?, labelHeader? }       (extended)
- *
- * Shorthand entries are preserved as-is; extended entries are trimmed and
- * stripped of unknown keys. Entries without a target resource are dropped.
- */
 function parseRelationsCell(value) {
   var parsed = parseJsonCell(value, {});
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
@@ -988,10 +895,6 @@ function getRolePermissionsContext() {
   return _role_permissions_context_cache;
 }
 
-/**
- * Clears the cached role permissions context.
- * Call after any write to the RolePermissions sheet.
- */
 function clearRolePermissionsCache() {
   _role_permissions_context_cache = null;
   // The catalog memos are derived from the permissions context.

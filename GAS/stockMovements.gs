@@ -2,20 +2,28 @@
 
 function handleStockMovementsBulkSave_afterBulk(payload, result, auth, action, meta, resourceName) {
   try {
-    var records = meta && Array.isArray(meta.savedRecords)
+    let records = meta && Array.isArray(meta.savedRecords)
       ? meta.savedRecords
       : (payload && Array.isArray(payload.records) ? payload.records : []);
     applyBatchStockMovementsToWarehouseStorages(records.map(toStorageMovement), auth);
   } catch (e) {
+    if (_activeBatchWritePlan) {
+      _activeBatchWritePlan.failure = e;
+      throw e;
+    }
     Logger.log('handleStockMovementsBulkSave_afterBulk ERROR: ' + String(e));
   }
 }
 
 function handleStockMovementsBulkSave_afterCreate(payload, result, auth, action, meta, resourceName) {
   try {
-    var record = meta && meta.savedRecord ? meta.savedRecord : null;
+    let record = meta && meta.savedRecord ? meta.savedRecord : null;
     if (record) applyStockMovementToWarehouseStorages(record, auth);
   } catch (e) {
+    if (_activeBatchWritePlan) {
+      _activeBatchWritePlan.failure = e;
+      throw e;
+    }
     Logger.log('handleStockMovementsBulkSave_afterCreate ERROR: ' + String(e));
   }
 }
@@ -30,6 +38,10 @@ function applyStockMovementToWarehouseStorages(record, auth) {
     applyBatchStockMovementsToWarehouseStorages([toStorageMovement(record)], auth);
     return { success: true };
   } catch (e) {
+    if (_activeBatchWritePlan) {
+      _activeBatchWritePlan.failure = e;
+      throw e;
+    }
     Logger.log('applyStockMovementToWarehouseStorages ERROR: ' + String(e) + ' | record=' + JSON.stringify(record));
     return { success: false, error: String(e) };
   }
