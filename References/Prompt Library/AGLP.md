@@ -1,247 +1,424 @@
 # Assisted Goal Loop Protocol (AGLP)
 
-**A shared goal, led by the Architect, with the Human Conductor in control.**
+**Revision: 2026-10-29 — selective section reading; current goal and task checklist; implementation-first Builder delegation; platform-owned capability discovery and self-setup; event-driven wake, fixed polling, concise handoff.**
+
+**One current goal, led by the Architect, controlled by the Human Conductor. Agents configure their own wake adapters; A plans and decides; B implements; T tests; A verifies. Prefer checked event delivery over idle AI polling.**
+
+## 0. Read this first — selective protocol index
+
+**Do not load this whole file by default.** Read this section first, then read **only the sections relevant to your role and current action**. The protocol is a reference manual, not a required 400-line prompt. For a routine task, the directive and current goal/control files supply the actual work. Read more AGLP sections only if a rule is relevant, unclear, or conflicts with another instruction.
+
+**Always applicable, even when you skip sections:** Follow project `AGENTS.md` and C's agreed limits; never infer permission to start, commit, push, deploy, sync, change live data or send externally. Check the exact assignment, goal mode and authorization before work; respect exclusive ownership and locks. A Builder report is not Architect acceptance. A notification or wake is not permission. When in doubt, stop the affected action, read the relevant rule and report the gap rather than guessing.
+
+### 0.1 Task and role reading map
+
+| You are doing... | Read only these AGLP sections (in addition to this index) |
+|---|---|
+| Just identifying what AGLP is | [§1 Purpose](#1-purpose-and-scope) and [§2 Roles](#2-roles-and-authority) if needed |
+| Architect discussing, writing, or revising the goal | [§3 Goal](#3-define-and-maintain-the-goal); [§10 Changes](#10-changes-pause-resume-and-completion) when work is active |
+| Architect starting agent setup | [§4.1–4.4 Setup](#4-agent-discovery-self-setup-and-wake-selection); [§4.5 Browser choice](#45-browser-test-choice) if T is needed |
+| Builder or Tester receiving the **one-time setup prompt** | [§2 Roles](#2-roles-and-authority), [§4.2–4.3 Self-setup](#42-one-short-conductor-relayed-capability-handshake); [§6.1 Antigravity](#61-antigravity-fresh-buildertest-task-chat) only for Antigravity, [§6.2 Direct](#62-direct-messages-and-event-driven-bridge) for messages/bridge, [§7 Polling](#7-lightweight-fixed-polling-and-shared-state) only if polling is selected; T also reads [§4.5](#45-browser-test-choice) |
+| Architect investigating and preparing a Builder directive | [§5.1–5.5 Execution-first](#5-implementation-first-delegation-directives-and-reports); [§9 Tiers](#9-worker-capability-and-directive-detail) when setting detail |
+| Builder executing an assigned directive | Its **complete directive**, goal and project rules first; consult [§5.2](#52-bundle-complete-coherent-implementation-work), [§5.5](#55-directive-publication-and-execution-report), [§6 Dispatch](#6-dispatch-direct-return-and-acknowledgment) and [§7](#7-lightweight-fixed-polling-and-shared-state) **only as applicable**. Fresh task chats do not reread the full protocol |
+| Browser Tester executing a test directive | Its directive first; [§4.5](#45-browser-test-choice), [§5.5](#55-directive-publication-and-execution-report), applicable [§6](#6-dispatch-direct-return-and-acknowledgment) or [§7](#7-lightweight-fixed-polling-and-shared-state) |
+| Architect receiving a completed/failed report | [§8 Review](#8-architect-review-and-progress) and [§9 Tiers](#9-worker-capability-and-directive-detail); [§5.4 Guard](#54-nonproductive-delegation-guard) if there is no useful progress |
+| Configuring or troubleshooting direct delivery | [§4.1–4.3](#4-agent-discovery-self-setup-and-wake-selection) and [§6.2–6.3](#62-direct-messages-and-event-driven-bridge) |
+| Configuring or troubleshooting polling | [§7 Polling](#7-lightweight-fixed-polling-and-shared-state) only; during a **quiet poll**, read **only `current-state.md`**, not this index or AGLP |
+| Pausing, resuming or finishing a goal | [§10](#10-changes-pause-resume-and-completion) and applicable [§6–7](#6-dispatch-direct-return-and-acknowledgment) |
+| Recovering a failed dispatch, lock, return or review | [§11.1 Recovery](#111-recovery-without-conversation-history), and the affected [§6](#6-dispatch-direct-return-and-acknowledgment) or [§7](#7-lightweight-fixed-polling-and-shared-state) |
+| Architect changing to a new chat | [§11.2–11.5 Handoff](#112-context-awareness-and-deciding-when-to-hand-off), plus [§7](#7-lightweight-fixed-polling-and-shared-state) **if A polls** |
+| Rewriting or auditing **this protocol itself** | Read the **entire** document and check cross-section consistency |
+
+### 0.2 How to read a portion without loading the rest
+
+- Locate the needed heading with your file tool's **heading search** (for example, `rg -n '^#{2,3} ' AGLP.md` or equivalent). Then request only the matching line range, **ending at the next heading of the same or higher level**. On a Markdown viewer, follow the section links above. Do not run an unrestricted `cat`, `Get-Content`, or full-file read just to locate one section.
+- For a subsection (such as §4.3), read that subsection's paragraphs and any explicitly referenced prerequisites. For a whole numbered section (such as §7), read through the next `##` heading. Keep required scope-specific checks intact; **selective reading changes token use, not safety or authority**.
+- On an active wake, load only the necessary sections and named files. On a quiet poll, the scheduled prompt and `current-state.md` are sufficient; **do not read AGLP at all**. If a tool automatically injects the entire document, this index cannot prevent that cost—use a range-capable file read or a separate lightweight entry prompt instead.
+
+---
 
 ## 1. Purpose and scope
 
-AGLP helps agents work toward a goal through saved directives, reports, and reviews. C and A discuss the goal. C agrees to setup and gives the start signal. A then guides the work and checks the results.
+AGLP coordinates a Human Conductor (C), Architect (A), Builder (B), and optional Browser Test Agent (T) to achieve an agreed outcome. C and A define the goal; C authorizes setup and gives the start signal; A investigates and makes technical decisions, assigns implementation-ready work, and independently reviews; B implements and self-checks; T verifies live behavior where required. An ordinary Builder handoff should deliver concrete code or another expressly assigned artifact, **not a cycle of delegated research and reports**. A wake or notification is not itself permission to do work.
 
-Read the project's AGENTS.md first. Its file, permission, and remote update rules still apply. A goal may set tighter limits. AGLP does not grant permission to push, deploy, sync, change live data, or take other actions that need C's explicit request. A and the needed B and T setup chats read this full protocol. A fresh Antigravity B or T task chat follows the reading rule in section 5.
+The project's `AGENTS.md` applies first, including its permissions, file rules, and remote-operation restrictions. A goal may impose tighter limits. AGLP never independently authorizes a commit, push, deployment, sync, production or live-data change, external message, or other action requiring C's approval. A and each role's setup chat follow the selective-reading map in section 0, rather than loading this entire protocol by default. Fresh task chats read the files required by their directive, as in section 5.
 
-AGLP is separate from [MACP](MACP.md) and [MAP](MAP.md). Reading or editing this file does not start a goal, resume paused work, or change an existing loop. Change an existing goal's wake methods only with C's agreement and a checked handoff.
+AGLP is separate from [MACP](MACP.md) and [MAP](MAP.md). Reading or revising AGLP does **not** start, resume, migrate, or reconfigure a running goal. An existing goal adopts a new protocol or wake arrangement only through C's agreement and a checked transition.
 
-## 2. Roles
+## 2. Roles and authority
 
-| Role | Work |
+| Role | Responsibility |
 |---|---|
-| **C — Human Conductor** | Discusses the goal with A. Carries setup messages between A and B, and between A and T when needed. Gives the start signal. May pause, stop, or change the goal. C may change or refuse a proposed setup. |
-| **A — Architect** | Keeps the same A chat. Plans work, prepares directives, checks reports and proof, saves reviews, and guides the goal. If C chooses A's own browser, A performs the needed live browser tests. A does not write production code. A may write agreed goal, protocol, state, directive, and review files and run allowed checks. |
-| **B — Builder** | Carries out its assigned directive, checks its work, and saves proof and a report. |
-| **T — Browser Test Agent** | When needed, tests the live app and reports what it saw and any access gap. Keep live browser proof separate from source, fixture, and compiled-component proof. |
+| **C — Human Conductor** | Defines and changes the intended outcome with A, approves setup and starting, chooses permitted connections and limits, monitors the need for Architect handoff, and can pause, stop, or decline a proposal. |
+| **A — Architect** | Owns the complete current goal, ordered checklist, codebase and dependency investigation, bug/root-cause analysis, technical decisions, implementation approach, cohesive directives, independent review, operational control, and safe handoffs. Resolves **what, where, and how** before delegating, within the available tools and authorization. Does not write production code. May write agreed coordination files and run allowed checks. |
+| **B — Builder** | Primarily implements the specified file changes, performs routine within-scope decisions, runs checks and self-corrections, and publishes one concise final report and proof. Does not routinely perform Architect-owned discovery, broad audits, redesign or major decision-making. Reports true blockers and may give a bounded second opinion when A explicitly requests it. |
+| **T — Browser Test Agent** | When selected, performs the assigned real-browser cases and reports observed behavior, evidence, and access gaps. Source mocks are not browser proof. |
 
-Use B only when needed. Use an external T when the goal needs browser testing and C chooses an external test agent. Keep the same ready T setup for a goal unless C agrees to a change; fresh task chats under that setup are allowed. Each wake names the role. A wake grants no new work or permission; the saved directive sets the work and limits.
+Use one B assignment at a time. A normal assignment may cover **all related files required for one coherent deliverable**; do not split by file count or worker tier. Setup capability discovery is a **one-time coordination step**, not a series of Builder goal tasks. Use a separate T only if C chooses external browser testing; otherwise A may test with its own accessible browser. B and T may perform independent non-conflicting work concurrently only when the wake method and ownership controls safely support it. Keep A in one chat until a checked, C-approved session handoff.
 
-## 3. Talk first
+## 3. Define and maintain the goal
 
-C may invoke AGLP before or after discussing the work. Reuse known context and choices. A helps C shape the goal through discussion. Do not begin with a fixed form or ask for a full plan, role list, or limits checklist. Ask about a real missing point when it matters. Do not ask again for a choice C already made.
+### 3.1 Discuss first
 
-Save the shared understanding in `goal.md` in the goal folder: the goal, choices, open points, useful next steps, limits, and how to judge completion. The task list can grow or change. A can add, split, join, drop, or reorder work as the goal and proof require.
+C and A may discuss before or after invoking AGLP, including while work is under way. Reuse established choices. Ask only about material unknowns; do not begin with a lengthy form or treat an idea as an approved change. A speaks to C in simple English, usually giving a concise progress update after a dispatch or review. Quiet polls make no progress announcement.
 
-Begin needed setup once the direction is clear enough and C agrees to setup. Carry on with allowed setup until ready or blocked. A protocol request or discussion alone is not a start signal. If C already gave a clear start signal during setup, save it and use it once setup is ready. Do not ask again.
+### 3.2 `goal.md` is the destination
 
-## 4. Wake methods and setup
+The goal file is the **single authoritative, complete A-to-Z statement of the currently agreed final outcome**. Include applicable purpose, features, workflows, business rules, data model and relationships, permissions, integrations, architecture and constraints, UI/UX, edge cases, agreed limits, genuine unresolved decisions, acceptance conditions, and ordered goal tasks. A large specification is acceptable when the product is complex; historical narration is not.
 
-There are two wake methods: **CLI** and **polling**. Codex always uses polling for its incoming wake, whether it is A, B, or T; follow section 7.3. A first decides its own incoming wake method from the tools and access available to A. Honor C's stated choice when supported and consistent with the Codex rule. Save A's selected method in `goal.md` before choosing or checking B's method, and tell C the choice. If A cannot use C's chosen method, report the actual gap and discuss a supported choice. Then choose B's incoming wake method. A and B may use different methods. A's selected method tells B how to return its report. Do not add a file watcher as a third method or a second wake path for the same role.
+When C and A finalize a decision, A evaluates its effects throughout the **entire** goal, including dependencies, rules, tests and tasks. A rewrites and atomically republishes the whole `goal.md` as one coherent current specification. Replace obsolete decisions wherever they appear, preserve unaffected requirements, and remove contradictions. If a material choice is not resolved, label it as open and hold dependent work; do not invent an answer.
 
-| A wakes by | B wakes by | How A sends work | How B returns a result |
-|---|---|---|---|
-| CLI | CLI | A calls B's CLI with the directive path. | B calls A's CLI with the report path. |
-| Polling | CLI | A calls B's CLI with the directive path. | B updates shared state; A finds the result on its poll. |
-| CLI | Polling | A updates shared state; B finds the assignment on its poll. | B updates shared state and calls A's CLI with the report path. |
-| Polling | Polling | A updates shared state; B finds the assignment on its poll. | B updates shared state; A finds the result on its poll. |
+**Never turn `goal.md` into an execution log.** Do not append conversations, old designs, what one agent told another, dispatch/launch attempts, schedule changes, per-directive progress, reports, reviews, context handoffs, or error diaries. Do not create a substitute chronological execution-log file. Retain only the operational facts necessary for safety in `control.md` and task-specific evidence files.
 
-After choosing A's method, A asks B for its method using the short setup prompt in section 4.1. When B is Antigravity, its method is the CLI path in section 6.1. When B is Codex, its method is polling as in section 7.3. Do not switch an Antigravity B to polling because its new chat's workspace binding or returned ID is unknown. For other roles, use a supported incoming path within C's limits. For A's CLI wake, B needs a way to call A's CLI and continue the exact existing A chat. A CLI that starts B does not prove B can call A. Report actual tool results honestly.
+### 3.3 Ordered outcome checklist
 
-### 4.1 Check support through C
+Keep one concise ordered checklist of **results required to reach the current goal**. Goal-task IDs remain stable for surviving work; they are independent of directive IDs. Example only:
 
-Once C agrees to setup, A first chooses its own wake method, prepares the needed settings, and saves the choice. A then prepares a short initialization prompt for B. If C chose an external browser test agent, A also prepares a short prompt for T under section 4.3. Do not ask C to name or choose which agent app will be B or T before giving these prompts. C carries each prompt to the intended agent and brings its reply back; C does not have to research the agents or their methods. The agents identify themselves and report their methods in their replies. A does not assume an agent app or ask C to supply facts A, B, or T can find.
+```markdown
+## Tasks to reach the goal
+- [x] G01 — Establish the storage contract; verified against the agreed schema.
+- [x] G02 — Read RFQ items through the linked PR; affected readers verified.
+- [ ] G03 — Complete quotation saving; passes validation and reload checks.
+- [ ] G04 — Verify the complete live-browser workflow; required cases pass.
+```
 
-Name the B role, the project, the exact goal folder, the absolute path to this protocol, and A's selected wake method. Ask B to read AGENTS.md and this protocol, identify its agent app, say which wake method it uses, and explain the needed directive and report handoff. Ask B to follow this protocol's setup rules for its own app, including preparing a wake script if it is Antigravity under section 6.1. If A uses CLI, give the known app, executable and exact session target so B can address the callback. If A polls, say B returns results through shared state. Give A's host and goal folder when known. If A needs connection or project details not already known, ask B for those facts in the same prompt. Do not ask for details A already has, a full tool interview, or proof of an actual future launch. Show the full short prompt in a four-backtick code block so C can copy it. After B replies, A uses the reply and known context to complete setup; it does not require a second relay just to repeat details. Reuse a current suitable reply when it already answers the needed points.
+The checklist is not an assignment history. Each item describes an outcome and how completion is judged; **a goal task is not the same as a Builder directive**. Prefer one cohesive execution directive when the task is ready; more directives are justified only by real dependencies, meaningful risk boundaries, discovered defects or other material reasons. A may reorder, split, merge, add, or remove goal tasks when the goal changes. Do not preserve obsolete tasks just to show what used to be planned. Mark `[x]` only after A independently accepts proof for the **current** completion criteria. Reopen a previously completed task if a later agreed requirement invalidates it. Show a short `blocked` or `in progress` annotation only when useful; no attempt history.
 
-A checks and supplies its actual session target before choosing an A CLI wake. B may report any known callback limits in its initialization reply. A gives the exact callback in the task directive and reports an actual callback error if it occurs. If A cannot find the session ID, CLI path, access, or another required fact, record it as unknown and report the gap through C. Do not claim that B verified an unnamed or unreachable A session.
+A owns `goal.md`. B and T do not edit it. A atomically rewrites the specification after agreed changes and atomically updates its checklist after accepted evidence. Do not rewrite it for a quiet poll, an agent message, a launch, or a temporary error.
 
-**Antigravity B is a special CLI case.** When B reads this protocol for setup, it identifies CLI as its wake method and prepares a goal-specific wake script under section 6.1. B reports the script path and exact command for A to run with a directive, as well as any real gap. B also explains the need for a complete directive and report. A records the setup and uses B's command for later dispatches. Actual launch success, workspace binding, returned ID, and callback success are separate facts; do not say they are proven before they happen.
+## 4. Agent discovery, self-setup and wake selection
 
-When a tool check is needed for a B other than Antigravity, B checks and reports supported, unsupported, or unknown, with command help or other direct evidence:
+### 4.1 Two directions; choose the method only after discovery
 
-- Whether A can start B through B's CLI: exact executable, command and arguments, access, project selection, and whether a fresh task chat can be created, named, and identified. Do not assume the working directory selects the chat's project.
-- Whether B can call A's CLI from B's environment to continue A's exact existing session: executable, command form, access, and limits. A separately checks its own session target and required access.
-- When polling is needed, the available automation tool, exact role and chat or project target, supported interval, and start, status, pause, resume, and stop controls. Check whether it can avoid repeated agent runs while work is active.
-- Whether both sides can read and write the needed goal files, use exclusive locks and atomic state replacement, and create the specified report.
+AGLP has **two distinct communication directions**: **A → worker** (dispatch a directive) and **worker → A** (return a completed report). Each role also has an **incoming wake method**, which is how a message or scheduled run reaches that role. A CLI that launches B does not establish that B can return to A. Likewise, two agents using Codex, Antigravity or the same host does not prove a usable direct-message link.
 
-For Codex, use polling for every role as in section 7.3. For other roles except Antigravity B, check the needed incoming path and use polling if the CLI path is not supported or is outside C's limits. For Antigravity B, use its initialization reply and section 6.1; do not add an unnecessary tool interview. Do not require demo tasks, trial conversations, or round-trip tests. Setup does not authorize goal work. Report unknown facts as unknown and actual results as they occur.
+For each role, prefer supported and authorized methods in this order:
 
-A chooses and tells C each method and why. C may change or refuse the choice. A records the methods and setup. Send B only the actual settings or actions B still needs, through C. Do not repeat a complete check reply. For a polling role, set up and check its automation and save its actual settings. Follow the tool's supported controls. Do not edit scheduler files by hand. If a required path or access is missing, report the exact gap. Do not claim readiness or silently switch to manual relay; C may choose a manual route.
+1. **Direct agent message or checked existing-session CLI return** to the exact intended chat, where both sender and recipient are verified. A Codex role uses a supported Codex-to-Codex messaging action or fixed polling for its incoming wake; do not assume Codex accepts an incoming CLI wake.
+2. **Checked event-driven adapter/bridge** when native cross-app delivery is unavailable. A small local PowerShell/Node process or supported event hook may notify an existing target chat without invoking an AI model while idle. It must be approved by C and actually tested for the specified direction; a file watcher is allowed only as part of that explicit checked adapter.
+3. **Fixed-interval AI polling** when neither direct delivery nor an event bridge is currently supported and authorized. Use minimal prompts, one slim state file and the verified fixed interval from section 7; never adaptive polling.
 
-### 4.2 Setup records and start
+**During setup, the methods may be provisional.** A first identifies its **actual platform and incoming/outgoing capabilities**, exact current chat/session target if discoverable, host and limits, distinguishing **verified**, **reported**, and **unknown** facts. Record these provisional facts in `control.md` without scheduling a poll or declaring an untested return ready. A sends the short handshake of section 4.2; the worker checks its own platform and returns the exact supported dispatch and return options. A then verifies each needed sender → recipient link, selects **one incoming wake per role**, tells C the decision and why, obtains any required C authorization, and records the final choices. If direct return to A becomes viable, do not retain an unnecessary provisional A polling schedule.
 
-Use `<project>/AGLP/<goal-name>/` unless C agrees to another folder. For a new goal, use `goal.md` as its goal record. A saves the absolute project and goal paths, each role's method, exact CLI commands and arguments or schedule settings, session or chat target, owner, access, stop/resume steps, failure and recovery steps, and checked evidence in `goal.md`. For polling, save the automation tool, schedule ID, role, target, interval, state path, and accepted settings. Do not claim a launch or callback succeeded before it happens.
+For the selected arrangement, check the exact executable/tool and invocation, project/workspace selection, chat/session ID and host, permission, authorized sender, report path and file access, busy/queued behavior, and how receipt or review will be confirmed. **One role has exactly one active incoming wake path**; outgoing dispatch to another role does not count as its own incoming path. Do not simultaneously use direct notification and AI polling as competing normal ways to wake A. Switch methods only through C-approved or explicitly pre-authorized, checked handoff: settle pending notifications and owners, disable the old incoming route, then verify the replacement. A non-AI checker may detect a missing acknowledgment and signal only through the chosen route.
 
-Use one shared `current-state.md` only if any role polls. All roles in that goal update the fields needed by the polling roles, including CLI roles. If no role polls, do not create, read, or update it. Keep goal mode, assignments, results, and reviews in the goal record and reports instead.
+### 4.2 One short Conductor-relayed capability handshake
 
-Setup is ready when the selected methods, needed paths, commands, targets, rights, and controls are saved and any required setup is done. For Antigravity B, an unknown workspace binding or conversation ID is not a setup blocker; section 6.1 gives the first-task access check. Do not claim those unknown facts are verified. Do not start goal work before C's start signal. After that signal, set the goal active and give the first real directive.
+After C approves setup, A prepares **one concise initialization prompt** per needed B or external T, displayed in a four-backtick code block for C to copy. C carries it to the chosen agent and brings back the answer. **C does not have to identify the agent's software, research its command-line options, configure its environment, or relay one missing environment variable at a time.** A gives information it already has, including its own checked communication capabilities; it must not pretend a method is verified because it is theoretically supported.
 
-### 4.3 Browser test choice and T setup
+The prompt identifies: role A and its platform, known/unknown outgoing methods, A's currently available return methods (provisional when necessary), the receiving role, exact project root, goal folder, `AGENTS.md` and absolute AGLP path, permitted setup writes, and a request for the recipient to self-identify and self-configure. It asks for **one complete reply** with (1) the worker's platform and capabilities, (2) the selected/available A → worker wake and its exact command/target, (3) a checked worker → A return method or gap, (4) prepared setup scripts and preflight evidence, and (5) all remaining blockers together. Ask only for needed unknowns; do not request a generic tool interview, a sample code task or a demonstration chat. **Setup is not a start signal.**
 
-If the goal calls for live browser testing, A asks C whether A should use its own built-in browser or an external browser test agent. Reuse C's answer if it is already clear; do not ask again. Save the choice in `goal.md`. If browser testing is added later, ask then if the choice is still unknown. Do not treat source checks, fixtures, or B's report as a live browser test.
+**Initialization prompt template** (A replaces placeholders with checked facts; remove unsupported claims):
 
-If C chooses A's own browser, A performs the needed live tests with its available browser and records what it sees, proof, and any access gap in the goal review. No separate T, T schedule, T directive, or T wake setup is needed. Check browser access and ask C to sign in only when needed. If A's browser is unavailable, report the gap and ask C how to proceed; do not claim the test passed.
+````text
+AGLP SETUP ONLY — no goal implementation.
+I am Architect (A), using <A agent app> in <A host/chat if known>.
+My checked outgoing methods: <actual methods or unknown>.
+My possible incoming returns: <actual methods and checked status>.
+You are <Builder B OR Browser Test Agent T> for this project.
+Project: <absolute project root>
+Goal folder: <absolute goal folder>
+Protocol: <absolute AGLP.md>
+Project rules: <absolute AGENTS.md>
 
-If C chooses an external agent, set up and use T. A first selects its own wake method, then prepares a short initialization prompt for T using the same setup flow as B in section 4.1. Do not ask C which agent app should be T before providing the prompt. Name the T role, the project, exact goal folder, protocol path, A's method, and the needed browser work. Ask T to read AGENTS.md and this protocol, identify its agent app, report its wake method, and explain the directive and report handoff. Ask T to follow this protocol's setup rules for its own app, including preparing a wake script if it is Antigravity under section 6.1. Ask for connection or project facts only when A needs them. Show the prompt in a four-backtick block. C carries it to the intended T and brings the reply back; do not ask C to research T's tools.
+Read AGENTS.md, AGLP section 0 and the setup sections relevant to your platform; do not load all of AGLP.
+Identify your app and check which incoming wakes you support
+(CLI, direct message, event bridge, fixed polling).
+Set up the best supported A-to-you path for your app;
+check how you can return results to this exact Architect chat.
+Use your platform-specific AGLP setup, including an adapter
+or wake script where required. Collect all setup gaps together.
 
-T can wake by CLI or polling, independently of A and B. A Codex T always uses polling. An Antigravity T uses the same role-specific wake script setup as Antigravity B under section 6.1, with T as the role and a separate T script and directive. For another T, A chooses a supported method from T's reply, as for B, within C's limits. C may change or refuse the choice. If T uses CLI, A saves a complete browser test directive and wakes T through its selected path.
+Reply once with your exact invocation command/tool and args,
+selected return path, checked evidence, remaining unknowns,
+and the settings/actions I must perform. No secrets.
+Do not start a demo conversation or goal task.
+````
 
-If T polls, C chooses T's interval; do not assume B's interval. After the method and interval are known, A prepares the shared `current-state.md` in `setup` mode with T's slot set to `none`. A then gives C a complete T setup prompt in a four-backtick block. The prompt gives T the exact goal and state paths, its role, selected interval, quiet check, setup-mode rule, and instructions to use T's own supported automation controls. C carries the prompt to T.
+The receiving agent **owns discovering and preparing its platform-specific setup** within C's approved file, permission and tool limits. It reads its own installed tool help, checks supported access and prepares the reusable adapter or goal-specific script as needed. If it cannot perform a check, reports `unknown` or the exact failure rather than guessing. It may not install software, change global environment settings, deploy, push, commit, or launch a real task unless separately authorized. B/T can write approved setup scripts or scratch files in the goal folder and report them; they do not edit `goal.md` or `control.md`.
 
-**T creates and owns its own polling schedule in T's chat.** A must not create, change, or stop T's schedule. T checks the actual target chat, accepted interval, state path, busy handling, and start, status, pause, resume, and stop controls. T reports the schedule ID, accepted settings, owner, controls, and any gap to A through C. A records T's reply in the goal record and does not mark T ready until the needed settings are confirmed. T does no browser task while the goal is in `setup` mode.
+**Expected compact setup reply** (all reported facts still require A's verification):
 
-T's setup can proceed while B's reply is pending. A must not stop after saving the interval or wait for B before giving T its schedule setup prompt. If the state file, target, or another required fact is missing, A prepares what it owns and reports the real gap. Follow section 7 for schedule and busy rules.
+```text
+Role / app / host: ...
+Incoming wake: CLI | message | bridge | polling | unsupported
+A -> worker: exact command/tool, argument form, target and project
+Worker -> A: exact checked return path, or unresolved reason
+Setup files / preflight: paths, status, relevant non-secret evidence
+Needs from A/C: only outstanding permission/access or action
+Ready: yes | conditional (specific check) | blocked (reason)
+```
 
-If any role polls, use the one shared `current-state.md`, with a separate T slot. T follows only its own slot and never claims B's work. A gives T the exact browser target and limits, allowed writes, directive and report paths, proof needed, and A's selected return method. T reports what it actually saw and any access or sign-in gap. Check browser access and ask C for sign-in only when needed. Do not require a demo. Reuse the same ready T setup unless C agrees to change it.
+A verifies the reported configuration from **A's own actual invocation environment**, not merely the worker's shell. Check both directions separately; examine the script and non-secret probe results, real target IDs, and permission/access requirements. Confirm that the stated project and goal paths match the current goal. A may ask for **one targeted follow-up** when evidence exposes a real gap; do not restart a broad questionnaire or troubleshoot missing settings one by one. If the reply already supplies all needed facts, complete setup without additional relay. Record the currently selected methods, real commands and controls in `control.md` and tell C what is ready, what still requires first-task verification, and what genuinely blocks setup.
 
-## 5. Files and task rules
+### 4.3 Platform-owned adapters and one-pass preflight
 
-A owns `goal.md`. It holds the living goal, version, mode, setup, assignment and launch history, owners, reviews, timing, changes, and recovery. B and T do not edit it. A updates it after every review and agreed goal change.
+**Antigravity B or T (special CLI case).** The Antigravity setup agent follows section 6.1 and prepares its **own goal-specific wake script**, using any approved reusable Antigravity bootstrap. The script accepts a directive **filename**, resolves the exact goal-folder directive and uses the supported installed `agentapi new-conversation` method to launch a **fresh task chat**. The setup agent, not A, resolves the platform-specific invocation details and supplies A with the exact executable/runtime, command and argument form. Prepare distinct B and T scripts if both use Antigravity.
 
-A chooses a unique, suitable filename for each directive and report in the goal folder. Names do not route work and do not change with status. Never overwrite an earlier directive, report, or review. Each directive, report, and review begins with `Directive: <unique-id>`. A uses a new ID for each task, retry, or correction and links the earlier ID when useful.
+The Antigravity bootstrap/preflight must check the entire connection chain **in one diagnostic pass** before saying `ready`:
 
-Each directive is self-contained for its task. Include the goal version, purpose, scope, steps appropriate to the task, inputs, allowed actions and paths, limits, checks and proof, exact report path and format, selected wake methods, and handoff and failure steps. Give absolute project, goal, directive, report, protocol, and goal file paths. Include the shared state path and role fields when any role polls. A fresh worker must not need memory from setup. For a dedicated Antigravity task chat, list the needed files, canonical docs, and initialization prompts in the directive. Give the full task and handoff steps in section 6. The worker reads AGENTS.md, its directive, the goal record, and the task references it needs. It does not need to read the full AGLP protocol during that task; the setup chat still reads it. The worker must follow all other applicable repo and skill instructions.
+- Find the actually available `agentapi` executable/runtime in the sender's environment, including PATH handling **inside the launcher** when appropriate; do not require a permanent global PATH modification.
+- Identify the documented/supported runtime connection method. If the installed implementation requires `ANTIGRAVITY_LS_ADDRESS`, obtain it through a supported runtime environment or checked local connection loader. It may change after app restarts: **refresh it when dispatch requires it**, not as a permanently hardcoded secret.
+- Resolve the **exact intended Antigravity project ID** and confirm its relationship to the user's project/workspace. If the runtime uses `ANTIGRAVITY_PROJECT_ID`, supply the verified ID to the launch process. Do not silently fall back to another selected project. A path or working directory alone does not prove project binding.
+- Check the supported CLI syntax, project and file-path access, permissions, ability to publish reports, and local lock/atomic-write support. Provide one consolidated report listing **all** failures, unknowns and remedial actions rather than repeated single-variable conversations.
+- Offer a **non-launching `-Probe`/equivalent** that verifies the settings it actually can check. The script must distinguish `configuration checked` from `first real task conversation/workspace not yet verified`. Do not start a demo or trial conversation. Never print connection tokens or sensitive environment values.
 
-If A wakes by CLI, include A's exact existing session ID, the full return prompt, and the checked command with separate arguments. The prompt names the exact goal record and report, and shared state when used. For Antigravity A, include the wake script command and report filename as in section 6.2. Do not use `--last` or unresolved example values. If A polls, tell the worker to update state and not call A by CLI or wake script. Include permission to write the report, owned locks, and temporary files within the agreed scope.
+The bootstrap may be a reusable project-independent utility with a **goal-specific wrapper**, or a self-contained goal script. Reuse a previously **checked** adapter rather than creating duplicate launchers for every goal. The setup agent reports both its bootstrap/preflight and normal wake commands, any project ID needed, actual checked results and remaining first-task checks. **A must check the script from its own runtime before dispatch**; a worker-local success is not proof that A can launch it. The first authorized task checks the actual returned conversation metadata/workspace, project and directive access before edits; stop and report a mismatch. A successful CLI exit or returned conversation ID alone does not prove this binding or the task's completion.
 
-A saves the assignment and launch intent in the goal record before publishing a directive or dispatching work. Write each directive and report to a unique draft, close and check it, then atomically move it to its unique final path without overwrite. Check its Directive line and CRLF. Do not expose a partial report as final. A records the actual launch result and worker ID when available without overwriting a newer review. A launch failure is not a failed build.
+**Codex B or T.** Inspect the installed supported in-app chat-message actions, access to the exact chat ID and host, sender permissions and C's explicit authorization for the particular link. If checked, prefer direct Codex → Codex messaging in both directions. Do not use unverified CLI incoming wakes, invent chat IDs, or assume a readable chat name is a send target. If direct messaging is unavailable, check an approved event bridge; otherwise use a fixed polling role and its checked schedule. A message accepted is not proof that the recipient acted.
 
-B reports the Directive, goal version, owner, start and finish times, result, proof, and unmet work. `completed` means all task checks passed. `failed` includes partial or blocked work. A reviews either result; a worker's result is not acceptance.
+**Other platforms or mixed platforms.** The receiving agent identifies its actual supported incoming path, produces the appropriate adapter invocation and return instructions, and checks what it can. A independently verifies the needed cross-app send route. For example, Codex A → Antigravity B may use a checked Antigravity CLI launcher, while B → Codex A uses an independently verified direct bridge or fixed polling. **Do not force A to poll merely because B launches through CLI.** If no supported link can notify A's exact existing session, record that limit and select polling with C's agreement. Never claim a bridge is working just because it can see report files.
 
-## 6. CLI wake
+**External T schedule ownership.** If T polls, it creates, confirms and manages **its own** schedule in its own chat using its supported controls. A does not create, stop, pause, resume or retarget it. T checks the actual target, accepted fixed interval, run status, busy suppression or safe pause/resume, and reports exact settings through C. T does no test task in setup mode. If T uses direct messaging or CLI instead, do not create a T polling schedule. The same self-discovery prompt and one consolidated reply apply to T as to B.
 
-For a role using CLI, the sender calls its selected CLI with a short prompt naming the role and exact directive or report path. For Antigravity B, use its setup reply and the path in section 6.1. For B or T, the prompt states the worker's role and A's selected wake method and says to read the directive and execute it end to end. For A, it says to read the report and goal record, check the assignment, review the result, and take the next needed step. Include the state path in mixed goals. The CLI prompt carries the file location; the directive carries the full task and return instructions.
+### 4.4 Goal folder and operational records
 
-A launches the assigned B or T in the specified project. Use a launch that lets A end its turn while the worker runs. Release A's run lock before dispatch. Do not launch a second live owner for the same assignment. Save launch intent and result.
+Use `<project>/AGLP/<goal-name>/` unless C agrees otherwise. Required or conditional files:
 
-The worker reads the directive and goal record, checks the assignment and goal mode, claims the work, and follows the directive. It saves and closes the report, updates its own shared state slot if used, and releases its locks before the return. When A uses CLI, the worker runs the exact checked callback command to continue A's saved session. When A polls, the worker does not also call A.
+| File | Purpose |
+|---|---|
+| **`goal.md`** | Full current final specification and ordered outcome-task checklist. No logs. |
+| **`control.md`** | Compact **current** operational snapshot: mode, start authorization, exact paths, roles, checked worker platforms and invocation settings, selected wake methods and verified targets, active assignments, task ownership, pending returns/reviews, current schedule settings, locks and recovery controls. Replace stale facts; do not append history. |
+| **Unique directives, reports and reviews** | Immutable instructions and independent task-specific proof. |
+| **`current-state.md`** | At most ten lines, **only while a role uses polling**; see section 7. |
+| **Task-specific claim/dispatch/return records and locks** | Only minimal verified records needed for concurrency and recovery, not a general journal. |
+| **Approved agent adapters / wake scripts** | Goal-specific invocation wrappers and optional reusable platform setup helpers, with non-secret config only. |
 
-A callback failure does not mean the build failed. Save the error and pending return in the agreed local dispatch record. Check that A is free and has not reviewed the assignment before retrying only the return. Do not rebuild finished work. If no return path works, tell C the gap. Codex never uses a CLI incoming wake under this protocol; follow section 7.3.
+Save the exact absolute paths, method/adapter ownership, approved settings, commands, scheduler IDs when applicable, target IDs, access/authorization evidence, first-task checks, stop/resume controls and known gaps in `control.md`. Record what was **actually verified** and what remains unknown; no secrets. A owns `goal.md` and `control.md`; B/T do not edit them. Adapters and scripts may be written only under C's permitted scope and project file rules.
 
-### 6.1 Antigravity B or T: special CLI wake
+Setup is ready when needed paths, methods, executable/adapters, access, checked return targets, rights and controls are verified. For Antigravity B, **actual new-chat workspace binding** may be deferred to the first real task, clearly marked conditional, provided that all prerequisites and a safe stop/report path are checked. A provisional method is not readiness. No setup starts work: C's start signal is required, and its authorization belongs in `control.md`, not the goal specification.
 
-For an Antigravity T, follow this same setup and dispatch flow with T as the role, a separate T wake script, T directive and report, and T's own shared-state slot when used. The wake prompt names T and its browser test directive. Each directive uses a fresh task chat under the same ready T setup; T reports browser evidence as in section 4.3. Keep B and T assignments and scripts distinct.
+### 4.5 Browser test choice
 
-After selecting A's method, A sends the short initialization prompt in section 4.1 to B through C. The prompt gives B the exact project folder, goal folder, A's wake method, and permission for the agreed setup work. Antigravity B prepares a goal-specific wake script in that goal folder and replies that it uses CLI. Follow the project's file and code rules and any required approval; reuse permission already given. If B cannot create the script or lacks access, it reports the exact gap rather than claiming it is ready.
+If live browser testing is required, A asks C whether A tests with its own available browser or an external T; reuse C's existing answer. Source, fixtures, mocks and compiled components never count as live browser proof. If A tests, save actual observations in its review. If C chooses external T, apply the same platform-owned handshake and setup rules; its exact target, dummy/production data, allowed writes, sign-in/access, test scope and report path go in each directive. Never infer permission for real data changes.
 
-B's script accepts the directive **filename** as an argument, not the directive text. It finds that file inside the goal folder and checks that it exists. It uses the actual project, goal, A's selected method, and Antigravity tool settings from setup. It obtains the current connection and project details needed by the installed Antigravity and starts `agentapi new-conversation` with a fresh B chat, a task title, and a wake prompt. The script builds the prompt using the directive's exact absolute path. The prompt names B's role, A's method, project, and AGENTS.md, and tells B to read the directive file and execute it end to end. Do not hard-code one host's server or project values into this protocol. The script must report an actual launch error if it cannot start the chat.
+A Codex T can use checked direct messages or fixed polling. An Antigravity T uses its own checked CLI task wake script and a separate T assignment. T owns any schedule in its chat and confirms its status and controls to A through C. A must not control a T-owned schedule except a specifically authorized, checked operation permitted by the protocol. T's setup may proceed independently of B; do not wait on B's reply when T setup can safely advance.
 
-B reports the script's absolute path, the exact runtime and command A should use with a directive filename, any needed setup or access, and what launch results it returns. B checks the script within its available tools without starting a demo or goal task. C carries B's reply to A. A checks and records the script path, command, settings, and reported gaps in `goal.md`. Setup is not ready if the script or required runtime is missing. A does not need to build the wake prompt or connection steps for each task.
+## 5. Implementation-first delegation, directives and reports
 
-After C's start signal, A writes and publishes the directive file, records the assignment, and runs the saved script command with the directive filename. A does not pass the directive's contents as the command argument. The script starts a fresh B chat for **every directive**, including each later task, retry, or correction. Never assume a new B remembers an earlier task chat. Use a launch that lets A end its turn while B works. Record the actual launch result and conversation ID when returned. A returned ID means the launch was accepted; it does not prove B claimed or finished the task. Do not dispatch twice when the first owner may still be live. Keep a failed assignment and directive for recovery and report the actual error; do not switch B to polling without a supported setup and C's agreement.
-- Set the launch working directory to the project root and name the exact project and absolute directive path in the wake prompt. Use absolute paths in the directive. The exact app workspace binding and a returned conversation ID may be unknown; neither blocks this setup, and A must not claim either is proven. At the start of the real task, B checks access to the named project, directive, goal record, and needed files before any task edits. If access is missing or the wrong project is in use, B stops task edits and reports the actual gap through the directive's failure path. No demo or trial conversation is required.
-- The wake prompt states whether A uses CLI or polling and tells B to read AGENTS.md and the exact directive and execute it end to end. Every directive gives B the full task, references, checks, allowed paths, goal record, assignment and mode checks, lock paths and ownership, report draft and final paths, publishing or other file renames needed for that task, and failure steps. If any role polls, include the exact `current-state.md` path, B slot, allowed fields, locks, and steps to set `working` and then `completed` or `failed`. If no role polls, say there is no state file to update. Give A's selected return method and exact callback details when A uses CLI. The fresh worker follows the directive and applicable repo rules without relying on memory from setup. Directive filenames stay fixed; do not rename them for status changes.
-- Give B this execution order in the directive: check the assignment and goal mode; claim the task and any shared state under the required locks; do the work and checks; publish the completed or failed report; update shared state when used; release owned locks; then use A's selected return path. If A polls, B does not also call A. If A uses CLI, B runs the exact callback after lock release. Record any handoff failure and do not repeat completed work. The fresh B conversation ends after its task and handoff; B does not need its own polling schedule for this CLI wake.
+### 5.1 Architect owns investigation and implementation planning
 
+**Before dispatching normal Builder work, A must make it implementation-ready.** A investigates the current code, relevant canonical documentation, existing patterns, exact target files/functions, callers and dependencies, actual bugs or missing behavior, architecture rules, data contracts, migration effects, likely edge cases, and appropriate verification. A makes the required technical decisions and determines **what to change, where, and how**, within its available access, without writing production code. Use existing project tools and checks when useful; record genuine unknowns as unknown rather than inventing proof.
 
-### 6.2 Antigravity A: return wake
+A should aim to resolve related questions in **one preparation pass**, then delegate a real deliverable. Do not ask B to perform a broad audit, inventory, options study or repeated recommendation cycle merely because A has not finished its own investigation. A may ask C only for a material business choice, authorization, or access A and B cannot establish. Setup/permissions checks and evidence-based safety reviews remain valid and are not treated as waste.
 
-When A is Antigravity, A chooses CLI or polling for its own wake before setting up B. Use the chosen method for B's and T's returns. Keep A in the same chat.
+Every normal B directive must have a **concrete implementation outcome**: specified files changed, integrated behavior, correction applied, tests supplied, or another explicitly approved deliverable. If the work is ready to implement, the next B directive must implement it—not merely review it. The directive must identify the relevant current goal-task ID and the verifiable result sought. B reads what is needed to execute safely but is not responsible for independently redesigning the solution.
 
-If A uses CLI, prepare a goal-specific wake script for A in the goal folder during setup. A may prepare a setup script, or ask B to prepare it in B's initialization prompt when B has the needed access. Follow project file and code rules and any required approval; reuse permission already given. Record the script's exact path, runtime, command, A's existing conversation ID, and any required connection details in the goal setup. Check the needed tool and access facts; do not claim that a callback succeeded until it happens. If the target or script cannot be prepared, report the actual gap.
+### 5.2 Bundle complete, coherent implementation work
 
-The A wake script accepts the report **filename** as an argument, finds the closed report in the goal folder, and builds a return prompt naming A's role, the exact goal record and report paths, and the shared state path when any role polls. The prompt tells A to check the assignment, read and review the report, and take the next permitted step. The script uses the selected Antigravity message method and the exact saved A conversation ID to send that prompt to the same A chat. The local CLI help lists `agentapi send-message <recipient_id> <content>`; check its availability and target for the actual setup. It must not start a new A conversation. Report actual send failures.
+**One cohesive goal outcome should normally be delivered in one B directive and one A review**, even if it modifies several files. Group related schema, backend, frontend, tests and documentation edits when they form one safe, bounded change with clear acceptance checks. A small two-file change must not become a chain of separate discovery, confirmation and approval assignments without a real blocker.
 
-Each B or T directive states that A uses CLI and gives the script path, runtime, exact command, and expected report filename. After finishing work, the worker publishes the report, updates its own shared slot if any role polls, releases its locks, and calls A's script with that filename. A message sent does not prove the review happened; A checks and records the review. If the return fails, retain the report and retry only the return after checking A's state and whether the result was already reviewed. Do not repeat finished work.
+Split only when there is a concrete reason: a dependent step requires unavailable data or C authorization; a high-risk migration needs an independently verified checkpoint; separate work has conflicting ownership; a required test environment is not ready; or scope is too broad to implement and verify safely in one assignment. **A Low capability tier means more precise instructions, not automatically a smaller change or more handoffs.** Avoid artificial task fragmentation to simplify the report count.
 
-If A uses polling, set up A's automation and one shared `current-state.md` as in section 7. B or T publishes the report and updates its own slot; A finds the final result on its next poll. The worker does not call an A wake script or another CLI return path. If B uses a CLI wake, B's own wake script is separate and still handles A-to-B dispatch.
+After claiming, B implements the **entire authorized directive**, runs relevant checks, and corrects routine defects discovered within scope before returning. B reports one closed final result; do not seek A's approval for each file, routine fix or internal step. B must still stop or ask when instructions conflict with `AGENTS.md`, permissions, the current goal, safety constraints, or a material unapproved decision. B never expands scope or performs an unauthorized external action just to avoid a handoff.
 
-## 7. Polling wake and shared state
+### 5.3 Exceptional advice or research from B
 
-An automation wakes a polling role at a checked interval. B starts at three minutes when the tool supports it and C has not chosen another interval. If it cannot, tell C the supported choices. C chooses T's interval. Save each accepted interval, role, exact target, and state path. A's interval is chosen from checked support and the needs of the goal; do not assume B's interval applies to A or T. Change schedules only through supported controls and check the accepted result.
+A may explicitly use B for a **narrow second opinion, specialized investigation or bounded technical suggestion** when A lacks an accessible tool, has a genuine unresolved technical question, or has verified that B's capability and available context make that delegation useful. Such work must name the exact unanswered question, A's prior findings, expected evidence, allowed reads/writes, and whether implementation is authorized. A retains responsibility for accepting any recommendation and all major architecture/business decisions; C retains required approvals. High capability does not transfer general authority to redesign the goal.
 
-A quiet poll reads only `current-state.md`. The wake prompt names the role and the exact state path. If the role has no action, end the turn quietly and wait for the next scheduled wake. Do not scan folders, read the directive, goal record, or reports, or rewrite unchanged state during a quiet poll. Notify C only for a meaningful result, completion, failure, or needed action; use the tool's notification settings when available.
+A may permit a proven B broader **routine implementation discretion** within a decided design—for example, choosing between equivalent local refactors—but the directive defines the decision boundary and required reporting. Do not confuse this with giving B ownership of requirements, architecture or risk acceptance. An exceptional read-only research directive must be identified as such and justified by a specific blocker or benefit, not issued as the normal first step of coding.
 
-Keep `current-state.md` to **at most 10 lines**, with the fewest practical tokens. It is one file for the whole goal, not one file per role. It holds current facts, not task text, report contents, history, full commands, or check instructions. Paths may be relative to the goal folder. The wake prompt supplies the role; do not infer it from a ready task. The following is a shape, not a live assignment:
+### 5.4 Nonproductive delegation guard
+
+After each B report, A asks: **What concrete accepted implementation or blocked dependency changed?** A verified implementation, a genuinely needed safety finding, or resolution of a previously blocking uncertainty counts as progress; repeated generic reviews and unverified suggestions do not. A short factual progress note to C should identify the outcome, not the number of agent exchanges.
+
+If **two consecutive B directives** produce no accepted implementation or necessary blocker resolution, A must reassess **before any further B dispatch**. A performs the missing investigation itself where permitted, identifies the specific obstacle, and then either (a) issues one implementation-ready directive, (b) seeks the one essential decision/access from C, or (c) declares the affected work blocked with evidence. Do not issue another substantially identical research task or retry a failed instruction under unchanged conditions. This guard detects waste; it does **not** override essential security checks, user approval gates, legitimate access limitations or a required staged migration.
+
+Correction cycles are evidence-driven: A verifies all detectable defects, consolidates related corrections into **one targeted follow-up directive**, and does not require B to rediscover the same defects. If B reports a real unapproved design question, A settles it before the next implementation dispatch. Do not automatically penalize B for A's incomplete directive or outside tool failure.
+
+### 5.5 Directive publication and execution report
+
+Every Builder or Test directive begins with an immutable unique `Directive: <id>` first line. A publishes each as a closed file at a unique final path; never overwrite or rename it for status changes. A retry, correction or changed task gets a new Directive ID. Link to its current goal-task ID and any earlier Directive only when necessary. Reports and reviews also start with the matching Directive line and use unique closed, checked files.
+
+A directive is self-contained: concrete deliverable, current goal-task outcome, implementation approach and exact affected files/functions as appropriate, purpose, relevant inputs and canonical references, allowed paths/actions, business/architecture limits, worker-tier-specific execution guidance, checks and proof, exact report draft/final paths, selected wake/return method, locks, claim steps, error handling, confirmation and failure recovery. Include absolute project, protocol, goal, control, directive and report paths, plus state path and owned slot **if polling is active**. Do not require a fresh task chat to remember prior discussion. The worker reads `AGENTS.md`, current `goal.md`, `control.md`, its directive and relevant task references; it uses the section 0 index for any applicable AGLP rule and does not reread the full protocol in a fresh task chat.
+
+A saves the current assignment and dispatch intent in `control.md` under A's lock **before** publishing or sending. Write a unique draft, close and validate it, then atomically publish without overwriting. Check the Directive line, CRLF and complete content. After dispatch, A takes its lock again, re-reads current control, and saves the actual accepted/failed result; if it cannot, retain that fact in its unique dispatch record for recovery. Do not dispatch twice merely because the save failed. An accepted launch means a launch was accepted, not that B/T claimed or completed work.
+
+B/T publish concise reports: Directive and owner, start/finish times, `completed` or `failed`, **implemented outcome**, changed files when applicable, checks/results, actual proof, unmet work, blockers and access gaps. Do not use the report as a design essay or narrate every code change. Report **every encountered error**, including resolved errors, with action/conditions, exact relevant output, time, effect, attempted remedies/results, checked cause or `unknown`, final status and proof path. Say `no errors` if none occurred. Errors after report publication go in the limited task-specific return/recovery record; never rewrite a closed report. A checks actual files/proof before acceptance.
+
+For T, a directive gives exact real-browser cases, test data, expected outcomes and write limits appropriate to T's tier. T tests; it does not invent implementation tasks or make the Architect's root-cause decision. Browser proof remains distinct from source and mock proof.
+
+## 6. Dispatch, direct return and acknowledgment
+
+### 6.1 Antigravity fresh Builder/Test task chat
+
+Following the self-setup handshake and one-pass preflight in sections 4.2–4.3, **Antigravity B or T prepares its own** goal-specific wake script in the goal folder. This is a setup deliverable, **not** a research directive during the implementation loop. The script takes a directive **filename**, checks that the file exists in the goal folder, refreshes runtime-dependent connection settings and resolves the **exact verified intended project ID** (without a fallback to another project), then starts a fresh task conversation through the locally supported `agentapi new-conversation` method. It checks and reports CLI errors without leaking credentials. Its short wake prompt names role, project root, `AGENTS.md`, exact directive path and A's selected return method. Never assume the launch working directory or prompt alone binds the correct project; verify binding on the first authorized real launch.
+
+A independently runs the adapter's non-launching preflight from **A's own invocation environment**, records its exact path, checked launch syntax and unresolved first-task access checks in `control.md`. The preflight must identify missing executable, address, project ID and permissions together wherever observable. For each real directive, A passes **the directive filename as a separate argument**, dispatches with checked connection/project settings, and records the actual launch result. Each directive uses a fresh task chat; no new B/T chat remembers an earlier one. The worker first verifies actual chat project/workspace, goal, directive and source access before edits; if missing or wrong, stop edits and report through the assigned failure path. A probe or CLI exit does not prove the first chat is bound correctly. No demo launch is required. Do not launch another owner while the first may be live.
+
+Each directive tells the fresh worker, in order: check active mode and exact assignment; take its run lock; claim under shared-state lock or per-task lock as applicable; **implement the complete authorized scope, self-check and correct routine within-scope defects**; publish one final report; mark result in shared state when polling exists; release owned locks; perform **only** A's selected return/acknowledgment flow. If a return fails, do not repeat the build.
+
+### 6.2 Direct messages and event-driven bridge
+
+When A's incoming method is direct, a worker sends one **short completion notification** only **after** publishing a closed report, updating any required state, and releasing locks. The message names its role, Directive, report and `control.md` paths. A then checks exact ownership, already-saved review and actual report before reviewing. Similarly, A dispatches workers with short messages naming the exact directive, not the entire task text.
+
+For Codex-to-Codex messaging, require the supported app tool, access to the exact **chat ID and host**, and C's explicit authorization for the sender and target. A chat name alone is not a destination; resolve it through a checked listing or a checked ID from C. A message from one agent is not evidence that C authorized another link. Do not create an unrequested chat or assume that two Codex chats can reach one another merely because they share an app. Save the verified target, permission scope and controls in `control.md`. A Codex incoming wake is messaging or fixed polling, never an assumed CLI incoming method.
+
+For an Antigravity A, a checked existing-session message such as `agentapi send-message <recipient_id> <content>` may be used if supported and authorized; use the **exact saved A conversation**, never a new Architect chat. Its goal-specific return script accepts the report filename and builds a short path-only message. Check actual availability, target and callback access. Starting B successfully does not prove B can wake A.
+
+A cross-app event bridge may be a checked local Node/PowerShell service, explicit process callback, or filesystem notification reacting to a closed report. It runs without an AI model while idle. It must know the exact authorized target and verified send method; have checked project/path permissions; ignore unfinished files; use the matching Directive/claim and current mode; avoid duplicate/busy messages; preserve a pending notification on failure; and never create a second independent execution owner. **A bridge that cannot address the existing recipient chat is not ready.** AGLP does not prescribe a particular bridge implementation or grant permission to install a daemon.
+
+### 6.3 Confirmation and fallback
+
+An accepted notification **does not prove review**. Before a send, save a unique pending-return record for that Directive. Confirm completion only from the exact review saved by A and acknowledged in `control.md`. If unconfirmed, check the target's real availability, current assignment, queued/running wake and ownership before retrying **only the same notification** through its selected path. Use the checked delay/limit in the directive; do not spam a busy chat, repeat finished work, or infer success from an unlocked file. A lightweight non-AI watchdog can check a pending return without repeatedly calling a model.
+
+If delivery/confirmation cannot be checked or a direct link fails, preserve report, pending return and evidence, and inform C of the actual gap. Activate a pre-authorized fixed-poll fallback **only after** a checked switch that disables the direct incoming path and reconciles claims, return targets and pending results. If not pre-authorized, obtain C's decision. Do not allow both live incoming paths to consume the same completion concurrently.
+
+### 6.4 Claim protection without polling
+
+When **no role polls**, there is no live shared `current-state.md` requirement. Each Directive gets a brief exclusive task lock and separate immutable claim record. Under the role run lock and `CreateNew` task lock, the worker re-reads `control.md`, checks `active` mode, exact assignment, no hold and no prior claim, publishes its claim, then releases the task lock and proceeds. If a check fails, release locks and do not start.
+
+To withdraw or change an unclaimed task, A takes A's run lock then that task lock, reads the latest control and claim, and saves a hold/withdrawal **while locked**. A confirmed absent claim prevents the worker from starting afterward; an existing or racing claim is live work and must follow section 10. Never wait on a worker's run lock while holding the short task lock; never hold it throughout the task. Missing/conflicting records require recovery, not guesses. Release only owned locks and never clear one merely by age.
+
+## 7. Lightweight fixed polling and shared state
+
+### 7.1 Fixed interval, no adaptive rounds
+
+**Remove all escalating, halving, temporary fast-poll and automatic per-round schedule changes.** A polling role has a single supported, C-approved **fixed** interval, checked at setup. It remains constant across quiet and actionable polls. Change it only for an explicit C-approved configuration change or a required pause, resume, retarget, stop or recovery; verify the tool's accepted settings. If the requested interval is unsupported, offer the actual supported choices rather than inventing a fallback. Record the accepted interval, schedule ID, owner, exact target and controls in `control.md`, not as an ever-changing counter in the state file.
+
+A quiet poll reads **only** `current-state.md`, checks its own role's actionable condition and mode, and exits silently when there is nothing to do. It does not read `goal.md`, `control.md`, `AGENTS.md`, AGLP, directives, reports or other project files; it does not scan folders, change schedules, update unchanged state, or run reviews. A scheduled prompt is a short pointer and condition, **not** a copy of AGLP. Only an actionable wake loads the needed full instructions and exact work files. A broken/missing/malformed state is not interpreted as idle: stop dependent work and raise the actual gap.
+
+**Sample Architect scheduled prompt** (replace the path with the checked real path):
+
+```text
+AGLP A heartbeat. Read only <absolute-current-state.md>.
+If mode != active, exit silently.
+If no B/T slot is completed or failed, exit silently.
+Otherwise follow AGLP review rules for the exact finished Directive;
+verify ownership and review once. No unrelated work.
+```
+
+**Sample Test scheduled prompt:**
+
+```text
+AGLP T heartbeat. Read only <absolute-current-state.md>.
+If mode != active or T-task != new, exit silently.
+Otherwise claim and execute only that Directive under AGLP;
+report and return by the selected method.
+```
+
+These are **templates**, not proof that a product's scheduler permits such prompts or suppresses context costs. Short prompts reduce instructions supplied at each wake but may not remove the cost of reloading a long conversation, project instructions or tool context. If an AI scheduler still consumes excessive usage, use direct events or a non-AI checker rather than shortening the interval.
+
+### 7.2 State format and ownership
+
+Use one `current-state.md` only when at least one role **actively uses polling**. Keep it to **at most 10 lines** and minimal current facts, never a log, report, task instructions or history. Other roles update their own needed task slot if the mixed setup depends on it. Example:
 
 ```text
 mode: active
-version: 1
 A: polling
-B: polling
-B-task: new | id: task-1 | directive: build-task.md | report: report-task.md
+B: cli
+B-task: new | id: task-1 | directive: build-1.md | report: report-1.md
+T: polling
+T-task: none | id: none | directive: none | report: none
 ```
 
-Use `mode` values `setup`, `ready`, `active`, `paused`, `blocked`, or `done`. Use task status `none`, `new`, `working`, `completed`, or `failed`. When T is used, add `T: <method>` and a separate `T-task` line with the same fields. A and B methods are always present when B is used; a fresh worker can see the return method. During setup, a method not yet known may be `pending`, and an unassigned slot uses `none` for its status, ID, directive, and report. A replaces `pending` with the chosen method before the goal becomes active. Keep each slot's ID and paths unchanged while assigned. A directive is not renamed when status changes.
+Methods may be `cli`, `message`, `bridge`, or `polling`, matching the **actually selected incoming methods**; a method still being set up may be `pending`. Modes: `setup`, `ready`, `active`, `paused`, `blocked`, `done`. Task statuses: `none`, `new`, `working`, `completed`, `failed`. Each worker changes only its own task status; its ID and paths remain fixed while assigned. A controls mode, methods and assignments, and clears only an accepted exact finished slot. Do not duplicate the fixed interval in this slim file unless a checked implementation genuinely requires it; `control.md` and the scheduler are authoritative for schedule settings.
 
-In an active goal, B acts only when its own task is `new`. T also reads only its own slot and acts only when `T-task` is `new`. For `none`, `working`, `completed`, or `failed`, a polling worker ends quietly. T claims its own task under the T run lock and state lock, sets only `T-task` to `working`, reads the named directive, and tests within its limits. T publishes its report, sets only `T-task` to `completed` or `failed`, releases its locks, and uses A's selected return path. T does not poll during the test; follow the schedule and busy rules in section 7.1.
+B/T polling acts only on its own `new` slot. A polling acts only on a required `completed` or `failed` slot. For `none`, `working` or a previously reviewed result, exit or finish the minimal pending reconciliation without repeating work. No goal work begins in non-active modes except explicitly approved recovery.
 
-A leaves the quiet poll when a needed B or T slot is `completed` or `failed`. It then checks the goal record under its run lock to see whether that exact Directive was already reviewed. If neither slot has a final result, A ends quietly. A's scheduled prompt must not treat a missing or malformed state, unknown role, or unknown status as `none`; stop dependent work and report or recover the gap.
+### 7.3 Publish, claim and finish with polling
 
-Do not start goal work in setup, ready, paused, blocked, or done mode. In blocked mode only a named recovery wake may do the permitted recovery. A new assignment or a goal change needing A's planning is handled on an explicit wake or the normal result review, not by making idle polls scan other files.
+A publishes a closed directive and saves the matching assignment in `control.md`, then under `state.lock` sets the exact role slot to `new`. The worker on its next scheduled wake takes its exclusive run lock then `state.lock`, rereads state, confirms `active`, exact ID/paths and `new`, changes its own slot to `working`, releases `state.lock`, then checks directive/goal/control and performs only the claimed work. A run lock prevents a second owner; an invalid claim stops task work.
 
-### 7.1 Publish, claim, and finish
+Prevent recurring polling from launching duplicate runs while the worker is busy: use a checked scheduler busy-suppression capability, or let the worker's schedule owner pause and **verify** its own schedule after claim and before task work, then resume and verify only when the goal permits it. If neither works, report the gap; a run lock alone is not evidence that expensive overlapping wakes are suppressed. For T, only T owns these schedule controls.
 
-A records the assignment and intent in the goal record, publishes the closed directive, then writes the exact task ID, paths, and `new` status to the assigned B or T slot under the state lock. Only after that may the assigned worker claim it. If that worker uses CLI, A launches it after its slot is ready. If it polls, it finds its own slot on its next wake. Do not use both wake paths for the same worker.
+The worker atomically publishes its report, then under `state.lock` confirms its exact assignment and still-held run-lock ownership and sets only its slot to `completed` or `failed` with the exact report path; release owned locks. If its schedule was paused, its owner resumes it only when permitted, verifies the result and records any pending failure in the task-specific record. A polling detects the final slot on its next **fixed** poll; there is no temporary faster interval, no extra direct wake, and no second incoming method. Before another assignment to a polling worker, check its schedule actually runs for the right target and has no unresolved resume.
 
-A worker that sees `new` takes its exclusive role run lock, then takes the short state lock. Re-read state under that lock. Confirm active mode, the same goal version, exact assignment and `new` status, and no hold. Set only its own slot to `working`, then release the state lock. If the check fails or another owner holds the run lock, do not start a duplicate. Read the exact directive and goal record and execute only the assigned work.
+### 7.4 Safe state and schedule operations
 
-While working, a polling worker does not poll. Setup must name the schedule owner and a checked way to prevent repeated wakes while the worker is busy. This may be a tool that suppresses overlapping wakes or a schedule paused and resumed through supported controls. If neither is supported, report the gap; a run lock prevents duplicate work but does not stop extra wakes.
+Each role uses an exclusive `CreateNew` run lock for its active work; A uses A's run lock for control, review, and owned schedule changes. For every shared-state write, take a short `CreateNew` `state.lock`, re-read the latest state, validate mode, assignment, writer/transition, and 10-line format, preserve other slots, write a complete CRLF temporary copy, then atomically replace. Release the short lock in `finally`; never hold it during task work, review or scheduler calls. A similarly writes complete `goal.md` and `control.md` under A's run lock through checked atomic replacement. If safe locking/replacement is unavailable, stop and report the gap.
 
-If pausing is needed, the designated owner pauses the worker's own schedule and checks the result after claiming the task and before doing task work. The directive gives the exact controls and who runs them. If the pause fails, do not start task work. Save a failed report, finish the assignment as failed, and report the schedule gap. After any completed or failed work, the schedule owner resumes the schedule only if the goal still permits it, using the saved controls, and checks the result. Save a pause or resume error and the pending action in the agreed dispatch record; notify C when it needs action. Do not restart a schedule while the goal is paused or done. If the worker cannot run its own controls, C must carry the needed instruction to the owner; record the pending step and do not claim it happened. A CLI worker has no worker poll to pause.
+Only the designated schedule owner may pause, resume, stop, retarget or change its schedule. Confirm accepted status and target before relying on a scheduler operation. Serialize concurrent controls of the same schedule with an exclusive target-schedule lock where actual access requires it; do not hold `state.lock` during scheduler calls. A second run seeing a held run lock exits; locks are never cleared by age. Never resume a schedule for a paused or completed goal. A quiet poll does not check or modify the scheduler.
 
-After work and checks, close and publish the report first. Then take the state lock, re-read and confirm the matching assignment. Confirm ownership from the worker's still-held role run lock: its owner and Directive must match this run. The owner is not required in the slim state file. Set the slot to `completed` or `failed` with its exact report path. Release the state lock and owned run lock.
+## 8. Architect review and progress
 
-After lock release, the schedule owner resumes a schedule paused for this task if the goal still permits it. Record a failed or pending resume without changing the task result or repeating the work. If A uses CLI, send the callback even if schedule resume failed, and include the gap in the report or return prompt. If A polls, it finds the final state on its next wake; record and report the schedule gap separately. A failed task still gets a report and wakes A by its selected method.
+On a completed/failed slot or checked direct return, A acquires its run lock, reads `control.md`, checks the exact Directive and whether the review is already confirmed, waits for a released worker run lock, and examines the **closed** report and actual modified files/evidence. Run permitted targeted checks. Distinguish source, fixtures, compiled components and real-browser observations. A worker's `completed` status is not acceptance.
 
-### 7.2 Safe writes
+A records a unique review with `VERIFIED`, `PARTIAL`, `FAILED`, or `BLOCKED`, specific proof and limits. Missing functionality is `NOT IMPLEMENTED`; missing access is `BLOCKED`. Check errors and their actual causes where evidence permits; never repeat the same failed instruction under unchanged conditions. Save a confirmed review pointer and current pending/cleared assignment in `control.md`. Update `goal.md` **only** for revised accepted requirements or checklist completion/reopening. Clear the matching final state slot under lock when applicable. A repeated notification must not produce a second review.
 
-Each acting role holds its own exclusive run lock, created with `CreateNew`, during task or review work. Save the owner and Directive in the lock. A second run for that role leaves while the lock is held. Never clear a lock by age. Release only owned locks, including on failure.
+After review, A may accept the cohesive deliverable and proceed, issue **one consolidated defect-specific correction** if evidence requires it, ask C for a material decision, or finish. Do not delegate a fresh exploratory audit of work that A can directly inspect, or turn a verified two-file change into several review-only Builder directives. Apply the nonproductive delegation guard in section 5.4. Parallel work is allowed only for independent scopes with checked conflict, tool and return handling. If any active delivery system cannot queue concurrent returns safely, dispatch serially. Never start dependent browser tests before required implementation is available. Give C a concise outcome-based progress update, not an agent-launch history.
 
-For every shared state change, also take a short exclusive `state.lock` with `CreateNew`. Re-read the latest file under the lock. Check goal mode, version, assignment, allowed transition, and owner as needed. Change only the writer's allowed fields, keep other slots and methods intact, write a full temporary copy, check its format, 10-line limit, and CRLF bytes, then atomically replace the state file. Release the state lock in `finally`. Do not hold it during task work, report writing, or review. A owns mode, version, methods, and assignments; B and T change only their own task status and keep assigned IDs and paths intact.
+## 9. Worker capability and directive detail
 
-A writes the goal record under A's run lock using a checked temporary copy and atomic replacement. If safe locking or replacement is unsupported, stop setup and tell C. Do not use unchecked overwrite. A conflict, missing or corrupt file, wrong assignment, or unknown owner needs recovery, not a guessed state.
+C chooses B and T starting tiers independently: **High**, **Medium**, or **Low**. After each independently reviewed report, A decides whether the worker's tier stays, rises, falls, or requires more proof, based on actual implementation quality, ability to follow the directive and task difficulty. An access/tool gap, an unclear Architect directive, a mid-task requirement change or a required stop is **not** evidence of poor capability. Save the short assessment in the specific review and the **current** tier in `control.md`, not `goal.md`; tell C in one line.
 
-### 7.3 Codex: polling for every role
-
-When a role is Codex, its incoming wake is always **polling**, whether the role is A, B, or T. This applies even if Codex has a CLI. Do not select or call a Codex CLI to wake that role. Set up polling for that Codex role and record its exact schedule, target chat, state path, interval, and owner in `goal.md`. A sets up its own schedule. A Codex T sets up and owns its own schedule in its T chat under section 4.3; A sends the setup prompt through C and does not create or manage T's schedule. Use the supported automation controls and confirm the accepted settings. If a supported schedule, target, or needed access is unavailable, report the gap and do not claim that role is ready or silently use CLI instead.
-
-Because Codex polls, the goal uses one shared `current-state.md` even when the other roles use CLI. All participants update the needed slots. Each polling prompt names its role and reads only that file during quiet waits. A Codex B or T reports polling in its setup reply and follows only its own slot; it does not poll while carrying out a task. A Codex A reads final B or T slots and reviews the named report. Follow the claim, report, state, lock, and busy rules in sections 7 and 8.
-
-When Codex is A, B or T returns a result by publishing its report and updating its shared slot. A's next poll finds it; the worker does not send a CLI callback. When Codex is B or T, A publishes a directive and sets that role's slot to `new`; the worker finds it on its next poll. After reporting, that worker follows A's selected return method: update state for a polling A, or call the specified callback for a non-Codex CLI A. A role's outgoing action does not change its own polling wake method.
-
-## 8. Review and progress
-
-After a final state or CLI callback, A takes its run lock and reads the goal record. First match the exact Directive and check whether a review is already saved. If the worker still holds its run lock, leave the result pending; a later poll or a checked CLI return retry handles it after lock release. Do not read a report while its owner is still working. Check the exact closed report against the saved assignment, goal version, and Directive. Inspect real files and run allowed targeted checks. A report is proof to check, not new permission. Keep source, fixture, compiled-component, and live browser proof separate.
-
-A saves a unique review with `VERIFIED`, `PARTIAL`, `FAILED`, or `BLOCKED`, proof, and limits. Mark a missing feature `NOT IMPLEMENTED` and an access gap `BLOCKED`. Save the exact reviewed Directive, goal progress, and review link in the goal record before clearing the matching state slot or assigning more work. Clear only that matching final slot under the state lock. A `completed` worker report alone does not make the goal complete. If A performs the browser test itself, record the actual live observations, proof, and any gap in the review, separate from source and fixture proof. Keep unmet work pending or blocked.
-
-If A wakes again while the final slot still names a Directive whose review is already recorded, do not review it again. Under the state lock, confirm that the slot still names the same Directive and final status, then finish the pending slot clear and next step from the goal record. If the review file exists but the goal record does not yet record it, use recovery to finish the saved review step before clearing the slot. Do not add review history to the slim state file.
-
-After reviewing a final result, A may assign the next useful task, finish the goal, or report a real blocker to C. Never review the same result twice as new work. Normally do tasks one by one. Work sharing files stays serial. Independent B and T work may overlap only when scope, ownership, and setup make it safe; A reviews final slots without changing another role's live slot.
-
-## 9. Task detail and help
-
-C's High, Medium, or Low tier is the starting point. A judges B or T from checked work and records why task detail changes. A label or confident report is not proof.
-
-| Tier | Task detail |
+| Tier | How A specifies the **same coherent deliverable** |
 |---|---|
-| High | Outcome, purpose, limits, useful references, and proof needs. |
-| Medium | Also give target files, inputs, outputs, edge cases, and checks. |
-| Low | Give small tasks with clear steps, paths, order, and checks. |
+| **High** | Complete outcome, intent, decided boundaries, relevant references, constraints and required evidence; allow routine implementation flexibility within the agreed design. |
+| **Medium** | Also specify affected files/functions, interfaces, inputs/outputs, important edge cases and exact checks. |
+| **Low** | Also specify concrete ordered edits, exact paths, affected logic, acceptable examples and targeted checks; **do not automatically shrink the deliverable into file-by-file directives**. |
 
-All tiers need scope and proof rules. A does not supply full production code. When B has a tool, access, skill, or useful second opinion A lacks, A may give B a normal directive for help. State the question, what A checked, the gap, proof needed, and whether B may change files. Default to read and test only apart from the report and permitted state, lock, and scratch files. A still checks the answer and owns the decision.
+Capability affects **instruction precision and permitted routine discretion**, not the default number of handoffs. A is still responsible for investigation, bug diagnosis, business/architecture decisions, and review. B implements and self-corrects within scope. A may request B's bounded second opinion or specialized help only as in section 5.3, with evidence and a stated decision boundary. T's tier affects browser case detail and proof requirements; T cannot be judged incapable merely because browser or schedule access fails.
 
-## 10. Changes, pause, and completion
+## 10. Changes, pause, resume and completion
 
-C may change the goal or work at any time. A question or idea is not automatically a change; clarify only when intent is unclear. Save an agreed change, reason, effects, and new goal version in the goal record. If any role polls, update the version and any needed hold in shared state under the state lock. Keep history and proof.
+C may revise the goal at any time. After a **finalized** A–C decision, A assesses its full impact, holds conflicting new claims, rebuilds the complete current goal specification, reconciles goal-task statuses, and **replans affected cohesive implementation deliverables before the next B directive**. For polling, set `blocked` mode under `state.lock` while conflicting work is unsettled; otherwise hold unclaimed tasks under their task locks. Save the **current** affected assignment/owner disposition in `control.md`, not as a story of the change.
 
-Before changing assigned work, hold new claims. When state is used, A sets mode to `blocked` under the state lock while the change is unsettled and saves the hold and recovery steps in the goal record. Restore `active` only after the change is settled and permitted work is ready. For unclaimed work, check the actual dispatch and owner before withdrawing it; treat a racing claim as live until checked. For live work, save whether the worker may finish or must stop at a safe boundary. Do not rewrite a live directive or assume it stopped. The worker checks the saved change at safe boundaries and reports its actual result. A reviews what remains useful. A replacement gets a new Directive. Do not publish dependent work until the change is settled. Normal changes within the agreed goal do not need a new start signal.
+An unclaimed directive can be withdrawn only after checking dispatch and claims. A claimed live worker may finish or stop only according to a saved, safe, authorized disposition; do not rewrite its published directive or assume it has stopped. Reconcile its report and release before issuing replacement work with a new Directive ID. Restore `active` only when goal, control, mode and ownership agree. Ordinary finalized changes inside the same active goal do not require a new start signal.
 
-For a pause, save paused mode in the goal record and, when used, shared state. Stop new work. Pause schedules A owns through supported controls; C carries pause instructions to B or T for tools they own. T manages its own schedule; A does not pause it directly. Check and save actual results and C's pause scope. A live worker checks at safe boundaries and follows that scope; a paused schedule does not prove work stopped. Report any tool that could not be paused. Do not resume a paused goal until C asks.
+To pause, save `paused` in control and in shared state when used; prevent new claims and pause **only A-owned** schedules, verifying the result. C relays pause instructions to other schedule owners; T controls T's own schedule. Live workers check their directive's safe-boundary stop rules. A paused schedule does not prove work stopped. Resume only on C's request, after reconciling exact owner and wake target; resume only schedules owned by the acting role.
 
-On resume, read the goal record and state when used. Reconcile saved assignments and owners before restarting the existing wake paths. A resumes only the paths it owns; C carries the resume instruction to T, and T resumes its own schedule and reports the actual result. If C moves A to a new chat, check and retarget its wake path first. Save the target. Do not silently start a second A.
+To finish, A verifies all current goal-task completion checks, publishes final proof, marks `done` in control/state, stops its owned wake path and asks other owners to stop theirs. Verify actual scheduler/bridge results; tell C if anything remains running. If required proof is incomplete, leave appropriate checklist tasks pending/blocked and report `PARTIAL` or `BLOCKED`, never full completion.
 
-When the goal's done checks pass, A saves the final review and progress, sets done mode in the goal record and shared state when used, and stops wake paths it owns. C carries stop instructions for B or T tools they own. T stops its own schedule; A does not stop it directly. Check results and tell C what passed and any tool still running. If required checks remain unmet, report `PARTIAL` or `BLOCKED`; do not claim full completion.
+## 11. Recovery and Architect session handoff
 
-## 11. Recovery and handoff
+### 11.1 Recovery without conversation history
 
-A continuing session reads AGENTS.md, this protocol, the goal record, and the exact directive, report, or review needed. Existing goals keep their recorded goal file path, including `goal-record.md` when already in use. Do not rename it or create a second goal record unless C agrees to a checked handoff that updates all affected paths. Read shared state only when a role polls. Carry the goal, mode, version, assignment, owners, paths, methods, targets, schedule or CLI details, locks, and recovery steps forward. Reuse checked setup. A new chat does not resume a paused goal.
+A continuing Architect reads `AGENTS.md`, the AGLP section 0 index and applicable recovery/wake/review sections, the current `goal.md`, and `control.md`, plus **only** the exact active directive/report/review and `current-state.md` when polling applies. `goal.md` is sufficient to understand the present complete intended result and outstanding outcome tasks; `control.md` is sufficient to locate current owners, wake methods, targets, holds and recovery details. Do not reconstruct old chats or execution history unless a specific gap requires evidence.
 
-Check the goal record, shared state when used, exact files, live owner, locks, launch intent, and any unfinished publish or review step. Do not infer failure from silence or clear a lock by age. Confirm an old process is no longer active before any permitted lock repair; otherwise ask C.
+If dispatch, claim, return or review is uncertain, inspect actual assignments, locks, closed reports, pending notification records, target availability and specific reviews. Never infer failure from silence, repeat completed work, or clear a lock by age. Confirm the previous owner is inactive before repair. If a report exists but the review/notification failed, finish only the return/review. If a review exists but the checklist/control confirmation was not completed, finish that exact step against **current** criteria. If schedules or bridge targets disagree, hold dependent work and check actual settings. Missing/corrupt/conflicting records trigger recovery and a report to C, not guessed success.
 
-- If dispatch is unclear, reconcile the actual owner and report before retrying. Do not launch from file existence alone.
-- If a report exists but return or review did not finish, check the closed report and assignment; retry only the selected return or finish the saved review. Do not repeat the build.
-- If a review exists but progress was not saved, finish that saved step instead of reviewing again. If the goal record already records the review but the final slot remains, verify the matching Directive and clear that slot under the state lock before the next assignment.
-- If a schedule pause or resume was not confirmed, check its actual status and the goal mode before using its saved controls. Do not resume a paused or done goal or repeat finished task work. Report an unresolved tool or owner gap to C.
-- If state and files disagree, an owner is unknown, or a required record is missing or corrupt, hold dependent work and recover from checked records. Never guess that a slot is idle.
-- If a wake fails, retry through the selected checked path only after checking ownership. Keep old proof. Use a new Directive for a new repair task.
+### 11.2 Context awareness and deciding when to hand off
 
-## Maintenance
+Long-running Architect chats can grow costly as context accumulates. **C periodically checks with A about the session's context** and decides when a new Architect chat is needed. If C uses a tool or indicator called *CNI*, treat its readings as evidence only when its meaning and access are verified; AGLP does not assume an independently available CNI capability. If a supported tool shows actual context utilization reaching **60%** (unless C sets another threshold), A briefly informs C and recommends handoff once per session. Do not guess utilization from message count, elapsed time, or account quota. If no measurement exists, say `context usage unknown`; C may request handoff at any time.
 
-Update this file and AGENTS.md together when activation, roles, setup, naming, or loop rules change. Protocol edits do not migrate an existing goal. AGLP has two wake methods, CLI and polling, chosen per role. Any polling role requires one shared state file of at most 10 lines. Directives keep their names. Real goal work starts only after setup and C's start signal.
+A handoff occurs **only when C requests or agrees**. It is a transfer of **one Architect owner**, not a fresh goal, a new start signal, or a copy of the conversation. Do not hand off because a quiet poll ran, and do not copy the full goal specification into the handoff prompt.
+
+### 11.3 Prepare the old session and its incoming wake
+
+A saves the **current handoff snapshot** in `control.md` under its run lock: present mode, paths, selected A incoming method, exact old target, live assignments/owners, settled reviews, pending returns, applicable schedule/bridge information, and the intended new Architect chat title. Do not append handoff history to `goal.md`.
+
+Stop new assignments. Reconcile or safely hold any unclaimed work; allow claimed work and its return/review to finish, or settle it through an explicitly verified safe handoff path. An already-issued CLI callback or direct Codex message may still target the old A; **do not silently invalidate it**. Confirm there are no ambiguous live returns before replacing the target. If a worker is still active or its return cannot be safely redirected, leave the handoff pending and report that fact to C.
+
+If the old A has an active polling schedule, its **owner** pauses or stops it through supported controls and checks that it is no longer waking the old chat. If the old A uses a direct/bridge target, hold new incoming deliveries and preserve pending notifications while the target changes. Do not pause or retarget B's or T's own schedules merely because A is moving. The old A remains the recorded owner until the successor's target and takeover are verified; it must not dispatch new work during the handoff.
+
+### 11.4 Short handoff prompt and new chat name
+
+Use a predictable, recognizable title: **`A — <goal-name> — Architect <sequence>`**, with a new sequence for each chat, for example `A — rfq-suppliers — Architect 02`. A gives C the exact title and a short prompt in a four-backtick block; C creates and names the new chat. **Do not copy the goal, past chat summary, completed directives or schedule history into the prompt.** The saved files already hold those facts.
+
+The prompt needs only: (1) A role and agreed chat title, (2) absolute project root, (3) `AGENTS.md`/AGLP, `goal.md` and `control.md` paths, (4) the state path **only if polling applies**, and (5) a command to verify and complete the one-owner wake takeover before continuing. Suggested complete template:
+
+````text
+You are Architect (A) continuing an existing AGLP goal.
+Chat title: <agreed-A-chat-title>
+Project: <absolute-project-root>
+Protocol: <absolute-AGLP.md>
+Goal: <absolute-goal.md>
+Control: <absolute-control.md>
+State: <absolute-current-state.md OR none>
+
+Read project AGENTS.md, goal.md, control.md, and AGLP section 0 plus the relevant handoff/wake rules only.
+The goal and ordered tasks are already fully defined in goal.md.
+Reconcile the saved handoff, pending owners and return targets.
+Verify the old A wake is disabled and establish exactly one
+checked incoming wake for this new chat; if polling is selected,
+use its fixed accepted interval. Save this takeover in control.md.
+Do not dispatch or review twice, resume a paused goal without C,
+or change any other role's schedule. Continue only when safe.
+````
+
+A may omit the `State` line when no polling role exists. Do not include unresolved placeholder values in an actual handoff; report any missing absolute path or destination instead of inventing it. Keep secrets and long instructions out of the prompt.
+
+### 11.5 Activate the successor and retire the old wake
+
+New A obtains/validates its **actual new chat ID, host, access, and selected incoming method**. It re-reads `control.md` under ownership protection and checks that old A's schedule/direct-delivery route is disabled or safely held and that no stale worker return still targets old A. It must not treat the human-readable chat title as a checked message destination.
+
+If polling was selected, **prefer retargeting the existing verified, paused A schedule** to the new chat when the scheduler supports it; verify exact target, accepted fixed interval and active status **before** claiming takeover. If retargeting is unsupported, check that the old A schedule is fully stopped, then create **one** new schedule for new A and verify it; never let both run. If the new incoming method is direct or bridge, update and verify its exact target and authorization; leave recurring AI polling off. If the required scheduler or sender controls are unavailable, ask C or the designated owner to perform the checked step; do not claim success.
+
+Under A's run lock, save the completed takeover, new exact recipient, ownership and wake settings in `control.md`. For goals using polling, reconcile the one slim `current-state.md` without creating another state or altering live worker assignments. Recheck outstanding report/claim/review before work resumes. Respect the previously saved mode: a paused goal stays paused until C separately requests resume. Only after verification may old A be treated as retired. If takeover fails, preserve pending state, inform C and **do not** start a second active Architect or silently restart old polling.
+
+## Maintenance and adoption
+
+Section 0 is the required lightweight reading map; routine agents select the relevant sections, while protocol audits read all sections. `goal.md` always expresses the latest agreed destination and one ordered outcome checklist—**never an execution log**. **Execution-first delegation is the default:** A investigates, makes decisions and prepares one coherent implementable scope; B implements and self-tests it; A independently verifies. Research-only Builder loops are exceptional, and worker tier changes directive detail rather than automatically increasing task count. **Agent-owned discovery and self-setup are the default:** A sends a short capability handshake through C; B/T configures its own supported incoming path, prepares its adapter, and returns one consolidated invocation/return report; A independently verifies both directions. Antigravity performs a one-pass executable/address/project preflight, refreshing runtime connection data when necessary. `control.md` stores only current operational facts; immutable directives, reports and reviews store task-specific evidence. Direct, checked event-driven notification is preferred. A non-AI watchdog may monitor failed acknowledgments. AI polling, when necessary, uses short scheduled prompts, minimal state and a **constant checked interval**, without adaptive or fast-poll adjustments. Only one incoming wake path per role is active at a time.
+
+An edit to AGLP does not automatically migrate an active goal. C must approve a checked migration: reconcile owners, claims and pending returns; rebuild the current complete goal and task checklist from agreed decisions and verified proof; establish `control.md`; choose and verify wake methods and exact targets; safely pause/retarget/stop old schedules; update task instructions and recovery paths where necessary; and preserve prior immutable evidence. No duplicate owner or dependent work while transition is unsettled. Begin real goal execution only after authorized setup and C's start signal.

@@ -91,6 +91,7 @@ Use when editing files under `FRONTENT/`.
   - `FRONTENT/src/components/REGISTRY.md`
   - `FRONTENT/src/composables/REGISTRY.md`
   - `Documents/FEATURE_DASHBOARD_ENGINE.md` (if affecting dashboard data items, descriptors, or widgets)
+- For inline SKU selection, reuse `FRONTENT/src/components/shared/AqlInlineSkuPicker.vue` and `FRONTENT/src/composables/useInlineSkuPicker.js`. Their props and live model rules are in the two registries above.
 - If the task affects a documented module, also read only the relevant section of:
   - `Documents/WORKFLOW_OUTLET_OPERATIONS.md` (for retail outlets, visits, restocks, deliveries, invoicing, and payments)
   - `Documents/WORKFLOW_PROCUREMENT.md` (for product variants, POs, receiving, GRNs, and warehouse inventory)
