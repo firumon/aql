@@ -1,20 +1,21 @@
-{
-    "name": "aql-workspace",
-    "private": true,
-    "scripts": {
-        "gas:push": "node scripts/push-gas.js",
-        "gas:deploy": "node scripts/deploy-gas.js",
-        "master:push": "cd MASTER && clasp push --force",
-        "master:deploy": "node scripts/deploy-master-gas.js",
-        "master:open": "cd MASTER && clasp open-script",
-        "tenant:push": "node scripts/tenant.js push",
-        "tenant:update-libs": "node scripts/tenant.js update-libs",
-        "tenant:deploy": "node scripts/tenant.js deploy",
-        "aql:deploy": "firebase deploy --only hosting:aqlpwa",
-        "aql:bd": "npm --prefix FRONTENT run bump && npm --prefix FRONTENT run build && npm --prefix FRONTENT run deploy",
-        "dsh": "dsh web"
-    },
-    "dependencies": {
-        "firebase": "^12.16.0"
-    }
+﻿{
+    "name":  "aql-workspace",
+    "private":  true,
+    "scripts":  {
+                    "gas:push":  "node scripts/push-gas.js",
+                    "gas:deploy":  "node scripts/deploy-gas.js",
+                    "master:push":  "cd MASTER && clasp push --force",
+                    "master:deploy":  "node scripts/deploy-master-gas.js",
+                    "master:open":  "cd MASTER && clasp open-script",
+                    "tenant:push":  "node scripts/tenant.js push",
+                    "tenant:update-libs":  "node scripts/tenant.js update-libs",
+                    "tenant:deploy":  "node scripts/tenant.js deploy",
+                    "aql:deploy":  "firebase deploy --only hosting:aqlpwa",
+                    "aql:bd":  "npm --prefix FRONTENT run bump && npm --prefix FRONTENT run build && npm --prefix FRONTENT run deploy",
+                    "dsh":  "dsh web",
+                    "todos:watch":  "powershell -ExecutionPolicy Bypass -NoProfile -File scripts/watch-todos.ps1"
+                },
+    "dependencies":  {
+                         "firebase":  "^12.16.0"
+                     }
 }
