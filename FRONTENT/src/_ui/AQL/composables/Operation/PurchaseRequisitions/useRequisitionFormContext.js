@@ -38,7 +38,7 @@ export function useRequisitionFormContext () {
   const ui = useAQLConfig()
   const { user } = useAuth()
   const { warehouseOptions, getWarehouse } = useWarehouseResource()
-  const { skuLabelText } = useSkuResource()
+  const { skuLabelText, getSku } = useSkuResource()
   const { itemSummary, getPurchaseRequisition } = usePurchaseRequisitionResource()
 
   const parent = pageState?.useNode(NODE)
@@ -66,6 +66,7 @@ export function useRequisitionFormContext () {
   })
   const currentStep = computed(() => pageState?.meta?.currentStep || 1)
 
+  const childIndexes = pageState?.useChildrenIndex(CHILD, 'SKU', NODE)
   const childRows = parent?.children(CHILD)
   const summary = computed(() => itemSummary(childRows?.value || []))
   const items = computed(() => summary.value.items)
@@ -92,9 +93,21 @@ export function useRequisitionFormContext () {
     }
   }
 
-  function addItems (selectedSkus, selectedCodes) {
-    syncRequisitionItems(pageState, selectedSkus, selectedCodes)
+  function addItems (values) {
+    if (!editable.value) return
+    const codes = Object.keys(values)
+    const selectedSkus = codes.map((code) => getSku(code)?._raw).filter(Boolean)
+    syncRequisitionItems(pageState, selectedSkus, codes)
+    const indexes = childIndexes?.value || {}
+    for (const code of codes) {
+      const index = indexes[code]
+      if (index === undefined) continue
+      const quantity = Number(values[code])
+      updateItem(index, { Quantity: Number.isFinite(quantity) ? quantity : 0 })
+    }
   }
+
+  const skuQuantities = computed(() => Object.fromEntries(items.value.map((item) => [item.SKU, item.Quantity])))
 
   const existingCodes = computed(() => summary.value.codes)
   const totalQuantity = computed(() => summary.value.quantity)
@@ -130,12 +143,13 @@ export function useRequisitionFormContext () {
     setApproved,
     currentStep,
     items,
-    childIndexes: pageState?.useChildrenIndex(CHILD, 'SKU', NODE),
+    childIndexes,
     setDraft,
     updateItem,
     removeItem,
     addItems,
     existingCodes,
+    skuQuantities,
     totalQuantity,
     warehouseOptions,
     getWarehouse,

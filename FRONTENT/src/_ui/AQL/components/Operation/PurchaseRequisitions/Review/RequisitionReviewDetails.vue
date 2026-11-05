@@ -2,44 +2,9 @@
   <q-card flat bordered :class="ui.cardClass">
     <q-card-section>
       <div :class="ui.detailGridClass">
-        <div :class="[ui.detailLineClass, ui.detailRowClass]">
-          <span :class="ui.detailKeyClass">PR Code</span>
-          <span :class="ui.detailValClass">{{ requisition.Code }}</span>
-        </div>
-
-        <div :class="[ui.detailLineClass, ui.detailRowClass]">
-          <span :class="ui.detailKeyClass">Progress</span>
-          <span :class="ui.detailValClass">{{ requisition.Progress }}</span>
-        </div>
-
-        <div :class="[ui.detailLineClass, ui.detailRowClass]">
-          <span :class="ui.detailKeyClass">PR Date</span>
-          <span :class="ui.detailValClass">{{ requisition.PRDate || '-' }}</span>
-        </div>
-
-        <div :class="[ui.detailLineClass, ui.detailRowClass]">
-          <span :class="ui.detailKeyClass">Required Date</span>
-          <span :class="ui.detailValClass">{{ requisition.RequiredDate || '-' }}</span>
-        </div>
-
-        <div :class="[ui.detailLineClass, ui.detailRowClass]">
-          <span :class="ui.detailKeyClass">Requisition Type</span>
-          <span :class="ui.detailValClass">{{ requisition.Type || '-' }}</span>
-        </div>
-
-        <div :class="[ui.detailLineClass, ui.detailRowClass]">
-          <span :class="ui.detailKeyClass">Priority</span>
-          <span :class="ui.detailValClass">{{ requisition.Priority || '-' }}</span>
-        </div>
-
-        <div :class="[ui.detailLineClass, ui.detailRowClass]">
-          <span :class="ui.detailKeyClass">Destination Warehouse</span>
-          <span :class="ui.detailValClass">{{ warehouseName }}</span>
-        </div>
-
-        <div :class="[ui.detailLineClass, ui.detailRowClass]">
-          <span :class="ui.detailKeyClass">Linked Procurement</span>
-          <span :class="ui.detailValClass">{{ requisition.ProcurementCode || 'Created on approval' }}</span>
+        <div v-for="line in lines" :key="line.label" :class="[ui.detailLineClass, ui.detailRowClass]">
+          <span :class="ui.detailKeyClass">{{ line.label }}</span>
+          <span :class="ui.detailValClass">{{ line.value }}</span>
         </div>
       </div>
     </q-card-section>
@@ -47,6 +12,7 @@
 </template>
 
 <script setup>
+import { computed } from 'vue'
 import {
   useRequisitionReviewContext, useRequisitionReviewSeed
 } from 'src/_ui/AQL/composables/Operation/PurchaseRequisitions/Review/useRequisitionReviewContext'
@@ -54,4 +20,19 @@ import {
 defineOptions({ name: 'PurchaseRequisitionsReviewDetails', inheritAttrs: false })
 useRequisitionReviewSeed()
 const { ui, requisition, warehouseName } = useRequisitionReviewContext()
+
+const lines = computed(() => {
+  const record = requisition.value
+  return [
+    { label: 'PR Code', value: record.Code },
+    { label: 'Progress', value: record.Progress },
+    { label: 'PR Date', value: record.PRDate || '-' },
+    { label: 'User', value: record.Username || '-' },
+    { label: 'Required Date', value: record.RequiredDate || '-' },
+    { label: 'Requisition Type', value: record.Type || '-' },
+    { label: 'Priority', value: record.Priority || '-' },
+    { label: 'Destination Warehouse', value: warehouseName.value },
+    { label: 'Linked Procurement', value: record.ProcurementCode || 'Created on approval' }
+  ]
+})
 </script>

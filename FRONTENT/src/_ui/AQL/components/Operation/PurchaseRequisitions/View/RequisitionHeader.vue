@@ -83,6 +83,7 @@ const lines = computed(() => {
     { label: 'Type', value: typeMeta(record.Type).label || '—' },
     { label: 'Priority', value: priorityMeta(record.Priority).label },
     { label: 'PR Date', value: record.PRDate || '—' },
+    { label: 'User', value: record.Username || '—' },
     { label: 'Required By', value: record.RequiredDate },
     { label: 'Warehouse', value: warehouseName.value },
     ...(referenceRequired.value ? [{ label: 'Reference', value: record.TypeReferenceCode }] : []),

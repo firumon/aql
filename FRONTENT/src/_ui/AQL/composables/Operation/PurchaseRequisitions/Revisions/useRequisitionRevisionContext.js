@@ -4,7 +4,6 @@ import { isRevisionRequired } from 'src/_resource/Operation/PurchaseRequisitions
 import { useRequisitionFormContext, TYPE_OPTIONS, PRIORITY_OPTIONS } from '../useRequisitionFormContext'
 
 const NODE = 'PurchaseRequisitions'
-const CHILD = 'PurchaseRequisitionItems'
 
 export function useRequisitionRevisionContext () {
   const form = useRequisitionFormContext()
@@ -32,19 +31,14 @@ export function useRequisitionRevisionContext () {
     if (index !== undefined) form.removeItem(index)
   }
 
-  function addItems (selectedSkus) {
-    form.addItems(selectedSkus, selectedSkus.map((row) => row.Code))
-  }
-
   return {
     ...form, loading, selectedCode, selectedCodeArray, selectedRecord, revisionRequiredPRs,
     responseComment: pageState.useControls('responseComment', '', NODE),
-    showSkuPicker: pageState.useControls('showSkuPicker', false, NODE),
     prType: pageState.useRecord('Type', NODE), prPriority: pageState.useRecord('Priority', NODE),
     approverComment: computed(() => selectedRecord.value?.ProgressRevisionRequiredComment || ''),
     approverBy: computed(() => selectedRecord.value?.ProgressRevisionRequiredBy || ''),
     approverAt: computed(() => selectedRecord.value?.ProgressRevisionRequiredAt || ''),
     canSubmit: computed(() => Boolean(selectedRecord.value && items.value.length)),
-    typeOptions: TYPE_OPTIONS, priorityOptions: PRIORITY_OPTIONS, updateItemQty, removeItem, addItems
+    typeOptions: TYPE_OPTIONS, priorityOptions: PRIORITY_OPTIONS, updateItemQty, removeItem
   }
 }
