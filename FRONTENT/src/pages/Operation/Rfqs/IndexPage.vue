@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div class="rfq-index">
     <q-card flat bordered>
       <q-card-section class="q-pa-sm">
@@ -40,8 +40,8 @@
                   <div class="text-subtitle2 q-mt-xs">{{ row.PurchaseRequisitionCode || '-' }} · {{ row.ProcurementCode || '-' }}</div>
                   <div class="text-caption text-grey-7">
                     RFQ {{ formatDate(row.RFQDate) }} · Deadline
-                    <span :class="isOverdue(row.SubmissionDeadline) ? 'text-negative text-weight-bold' : ''">
-                      {{ formatDate(row.SubmissionDeadline) }}
+                    <span :class="isOverdue(row.QuotationSubmissionDeadline) ? 'text-negative text-weight-bold' : ''">
+                      {{ formatDate(row.QuotationSubmissionDeadline) }}
                     </span>
                   </div>
                   <div class="q-mt-xs row q-gutter-xs">

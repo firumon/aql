@@ -58,7 +58,7 @@ export function buildRFQRecord({ pr = {}, items = [], form = {}, procurementCode
     DeliveryMode: form.DeliveryMode || 'ANY',
     AllowPartialDelivery: form.AllowPartialDelivery ? 'Yes' : 'No',
     AllowSplitShipment: form.AllowSplitShipment ? 'Yes' : 'No',
-    SubmissionDeadline: form.SubmissionDeadline || addDays(form.RFQDate || new Date(), 7),
+    QuotationSubmissionDeadline: form.QuotationSubmissionDeadline || addDays(form.RFQDate || new Date(), 7),
     Progress: 'DRAFT',
     Status: 'Active'
   }

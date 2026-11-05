@@ -1,67 +1,65 @@
-import { buildRFQCreateChainNodes } from 'src/_resource/Operation/RFQs/composables/useRFQPayload'
-import { usePurchaseRequisitionResource } from 'src/_resource/Operation/PurchaseRequisitions/composables/usePurchaseRequisitionResource'
-import { useProcurementResource } from 'src/_resource/Operation/Procurements/composables/useProcurementResource'
+import { batchResultCode } from 'src/composables/resources/resourceRequests'
+import { useRFQCriteria } from 'src/_resource/Operation/RFQs/composables/useRFQCriteria'
+import { validateRFQDraftNodes } from 'src/_resource/Operation/RFQs/composables/useRFQForm'
+import { findResourceConfig } from 'src/composables/resources/useResourceConfig'
 
 const NODE = 'RFQs'
 
-const text = (value) => String(value ?? '').trim()
-
-// step 1 requisition + items | step 2 terms | step 3 suppliers + review
 export default (props, { pageState }) => {
-  pageState.useNode(NODE)
-
-  const { getPurchaseRequisition, requisitionItemsByCodes } = usePurchaseRequisitionResource()
-  const { getProcurement } = useProcurementResource()
-
-  const control = (key) => pageState.getControls(key, null, NODE)
+  const parent = pageState.useNode(NODE)
+  const criteria = useRFQCriteria()
+  let landing = null
+  const control = (key, fallback = null) => pageState.getControls(key, fallback, NODE)
   const step = () => pageState.meta?.currentStep || 1
-
-  const requisition = () => getPurchaseRequisition(control('RequisitionCode'))
-
-  const procurement = () => getProcurement(requisition()?.ProcurementCode)
-
-  const selectedItems = () => requisitionItemsByCodes(control('SelectedItemCodes'))
+  const isDirect = () => !findResourceConfig('PurchaseRequisitions')?.permissions?.canRead ||
+    control('SourceType', 'PR') === 'DIRECT'
 
   return {
     get actions () {
-      if (step() === 2) return ['back', 'next']
-      if (step() === 3) return ['back', 'submit']
-      return ['cancel', 'next']
+      const plan = criteria.stepsOf(parent.record.value)
+      if (step() === plan.review) return ['back', 'submit']
+      return step() === 1 ? ['cancel', 'next'] : ['back', 'next']
     },
-
-    submitLabel: 'Generate RFQ',
-
-    cancel: (name, { nav }) => {
-      nav.goTo('index')
-      return false
-    },
-
+    submitLabel: 'Save RFQ',
+    cancel: (name, { nav }) => { nav.goTo('index'); return false },
     next: () => {
-      if (step() === 1) {
-        if (!requisition()) return { valid: false, message: 'Select an approved requisition.' }
-        if (!selectedItems().length) return { valid: false, message: 'Select at least one item to quote.' }
-      }
+      const plan = criteria.stepsOf(parent.record.value)
+      const current = step()
+      const sourceType = isDirect() ? 'DIRECT' : 'PR'
+      const criterionIdx = current - (plan.criterionStart || 4)
+      const error = validateRFQDraftNodes({
+        record: parent.record.value,
+        suppliers: control('SelectedSupplierCodes', []),
+        sourceType,
+        directItems: control('DirectItems', []),
+        stage: current === 1 ? 'source' : current === 2 ? 'items' : current === 3 ? 'criteria' : current === plan.suppliers ? 'suppliers' : 'criterion',
+        criterionId: plan.selected[criterionIdx]?.id
+      })[0]
+      if (error) return error
+      if (current === 1 && sourceType === 'PR') return { step: plan.criteria }
+      if (current === 2 && sourceType === 'PR') return { step: plan.criteria }
       return undefined
     },
-
-    submit: () => {
-      const result = buildRFQCreateChainNodes({
-        requisition: requisition(),
-        items: selectedItems(),
-        form: control('Form') || {},
-        procurement: procurement(),
-        suppliers: Array.isArray(control('SelectedSupplierCodes')) ? control('SelectedSupplierCodes') : []
-      })
-
-
-      const applied = pageState.applyNodes(result)
-      if (applied.valid === false) return false
-      return {
-        successMsg: applied.successMsg,
-        onSuccess: undefined
-      }
+    back: () => {
+      const plan = criteria.stepsOf(parent.record.value)
+      if (!isDirect() && step() === plan.criteria) return { step: 1 }
+      return undefined
     },
-
-    successRoute: 'index'
+    submit: () => {
+      const suppliers = control('SelectedSupplierCodes', [])
+      const error = validateRFQDraftNodes({
+        record: parent.record.value,
+        suppliers,
+        sourceType: isDirect() ? 'DIRECT' : 'PR',
+        directItems: control('DirectItems', [])
+      })[0]
+      if (error) return error
+      landing = { at: pageState.build().findIndex((request) => request.resource === NODE) }
+    },
+    onSubmitSuccess: ({ response }, { nav }) => {
+      const code = landing?.at >= 0 ? batchResultCode(response, landing.at) : ''
+      if (!code) return nav.goTo('index')
+      nav.goTo('view', { code })
+    }
   }
 }

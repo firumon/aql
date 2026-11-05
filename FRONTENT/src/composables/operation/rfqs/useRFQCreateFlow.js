@@ -60,7 +60,7 @@ export function useRFQCreateFlow() {
     DeliveryMode: 'ANY',
     AllowPartialDelivery: true,
     AllowSplitShipment: true,
-    SubmissionDeadline: addDays(today, 7)
+    QuotationSubmissionDeadline: addDays(today, 7)
   })
 
   const optionSets = computed(() => ({
@@ -94,7 +94,7 @@ export function useRFQCreateFlow() {
   const calculatedLeadTimeDays = computed(() => daysUntil(selectedPr.value?.RequiredDate, form.value.RFQDate))
   const leadTimeChanged = computed(() => selectedPr.value && Number(form.value.LeadTimeDays) !== Number(calculatedLeadTimeDays.value))
   const canGoTiming = computed(() => !!selectedPr.value && selectedPrItems.value.length > 0)
-  const canConfirm = computed(() => canGoTiming.value && !!form.value.SubmissionDeadline && !saving.value)
+  const canConfirm = computed(() => canGoTiming.value && !!form.value.QuotationSubmissionDeadline && !saving.value)
 
   function formatDate(value) {
     if (!value) return '-'
@@ -196,7 +196,7 @@ export function useRFQCreateFlow() {
   }
 
   watch(() => form.value.RFQDate, (date) => {
-    form.value.SubmissionDeadline = addDays(date, 7)
+    form.value.QuotationSubmissionDeadline = addDays(date, 7)
     if (selectedPr.value) form.value.LeadTimeDays = daysUntil(selectedPr.value.RequiredDate, date)
   })
 

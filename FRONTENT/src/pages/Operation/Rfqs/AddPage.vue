@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div class="rfq-add">
     <q-card flat bordered class="q-mb-sm">
       <q-card-section class="row items-center no-wrap q-pa-sm">
@@ -85,11 +85,11 @@
             </q-select>
           </div>
           <div class="col-12 col-sm-6">
-            <q-input v-model="form.SubmissionDeadline" dense outlined label="Submission Deadline" readonly>
+            <q-input v-model="form.QuotationSubmissionDeadline" dense outlined label="Quotation Submission Deadline" readonly>
               <template #append>
                 <q-icon name="event" class="cursor-pointer">
                   <q-popup-proxy cover transition-show="scale" transition-hide="scale">
-                    <q-date v-model="form.SubmissionDeadline" mask="YYYY-MM-DD">
+                    <q-date v-model="form.QuotationSubmissionDeadline" mask="YYYY-MM-DD">
                       <div class="row items-center justify-end"><q-btn v-close-popup label="Done" color="primary" flat /></div>
                     </q-date>
                   </q-popup-proxy>
@@ -164,7 +164,7 @@
             <q-item-section>
               <q-item-label>Terms</q-item-label>
               <q-item-label caption>
-                Lead {{ form.LeadTimeDays }} days · Valid {{ form.QuotationValidityDays }} days · Deadline {{ formatDate(form.SubmissionDeadline) }}
+                Lead {{ form.LeadTimeDays }} days · Valid {{ form.QuotationValidityDays }} days · Deadline {{ formatDate(form.QuotationSubmissionDeadline) }}
               </q-item-label>
               <q-item-label caption>
                 {{ form.ShippingTermMode }} {{ form.ShippingTerm || '' }} · {{ form.PaymentTermMode }} {{ form.PaymentTerm || '' }} · Delivery {{ form.DeliveryMode }}

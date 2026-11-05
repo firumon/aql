@@ -8,6 +8,7 @@ const text = (value) => String(value ?? '').trim()
 // [ Cancel ] [ Assign Suppliers ]
 export default (props, { pageState, resourceConfig, resourceRecord }) => {
   pageState.useNode(NODE)
+  let landing = null
 
   const rfq = () => {
     const row = resourceRecord?.record?.value
@@ -20,6 +21,7 @@ export default (props, { pageState, resourceConfig, resourceRecord }) => {
   }
 
   return {
+    showFormActions: true,
     actions: ['cancel', 'submit'],
     submitLabel: 'Assign Suppliers',
 
@@ -39,9 +41,14 @@ export default (props, { pageState, resourceConfig, resourceRecord }) => {
       const applied = pageState.applyNodes(result)
       if (applied.valid === false) return false
 
+      landing = { rfq: text(rfq()?.Code), suppliers: [...selected()] }
       return { successMsg: applied.successMsg }
     },
 
-    successRoute: 'view'
+    onSubmitSuccess: (result, { nav }) => {
+      if (!landing?.rfq || !landing.suppliers.length) return nav.goTo('view')
+      nav.goTo('index', { scope: 'operation', resourceSlug: 'rfq-suppliers',
+        query: { rfq: landing.rfq, suppliers: landing.suppliers.join(',') } })
+    }
   }
 }

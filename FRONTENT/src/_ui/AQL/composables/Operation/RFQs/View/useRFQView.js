@@ -1,6 +1,7 @@
 import { computed, onMounted } from 'vue'
 import { usePageRecord } from 'src/composables/resources/usePageRecord'
-import { useSkuResource } from 'src/_resource/Master/SKUs/composables/useSkuResource'
+import { useRFQCriteria } from 'src/_resource/Operation/RFQs/composables/useRFQCriteria'
+import { usePurchaseRequisitionResource } from 'src/_resource/Operation/PurchaseRequisitions/composables/usePurchaseRequisitionResource'
 import {
   progressLabel,
   progressColor,
@@ -9,7 +10,6 @@ import {
   supplierProgressColor,
   supplierProgressIcon,
   termLabel,
-  parsePrItemCodeCsv,
   supplierRowsOf,
   allSuppliersDispatched,
   daysToDeadline,
@@ -44,6 +44,7 @@ export function formatStampDate (value) {
 }
 
 export function useRFQView () {
+  const criteria = useRFQCriteria()
   const { resourceRecord } = useRFQViewContext()
 
   const rfqSuppliers = usePageRecord('RFQSuppliers')
@@ -54,7 +55,7 @@ export function useRFQView () {
   const skus = usePageRecord('SKUs')
   const products = usePageRecord('Products')
 
-  const { skuLabelOf } = useSkuResource()
+  const { linesByRequisition } = usePurchaseRequisitionResource()
 
   onMounted(() => {
     ;[rfqSuppliers, suppliers, requisitionItems, quotations, procurements, skus, products]
@@ -90,23 +91,9 @@ export function useRFQView () {
   }, { total: 0, assigned: 0, responded: 0 }))
 
   const lines = computed(() => {
-    const codes = parsePrItemCodeCsv(rfq.value?.PurchaseRequisitionItemsCode)
-    if (!codes.length) return []
-    const wanted = new Set(codes)
-    return requisitionItems.items.value
-      .map(asRow)
-      .filter((row) => wanted.has(text(row.Code)))
-      .map((row) => {
-        const label = skuLabelOf(text(row.SKU))
-        return {
-          code: text(row.Code),
-          sku: text(row.SKU),
-          primary: label.primary,
-          secondary: label.secondary,
-          uom: text(row.UOM) || label.uom,
-          quantity: num(row.Quantity)
-        }
-      })
+    const prCode = text(rfq.value?.PurchaseRequisitionCode)
+    if (!prCode) return []
+    return linesByRequisition.value.get(prCode) || []
   })
 
   const totals = computed(() => lines.value.reduce((acc, line) => {
@@ -118,6 +105,10 @@ export function useRFQView () {
   const terms = computed(() => {
     const record = rfq.value
     if (!record) return []
+    const selected = criteria.termsOf(record)
+    if (selected.length) return selected
+    if (!['LeadTimeDays', 'QuotationValidityDays', 'ShippingTerm', 'PaymentTerm', 'DeliveryMode']
+      .some((column) => text(record[column]))) return []
     return [
       { label: 'Lead Time', value: `${num(record.LeadTimeDays)} days · ${termLabel(record.LeadTimeType)}` },
       { label: 'Validity', value: `${num(record.QuotationValidityDays)} days · ${termLabel(record.QuotationValidityMode)}` },

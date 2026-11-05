@@ -5,15 +5,20 @@
     <q-card flat bordered :class="ui.cardClass">
       <q-card-section>
         <div :class="ui.detailGridClass">
-          <div
-            v-for="(line, index) in terms"
-            :key="line.label"
-            class="items-center"
-            :class="[ui.detailLineClass, ui.detailRowClass]"
-            :style="rowDelay(index)"
-          >
-            <span :class="ui.detailKeyClass">{{ line.label }}</span>
-            <span class="col overflow-hidden flex justify-end items-center" :class="ui.detailValClass">{{ line.value }}</span>
+          <div v-for="(line, index) in terms" :key="line.label" :class="ui.detailRowClass" :style="rowDelay(index)">
+            <div class="row items-center justify-between" :class="ui.detailLineClass">
+              <span :class="ui.detailKeyClass">{{ line.label }}</span>
+              <span v-if="line.weight != null" :class="ui.detailValClass">Weight {{ line.weight }}</span>
+              <span v-else :class="ui.detailValClass">{{ line.value }}</span>
+            </div>
+            <div v-if="line.method" class="text-caption text-grey-7">{{ line.method }}</div>
+            <div v-for="option in line.options || []" :key="option.name" class="row justify-between items-start">
+              <span class="col">
+                {{ option.name }}
+                <span v-if="option.description" class="text-caption text-grey-7 block">{{ option.description }}</span>
+              </span>
+              <span class="text-caption text-grey-7">{{ option.points }} points</span>
+            </div>
           </div>
         </div>
       </q-card-section>

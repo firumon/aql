@@ -88,7 +88,7 @@ export function buildPrimaryMeta(rfqHeader, prHeader) {
 
     return [
         { label: 'RFQ Date', value: formatDate(rfqHeader.RFQDate) },
-        { label: 'Submission Deadline', value: formatDate(rfqHeader.SubmissionDeadline) },
+        { label: 'Quotation Submission Deadline', value: formatDate(rfqHeader.QuotationSubmissionDeadline) },
         { label: 'PR Code', value: rfqHeader.PurchaseRequisitionCode },
         { label: 'Procurement Code', value: rfqHeader.ProcurementCode },
         { label: 'Lead Time', value: `${rfqHeader.LeadTimeDays || 0} days - ${rfqHeader.LeadTimeType || '-'}` },

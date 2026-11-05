@@ -1,86 +1,115 @@
-import { computed, inject, onMounted } from 'vue'
+import { computed, inject, watch } from 'vue'
 import { useAuth } from 'src/composables/core/useAuth'
+import { findResourceConfig } from 'src/composables/resources/useResourceConfig'
 import { usePageRecord } from 'src/composables/resources/usePageRecord'
-import { useAQLConfig } from 'src/_ui/AQL/composables/useAQLConfig'
-import { useSkuResource } from 'src/_resource/Master/SKUs/composables/useSkuResource'
+import { usePurchaseRequisitionResource } from 'src/_resource/Operation/PurchaseRequisitions/composables/usePurchaseRequisitionResource'
 import { isRfqEligible, typeMeta, priorityMeta } from 'src/_resource/Operation/PurchaseRequisitions/composables/usePurchaseRequisitionProgress'
-import { termOptions, termLabel } from 'src/_resource/Operation/RFQs/composables/useRFQProgress'
-import { toDateInputValue, addDays } from 'src/_resource/Operation/RFQs/composables/useRFQPayload'
+import { useWarehouseResource } from 'src/_resource/Master/Warehouses/composables/useWarehouseResource'
+import { useSkuResource } from 'src/_resource/Master/SKUs/composables/useSkuResource'
+import { joinParts } from 'src/_ui/AQL/composables/Operation/PurchaseRequisitions/Index/usePurchaseRequisitionRowPresets'
+import { useRFQFormContext } from 'src/_ui/AQL/composables/Operation/RFQs/useRFQFormContext'
+import { useSupplierResource } from 'src/_resource/Master/Suppliers/composables/useSupplierResource'
 
 const NODE = 'RFQs'
 
 const text = (value) => String(value ?? '').trim()
-const num = (value) => {
-  const parsed = Number(value)
-  return Number.isFinite(parsed) ? parsed : 0
-}
 const asRow = (value) => (value && typeof value === 'object' ? value : {})
-const isActive = (value) => text(asRow(value).Status || 'Active') === 'Active'
 
-const DEFAULT_FORM = {
-  RFQDate: '',
-  LeadTimeDays: 30,
-  LeadTimeType: 'FLEXIBLE',
-  ShippingTermMode: 'ANY',
-  ShippingTerm: '',
-  PaymentTermMode: 'ANY',
-  PaymentTerm: '',
-  PaymentTermDetail: '',
-  QuotationValidityDays: 30,
-  QuotationValidityMode: 'MIN_REQUIRED',
-  DeliveryMode: 'ANY',
-  AllowPartialDelivery: false,
-  AllowSplitShipment: false,
-  SubmissionDeadline: ''
-}
-
-// The Add wizard owns its own fetch and seeding: no record route loads an RFQ that
-// does not exist yet.
 export function useRFQAddContext () {
-  const pageState = inject('pageState', null)
+  const base = useRFQFormContext()
   const resourceConfig = inject('resourceConfig', null)
-  const ui = useAQLConfig()
   const { user } = useAuth()
 
   const requisitions = usePageRecord('PurchaseRequisitions')
-  const requisitionItems = usePageRecord('PurchaseRequisitionItems')
-  const suppliers = usePageRecord('Suppliers')
   const procurements = usePageRecord('Procurements')
-  const skus = usePageRecord('SKUs')
-  const products = usePageRecord('Products')
 
-  const { skuLabelOf } = useSkuResource()
-
-  onMounted(() => {
-    ;[requisitions, requisitionItems, suppliers, procurements, skus, products]
-      .forEach((resource) => resource.reload())
-    seedDefaults()
-  })
+  const { linesByRequisition } = usePurchaseRequisitionResource()
+  const { getWarehouse } = useWarehouseResource()
+  const { skuLabelOf, getSku } = useSkuResource()
+  const { activeChoices: availableSuppliers, getSupplier } = useSupplierResource()
+  const showSourceChoice = computed(() => Boolean(findResourceConfig('PurchaseRequisitions')?.permissions?.canRead))
 
   function control (key) {
-    return pageState?.getControls(key, null, NODE)
+    return base.pageState?.getControls(key, null, NODE)
   }
 
   function setControl (key, value) {
-    pageState?.setControls(key, value, NODE)
+    base.pageState?.setControls(key, value, NODE)
   }
 
-  function seedDefaults () {
-    if (control('Seeded') === true) return
-    const today = toDateInputValue()
-    setControl('Form', { ...DEFAULT_FORM, RFQDate: today, SubmissionDeadline: addDays(today, 7) })
-    setControl('SelectedItemCodes', [])
-    setControl('SelectedSupplierCodes', [])
-    setControl('Seeded', true)
-  }
-
-  const form = computed(() => {
-    const value = control('Form')
-    return value && typeof value === 'object' ? value : DEFAULT_FORM
+  const sourceType = computed({
+    get: () => showSourceChoice.value ? control('SourceType') || 'PR' : 'DIRECT',
+    set: (value) => setControl('SourceType', value)
   })
 
-  function setFormField (key, value) {
-    setControl('Form', { ...form.value, [key]: value })
+  const isDirectToggle = computed({
+    get: () => sourceType.value === 'DIRECT',
+    set: (value) => { sourceType.value = value ? 'DIRECT' : 'PR' }
+  })
+
+  watch([showSourceChoice, () => control('SourceType')], ([canReadPr, restoredSource]) => {
+    if (canReadPr || restoredSource !== 'PR') return
+    setControl('SourceType', 'DIRECT')
+    setControl('PrListCollapsed', false)
+    base.pageState?.setRecord(null, {
+      PurchaseRequisitionCode: '',
+      ProcurementCode: ''
+    }, NODE)
+    for (const resource of ['RFQSuppliers', 'PurchaseRequisitions', 'PurchaseRequisitionItems', 'Procurements']) {
+      base.pageState?.removeNode(resource)
+    }
+  }, { immediate: true, flush: 'post' })
+
+  const prListCollapsed = computed({
+    get: () => Boolean(control('PrListCollapsed')),
+    set: (value) => setControl('PrListCollapsed', Boolean(value))
+  })
+
+  const directItems = computed(() => {
+    const list = control('DirectItems')
+    return Array.isArray(list) ? list.map((item) => ({
+      ...item,
+      secondary: (getSku(item.sku)?.variantValues || []).filter(Boolean).join(' / ')
+    })) : []
+  })
+
+  function addDirectSkus (valuesBySkuCode = {}) {
+    const currentBySku = new Map(directItems.value.map((item) => [item.sku, item]))
+    const current = Object.entries(asRow(valuesBySkuCode)).flatMap(([rawCode, rawQuantity]) => {
+      const code = text(rawCode)
+      if (!code) return []
+      const existing = currentBySku.get(code)
+      const quantity = rawQuantity === undefined ? existing?.quantity ?? 1 : Number(rawQuantity) || 0
+      if (existing) return [{ ...existing, quantity }]
+      const label = skuLabelOf(code)
+      const skuObj = getSku(code)
+      return [{
+        code: `direct:${code}`,
+        sku: code,
+        primary: label?.primary || code,
+        secondary: (skuObj?.variantValues || []).filter(Boolean).join(' / '),
+        uom: text(skuObj?.uom) || label?.uom || 'Unit',
+        quantity,
+        description: ''
+      }]
+    })
+    setControl('DirectItems', current)
+  }
+
+  function updateDirectItem (index, updates = {}) {
+    const current = [...directItems.value]
+    if (index >= 0 && index < current.length) {
+      current[index] = { ...current[index], ...updates }
+      setControl('DirectItems', current)
+    }
+  }
+
+  function removeDirectItem (index) {
+    const current = [...directItems.value]
+    if (index >= 0 && index < current.length) {
+      current.splice(index, 1)
+      setControl('DirectItems', current)
+    }
   }
 
   const eligibleRequisitions = computed(() => requisitions.items.value
@@ -88,12 +117,23 @@ export function useRFQAddContext () {
     .filter(isRfqEligible)
     .map((row) => ({
       code: text(row.Code),
-      label: `${typeMeta(row.Type).label} · ${text(row.Code)}`,
-      caption: [priorityMeta(row.Priority).label, text(row.RequiredDate)].filter(Boolean).join(' • '),
+      top: joinParts([text(row.Username), text(row.PRDate)]),
+      bottom: joinParts([
+        typeMeta(row.Type).label,
+        priorityMeta(row.Priority).label,
+        text(getWarehouse(text(row.WarehouseCode))?.name) || text(row.WarehouseCode)
+      ]),
       row
     })))
 
-  const selectedRequisitionCode = computed(() => text(control('RequisitionCode')))
+  const displayedRequisitions = computed(() => {
+    if (prListCollapsed.value && selectedRequisitionCode.value) {
+      return eligibleRequisitions.value.filter((item) => item.code === selectedRequisitionCode.value)
+    }
+    return eligibleRequisitions.value
+  })
+
+  const selectedRequisitionCode = computed(() => text(base.record.value.PurchaseRequisitionCode))
 
   const requisition = computed(() => {
     const code = selectedRequisitionCode.value
@@ -110,102 +150,72 @@ export function useRFQAddContext () {
   const availableItems = computed(() => {
     const code = selectedRequisitionCode.value
     if (!code) return []
-    return requisitionItems.items.value
-      .map(asRow)
-      .filter((row) => text(row.PurchaseRequisitionCode) === code && isActive(row) && text(row.Code))
-      .map((row) => {
-        const label = skuLabelOf(text(row.SKU))
-        return {
-          code: text(row.Code),
-          sku: text(row.SKU),
-          primary: label.primary,
-          secondary: label.secondary,
-          uom: text(row.UOM) || label.uom,
-          quantity: num(row.Quantity),
-          row
-        }
-      })
-  })
-
-  const selectedItemCodes = computed(() => {
-    const value = control('SelectedItemCodes')
-    return Array.isArray(value) ? value : []
+    return linesByRequisition.value?.get(code) || []
   })
 
   const selectedItems = computed(() => {
-    const wanted = new Set(selectedItemCodes.value)
-    return availableItems.value.filter((item) => wanted.has(item.code))
+    if (sourceType.value === 'DIRECT') {
+      return directItems.value
+    }
+    return availableItems.value
   })
 
   const selectedSupplierCodes = computed(() => {
     const value = control('SelectedSupplierCodes')
     return Array.isArray(value) ? value : []
   })
-
-  const availableSuppliers = computed(() => suppliers.items.value
-    .map(asRow)
-    .filter((row) => isActive(row) && text(row.Code))
-    .map((row) => ({
-      code: text(row.Code),
-      name: text(row.Name) || text(row.Code),
-      country: text(row.Country),
-      contact: text(row.ContactPerson)
-    })))
+  const selectedSuppliers = computed(() => selectedSupplierCodes.value.map((code) => getSupplier(code)).filter(Boolean))
 
   function selectRequisition (code) {
-    setControl('RequisitionCode', text(code))
-    setControl('SelectedItemCodes', [])
+    base.setField('PurchaseRequisitionCode', text(code))
   }
 
-  function toggleItem (code) {
-    const next = new Set(selectedItemCodes.value)
-    if (next.has(code)) next.delete(code)
-    else next.add(code)
-    setControl('SelectedItemCodes', Array.from(next))
-  }
+  const selectedRequisition = computed({
+    get: () => selectedRequisitionCode.value,
+    set: (value) => selectRequisition(value)
+  })
 
-  function selectAllItems () {
-    setControl('SelectedItemCodes', availableItems.value.map((item) => item.code))
-  }
-
-  function toggleSupplier (code) {
-    const next = new Set(selectedSupplierCodes.value)
-    if (next.has(code)) next.delete(code)
-    else next.add(code)
-    setControl('SelectedSupplierCodes', Array.from(next))
+  function toggleSupplier (codes) {
+    if (Array.isArray(codes)) {
+      setControl('SelectedSupplierCodes', codes)
+      return
+    }
+    const code = text(asRow(codes).Code)
+    if (!code) return
+    setControl('SelectedSupplierCodes', selectedSupplierCodes.value.filter((selectedCode) => selectedCode !== code))
   }
 
   const totals = computed(() => selectedItems.value.reduce((acc, item) => {
     acc.lines += 1
-    acc.quantity += item.quantity
+    acc.quantity += Number(item.quantity) || 0
     return acc
   }, { lines: 0, quantity: 0 }))
 
-  const currentStep = computed(() => pageState?.meta?.currentStep || 1)
-
   return {
-    pageState,
+    ...base,
     resourceConfig,
-    ui,
     user,
-    form,
-    setFormField,
+    showSourceChoice,
+    sourceType,
+    isDirectToggle,
+    prListCollapsed,
+    directItems,
+    addDirectSkus,
+    updateDirectItem,
+    removeDirectItem,
     eligibleRequisitions,
+    displayedRequisitions,
+    selectedRequisition,
     selectedRequisitionCode,
     requisition,
     procurement,
     availableItems,
-    selectedItemCodes,
     selectedItems,
     availableSuppliers,
     selectedSupplierCodes,
+    selectedSuppliers,
     selectRequisition,
-    toggleItem,
-    selectAllItems,
     toggleSupplier,
-    totals,
-    currentStep,
-    termOptions,
-    termLabel
+    totals
   }
 }

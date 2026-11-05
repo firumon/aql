@@ -36,7 +36,7 @@ function editableSnapshot(form) {
     DeliveryMode: form.DeliveryMode || '',
     AllowPartialDelivery: normalizeFlag(form.AllowPartialDelivery),
     AllowSplitShipment: normalizeFlag(form.AllowSplitShipment),
-    SubmissionDeadline: form.SubmissionDeadline || ''
+    QuotationSubmissionDeadline: form.QuotationSubmissionDeadline || ''
   })
 }
 
@@ -70,7 +70,7 @@ export function useRFQEditableFlow() {
     DeliveryMode: 'ANY',
     AllowPartialDelivery: true,
     AllowSplitShipment: true,
-    SubmissionDeadline: '',
+    QuotationSubmissionDeadline: '',
     Progress: '',
     Status: ''
   })
@@ -123,7 +123,7 @@ export function useRFQEditableFlow() {
       DeliveryMode: row.DeliveryMode || 'ANY',
       AllowPartialDelivery: normalizeFlag(row.AllowPartialDelivery),
       AllowSplitShipment: normalizeFlag(row.AllowSplitShipment),
-      SubmissionDeadline: row.SubmissionDeadline || '',
+      QuotationSubmissionDeadline: row.QuotationSubmissionDeadline || '',
       Progress: row.Progress || '',
       Status: row.Status || ''
     }
@@ -147,7 +147,7 @@ export function useRFQEditableFlow() {
       DeliveryMode: form.value.DeliveryMode || 'ANY',
       AllowPartialDelivery: toFlagValue(form.value.AllowPartialDelivery),
       AllowSplitShipment: toFlagValue(form.value.AllowSplitShipment),
-      SubmissionDeadline: form.value.SubmissionDeadline || ''
+      QuotationSubmissionDeadline: form.value.QuotationSubmissionDeadline || ''
     }
   }
 

@@ -28,6 +28,7 @@
               <span v-if="line.secondary && line.secondary !== line.primary" class="text-caption text-grey-6 block">
                 {{ line.secondary }}
               </span>
+              <span v-if="line.Description" class="text-caption block">{{ line.Description }}</span>
             </span>
             <span class="col overflow-hidden flex justify-end items-center" :class="ui.detailValClass">
               {{ line.quantity }} {{ line.uom }}

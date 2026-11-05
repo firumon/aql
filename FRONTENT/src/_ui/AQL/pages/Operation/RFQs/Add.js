@@ -1,7 +1,8 @@
-// Three steps: pick the requisition lines, set the terms, then choose suppliers and check.
+import { buildRFQFormInitNodes } from 'src/_resource/Operation/RFQs/composables/useRFQForm'
+
 export default {
   sections: ['PageHeader'],
-  contents: ['SelectRequisition', 'RFQTerms', 'SupplierSelection', 'ReviewRFQ'],
+  contents: ['SelectRequisition', 'DirectItems', 'CriteriaSelection', 'CriterionOptions', 'SupplierSelection', 'ReviewRFQ'],
 
   PropsPageHeader: {
     title: 'Generate RFQ',
@@ -9,7 +10,13 @@ export default {
   },
 
   PropsSelectRequisition: { step: 1 },
-  PropsRFQTerms: { step: 2 },
-  PropsSupplierSelection: { step: 3 },
-  PropsReviewRFQ: { step: 3 }
+  PropsDirectItems: { step: 2 },
+  PropsCriterionOptions: (pageProps) => ({ gutter: pageProps.gutter }),
+
+  ready ({ pageState }) {
+    pageState.resetForResource('RFQs')
+    pageState.initResource('Procurements')
+    pageState.initResource('PurchaseRequisitions')
+    pageState.applyNodes(buildRFQFormInitNodes())
+  }
 }

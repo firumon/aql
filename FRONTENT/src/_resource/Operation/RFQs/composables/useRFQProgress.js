@@ -8,16 +8,14 @@ export const SENT = 'SENT'
 export const CLOSED = 'CLOSED'
 export const CANCELLED = 'CANCELLED'
 
-export const WORKFLOW_STATES = [DRAFT, SENT, CLOSED, CANCELLED]
-export const TERMINAL_STATES = [CLOSED, CANCELLED]
-export const IN_FLIGHT_STATES = WORKFLOW_STATES.filter((state) => !TERMINAL_STATES.includes(state))
-
-// Supplier rows walk their own path under the RFQ.
 export const SUPPLIER_ASSIGNED = 'ASSIGNED'
 export const SUPPLIER_SENT = 'SENT'
 export const SUPPLIER_RESPONDED = 'RESPONDED'
 export const SUPPLIER_CANCELLED = 'CANCELLED'
 
+export const WORKFLOW_STATES = [DRAFT, SENT, CLOSED, CANCELLED]
+export const TERMINAL_STATES = [CLOSED, CANCELLED]
+export const IN_FLIGHT_STATES = WORKFLOW_STATES.filter((state) => !TERMINAL_STATES.includes(state))
 export const SUPPLIER_STATES = [SUPPLIER_ASSIGNED, SUPPLIER_SENT, SUPPLIER_RESPONDED, SUPPLIER_CANCELLED]
 
 export const PROGRESS_META = {
@@ -27,8 +25,6 @@ export const PROGRESS_META = {
   [CANCELLED]: { label: 'Cancelled', color: 'negative', icon: 'block' }
 }
 
-// The RFQ vocabulary plus the supplier-row states, so one screen showing both reads
-// them from one definition.
 export const SUPPLIER_ROW_META = {
   ...PROGRESS_META,
   [SUPPLIER_ASSIGNED]: { label: 'Assigned', color: 'warning', icon: 'group_add' },
@@ -37,12 +33,9 @@ export const SUPPLIER_ROW_META = {
 
 export const FALLBACK_META = { label: '—', color: 'grey-6', icon: 'help_outline' }
 
-export const PROGRESS_COLORS = Object.fromEntries(
-  Object.entries(PROGRESS_META).map(([state, meta]) => [state, meta.color]))
-export const PROGRESS_ICONS = Object.fromEntries(
-  Object.entries(PROGRESS_META).map(([state, meta]) => [state, meta.icon]))
-export const PROGRESS_LABELS = Object.fromEntries(
-  Object.entries(PROGRESS_META).map(([state, meta]) => [state, meta.label]))
+export const PROGRESS_COLORS = Object.fromEntries(Object.entries(PROGRESS_META).map(([state, meta]) => [state, meta.color]))
+export const PROGRESS_ICONS = Object.fromEntries(Object.entries(PROGRESS_META).map(([state, meta]) => [state, meta.icon]))
+export const PROGRESS_LABELS = Object.fromEntries(Object.entries(PROGRESS_META).map(([state, meta]) => [state, meta.label]))
 
 export const PROGRESS_STAMP_PREFIX = {
   [CLOSED]: 'ProgressClosed'
@@ -52,7 +45,6 @@ export const WORKFLOW_STAMPS = [
   { state: CLOSED, prefix: 'ProgressClosed', title: 'RFQ Closed' }
 ]
 
-// Commercial terms the RFQ asks suppliers to answer against.
 export const TERM_OPTIONS = {
   leadTimeTypes: ['FLEXIBLE', 'STRICT', 'RANGE_10', 'RANGE_25'],
   shippingTermModes: ['ANY', 'FIXED'],
@@ -114,6 +106,13 @@ export const TERM_DESCRIPTIONS = {
   }
 }
 
+export const AGE_BANDS = [
+  { label: '0–2 days', caption: 'On track', color: 'positive', max: 2 },
+  { label: '3–5 days', caption: 'Watch', color: 'info', max: 5 },
+  { label: '6–10 days', caption: 'Chase', color: 'warning', max: 10 },
+  { label: '10+ days', caption: 'Overdue', color: 'negative', max: Infinity }
+]
+
 const text = (value) => String(value ?? '').trim()
 const asRow = (value) => (value && typeof value === 'object' ? value : {})
 
@@ -167,14 +166,12 @@ export function isActiveRow (row) {
   return text(asRow(row).Status || 'Active') === 'Active'
 }
 
-// Suppliers may be assigned while the RFQ has not been closed or cancelled.
 export function canAssignSuppliers (row) {
   return isActiveRow(row) && !isTerminal(row)
 }
 
-// Dispatch is only meaningful once the RFQ itself has been sent out.
 export function canMarkSuppliersSent (row) {
-  return isSent(row)
+  return isActiveRow(row) && (isDraft(row) || isSent(row))
 }
 
 export function canClose (row) {
@@ -206,14 +203,13 @@ export function assignedSupplierCount (rfq, supplierRows = []) {
 
 export function respondedSupplierCount (rfq, supplierRows = []) {
   return supplierRowsOf(rfq, supplierRows)
-    .filter((row) => text(row.Progress).toUpperCase() === SUPPLIER_RESPONDED).length
+    .filter((row) => progressOf(row) === SUPPLIER_RESPONDED).length
 }
 
-// Once nothing is left in ASSIGNED, the whole RFQ has gone out.
 export function allSuppliersDispatched (rfq, supplierRows = []) {
   const rows = supplierRowsOf(rfq, supplierRows)
   if (!rows.length) return false
-  return !rows.some((row) => text(row.Progress).toUpperCase() === SUPPLIER_ASSIGNED)
+  return !rows.some((row) => progressOf(row) === SUPPLIER_ASSIGNED)
 }
 
 export function isOwnedBy (row, userId) {
@@ -245,9 +241,8 @@ export function daysSince (stampValue) {
   return -daysFromToday(stampValue)
 }
 
-// Days left before the submission deadline. Negative once it has passed.
 export function daysToDeadline (row) {
-  return daysFromToday(text(row?.SubmissionDeadline))
+  return daysFromToday(text(row?.QuotationSubmissionDeadline ?? row?.SubmissionDeadline))
 }
 
 export function isDeadlinePassed (row) {
@@ -276,13 +271,6 @@ export function workflowStamps (record) {
     .filter((event) => event.by || event.at)
     .sort((a, b) => (a.timestamp?.getTime() ?? Infinity) - (b.timestamp?.getTime() ?? Infinity))
 }
-
-export const AGE_BANDS = [
-  { label: '0–2 days', caption: 'On track', color: 'positive', max: 2 },
-  { label: '3–5 days', caption: 'Watch', color: 'info', max: 5 },
-  { label: '6–10 days', caption: 'Chase', color: 'warning', max: 10 },
-  { label: '10+ days', caption: 'Overdue', color: 'negative', max: Infinity }
-]
 
 export function ageBandOf (days) {
   if (days === null || days === undefined || Number.isNaN(days)) return null

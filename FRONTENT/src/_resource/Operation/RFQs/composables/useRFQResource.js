@@ -1,10 +1,11 @@
 import { useRecord } from 'src/composables/resources/useRecord'
 
 const RESOURCE_NAME = 'RFQs'
+const SUPPLIERS_RESOURCE = 'RFQSuppliers'
 
 const text = (value) => String(value ?? '').trim()
 
-export { RESOURCE_NAME }
+export { RESOURCE_NAME, SUPPLIERS_RESOURCE }
 
 export function useRFQResource () {
   const record = useRecord()
@@ -24,6 +25,6 @@ export function useRFQResource () {
   return {
     getRFQ,
     rfqOfProcurement,
-    rfqSupplierRows: () => record.enriched('RFQSuppliers')
+    rfqSupplierRows: () => record.enriched(SUPPLIERS_RESOURCE)
   }
 }

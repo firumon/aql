@@ -1,3 +1,4 @@
+import { useAuth } from 'src/composables/core/useAuth'
 import { buildMarkAsSentChainNodes } from 'src/_resource/Operation/RFQs/composables/useRFQPayload'
 
 const NODE = 'RFQs'
@@ -8,6 +9,7 @@ const text = (value) => String(value ?? '').trim()
 // [ Cancel ] [ Mark As Sent ]
 export default (props, { pageState, resourceConfig, resourceRecord }) => {
   pageState.useNode(NODE)
+  const { user } = useAuth()
 
   const rfq = () => {
     const row = resourceRecord?.record?.value
@@ -22,6 +24,7 @@ export default (props, { pageState, resourceConfig, resourceRecord }) => {
   }
 
   return {
+    showFormActions: true,
     actions: ['cancel', 'submit'],
     submitLabel: 'Mark As Sent',
 
@@ -35,7 +38,8 @@ export default (props, { pageState, resourceConfig, resourceRecord }) => {
         rfq: rfq(),
         supplierRowCodes: selected(),
         supplierRows: rfq()?.$RFQSuppliers || rfq()?.$rfqsuppliers || [],
-        procurement: procurement()
+        procurement: procurement(),
+        actorName: user.value?.name || user.value?.email || ''
       })
 
 

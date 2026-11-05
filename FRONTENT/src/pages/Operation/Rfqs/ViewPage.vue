@@ -70,11 +70,11 @@
               </q-input>
             </div>
             <div class="col-12 col-sm-6 col-md-3">
-              <q-input v-model="form.SubmissionDeadline" dense outlined label="Submission Deadline">
+              <q-input v-model="form.QuotationSubmissionDeadline" dense outlined label="Quotation Submission Deadline">
                 <template #append>
                   <q-icon name="event" class="cursor-pointer">
                     <q-popup-proxy cover transition-show="scale" transition-hide="scale">
-                      <q-date v-model="form.SubmissionDeadline" mask="YYYY-MM-DD">
+                      <q-date v-model="form.QuotationSubmissionDeadline" mask="YYYY-MM-DD">
                         <div class="row items-center justify-end q-pa-sm">
                           <q-btn v-close-popup flat dense label="Close" color="primary" />
                         </div>

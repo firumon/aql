@@ -70,8 +70,8 @@ const facts = computed(() => {
   const record = rfq.value
   if (!record) return []
   const days = deadlineDays.value
-  const deadline = record.SubmissionDeadline
-    ? `${record.SubmissionDeadline}${Number.isFinite(days) && days >= 0 ? ` (${days} days left)` : ''}`
+  const deadline = record.QuotationSubmissionDeadline
+    ? `${record.QuotationSubmissionDeadline}${Number.isFinite(days) && days >= 0 ? ` (${days} days left)` : ''}`
     : ''
   return [
     { label: 'RFQ Date', value: record.RFQDate || '—' },

@@ -1,46 +1,34 @@
 <template>
   <div v-if="visible" :class="gutterClass">
-    <q-card flat bordered :class="ui.cardClass">
-      <q-card-section>
-        <div class="row items-center justify-between q-mb-sm">
-          <div class="text-subtitle1 text-weight-medium">Suppliers to invite</div>
-          <div class="text-caption text-grey-7">{{ selectedSupplierCodes.length }} selected</div>
-        </div>
+    <SectionDividerLabel label="Suppliers to invite" />
 
-        <div v-if="!availableSuppliers.length" class="text-center q-py-lg">
-          <q-icon name="group_off" :size="ui.emptyIconSize" :color="ui.emptyIconColor" class="q-mb-sm block q-mx-auto" />
-          <div :class="ui.emptyTitleClass">No active suppliers</div>
-          <div :class="ui.emptyCaptionClass">Add a supplier before sending an RFQ out.</div>
-        </div>
+    <div v-if="!availableSuppliers.length" class="text-center q-py-lg">
+      <q-icon name="group_off" :size="ui.emptyIconSize" :color="ui.emptyIconColor" class="q-mb-sm block q-mx-auto" />
+      <div :class="ui.emptyTitleClass">No active suppliers</div>
+      <div :class="ui.emptyCaptionClass">Add a supplier before sending an RFQ out.</div>
+    </div>
 
-        <q-list v-else separator>
-          <q-item v-for="supplier in availableSuppliers" :key="supplier.code" clickable @click="toggleSupplier(supplier.code)">
-            <q-item-section side top>
-              <q-checkbox
-                :model-value="isSelected(supplier.code)"
-                :style="ui.tapTargetStyle"
-                :aria-label="`Select ${supplier.name}`"
-                @update:model-value="toggleSupplier(supplier.code)"
-              />
-            </q-item-section>
-            <q-item-section :class="ui.flexWrapTextClass">
-              <q-item-label>{{ supplier.name }}</q-item-label>
-              <q-item-label caption>{{ captionOf(supplier) }}</q-item-label>
-            </q-item-section>
-          </q-item>
-        </q-list>
-
-        <q-banner dense rounded class="bg-grey-2 q-mt-sm text-caption">
-          Suppliers picked here are assigned to the RFQ. Dispatch them from the RFQ page
-          when the paperwork actually goes out.
-        </q-banner>
-      </q-card-section>
-    </q-card>
+    <AqlInlineMasterPicker v-else dense :filter-dense="false" :class="ui.cardClass" :items="availableSuppliers"
+      :model-value="Object.fromEntries(selectedSupplierCodes.map(code => [code, '']))"
+      filter-label="Filter by supplier name" search-by="name"
+      :list-props="{ label: 'name', caption: captionOf, labelClass: ui.flexWrapTextClass, itemClass: 'bg-transparent' }"
+      @update:model-value="toggleSupplier(Object.keys($event))">
+      <template #selected-items>
+        <q-card-section v-if="selectedSuppliers.length">
+          <AppList dense :items="selectedSuppliers" item-key="Code" separator
+            :label="item => `${selectedSuppliers.indexOf(item) + 1}. ${item.Name}`"
+            :label-class="ui.flexWrapTextClass" :paginate="false" :gutter="false" :item-bordered="false"
+            item-class="bg-transparent" btn="delete_outline" btn-color="negative" @btn-click="toggleSupplier" />
+        </q-card-section>
+      </template>
+    </AqlInlineMasterPicker>
   </div>
 </template>
-
 <script setup>
 import { computed, useAttrs } from 'vue'
+import AppList from 'components/app/AppList.vue'
+import SectionDividerLabel from 'components/shared/SectionDividerLabel.vue'
+import AqlInlineMasterPicker from 'components/shared/AqlInlineMasterPicker.vue'
 import { useRFQAddContext } from 'src/_ui/AQL/composables/Operation/RFQs/Add/useRFQAddContext'
 
 defineOptions({ name: 'RFQsAddSupplierSelection', inheritAttrs: false })
@@ -52,16 +40,10 @@ const props = defineProps({
 const attrs = useAttrs()
 const gutterClass = computed(() => `q-gutter-y-${attrs.gutter || 'sm'}`)
 
-const { ui, availableSuppliers, selectedSupplierCodes, toggleSupplier, currentStep } = useRFQAddContext()
+const { ui, availableSuppliers, selectedSupplierCodes, selectedSuppliers, toggleSupplier, currentStep, stepPlan } = useRFQAddContext()
 
-const visible = computed(() => props.step == null || Number(props.step) === currentStep.value)
-const selectedSet = computed(() => new Set(selectedSupplierCodes.value))
-
-function isSelected (code) {
-  return selectedSet.value.has(code)
-}
-
+const visible = computed(() => Number(props.step ?? stepPlan.value.suppliers) === currentStep.value)
 function captionOf (supplier) {
-  return [supplier.country, supplier.contact].filter(Boolean).join(' • ')
+  return [supplier.country || supplier.Country, supplier.contact || supplier.ContactPerson].filter(Boolean).join(' • ')
 }
 </script>
