@@ -688,7 +688,7 @@
       const countControl = '<select data-bind-path="count" data-kind="count">' +
         options(['auto', 'true', 'false'], count, ['Auto · compact default', 'Always show', 'Hide']) + '</select>';
       const permissionControl = '<textarea data-bind-path="permission" data-kind="permission" ' +
-        'placeholder="read&#10;or: [&quot;read&quot;,&quot;update&quot;]">' + esc(permissionValue) + '</textarea>';
+        'placeholder="read&#10;or: any,read,update&#10;or: [&quot;all&quot;,&quot;read&quot;,&quot;update&quot;]">' + esc(permissionValue) + '</textarea>';
       const defaultControl = '<div class="field"><div class="field-head"><label>Default view</label>' +
         '<button type="button" class="hint" title="Used when no view was remembered.">i</button></div>' +
         '<div class="check-field"><input type="checkbox" data-bind-path="default" data-kind="default-flag"' +
@@ -722,7 +722,7 @@
         ) +
         fieldControl(
           'View permission',
-          'Action, action list, or resource-to-actions JSON. Every check must pass.',
+          'Use one action, a comma list, or a resource map. Lists use all by default; add any to allow one action.',
           permissionControl,
           'span-two'
         ) +
@@ -1169,7 +1169,7 @@
       if (!isObject(node)) node = { type: 'group', logic: 'AND', items: [] };
       if (node.type === 'condition') {
         const kind = state.valueKinds[path] || guessValueKind(node.value);
-        const operator = node.operator || node.op || 'eq';
+        const operator = node.operator || 'eq';
         const remove = canRemove
           ? '<button type="button" class="button danger small" data-action="remove-node" ' +
             'data-path="' + esc(path) + '">Remove</button>'
@@ -1340,8 +1340,7 @@
         }
       } else if (normalized.type === 'condition' || (!normalized.type && normalized.column != null)) {
         normalized.type = 'condition';
-        const operator = normalized.operator || normalized.op || normalized.oper;
-        if (operator) normalized.operator = canonicalOperator(operator);
+        if (normalized.operator) normalized.operator = canonicalOperator(normalized.operator);
         delete normalized.op;
         delete normalized.oper;
       }
@@ -1434,7 +1433,7 @@
         return null;
       }
       cleanDefaults(view);
-      const filterError = validateTree(view.filter, 'Filter');
+      const filterError = validateTree(view.filter, 'Filter', true);
       if (filterError) { showError(filterError); state.activeTab = 'filter'; renderEditor(); return null; }
       if (Array.isArray(view.group)) {
         for (let i = 0; i < view.group.length; i++) {
@@ -1499,7 +1498,7 @@
         }
       }
       if (view.permission != null && !validPermission(view.permission)) {
-        showError('Permission must be an action name, an action list, or a resource-to-actions object.');
+        showError('Permission must be an action, a valid all/any list, or a resource-to-actions map.');
         state.activeTab = 'basic';
         renderEditor();
         return null;
@@ -1509,21 +1508,22 @@
       return view;
     }
 
-    function validateTree(node, title) {
+    function validateTree(node, title, allowOp) {
       if (node == null) return '';
       if (!isObject(node)) return title + ' must be a condition or group.';
       if (node.type === 'group') {
         if (node.logic !== 'AND' && node.logic !== 'OR') return title + ' group logic must be AND or OR.';
         const items = Array.isArray(node.items) ? node.items : [];
         for (let i = 0; i < items.length; i++) {
-          const error = validateTree(items[i], title);
+          const error = validateTree(items[i], title, allowOp);
           if (error) return error;
         }
         return '';
       }
       if (node.type === 'condition') {
         if (!String(node.column || '').trim()) return title + ' conditions need a column.';
-        if (VALUE_OPERATORS.indexOf(String(node.operator || node.op || '').toLowerCase()) < 0) {
+        const operator = allowOp ? (node.operator || node.op) : node.operator;
+        if (VALUE_OPERATORS.indexOf(String(operator || '').toLowerCase()) < 0) {
           return title + ' conditions need a supported operator.';
         }
         return '';
@@ -1568,13 +1568,42 @@
 
     function validPermission(value) {
       const validAction = function (action) { return typeof action === 'string' && action.trim().length > 0; };
-      if (typeof value === 'string') return validAction(value);
-      if (Array.isArray(value)) return value.every(validAction);
+      if (typeof value === 'string') {
+        if (!value.includes(',')) return validAction(value);
+        const actions = value.split(',').map(function (action) { return action.trim(); });
+        const modes = actions.filter(function (action) { return ['all', 'any'].includes(action.toLowerCase()); });
+        const checks = actions.filter(function (action) { return !['all', 'any'].includes(action.toLowerCase()); });
+        return actions.every(validAction) && modes.length <= 1 && (!modes.length || checks.length > 0);
+      }
+      if (Array.isArray(value)) {
+        const modes = value.filter(function (action) {
+          return typeof action === 'string' && ['all', 'any'].includes(action.trim().toLowerCase());
+        });
+        const checks = value.filter(function (action) {
+          return typeof action !== 'string' || !['all', 'any'].includes(action.trim().toLowerCase());
+        });
+        return value.every(validAction) && modes.length <= 1 && (!modes.length || checks.length > 0);
+      }
       if (!isObject(value)) return false;
       return Object.keys(value).every(function (resource) {
         const actions = value[resource];
-        return resource.trim().length > 0 &&
-          (validAction(actions) || (Array.isArray(actions) && actions.every(validAction)));
+        if (!resource.trim().length) return false;
+        if (typeof actions === 'string' && actions.includes(',')) {
+          const list = actions.split(',').map(function (action) { return action.trim(); });
+          const modes = list.filter(function (action) { return ['all', 'any'].includes(action.toLowerCase()); });
+          const checks = list.filter(function (action) { return !['all', 'any'].includes(action.toLowerCase()); });
+          return list.every(validAction) && modes.length <= 1 && (!modes.length || checks.length > 0);
+        }
+        if (Array.isArray(actions)) {
+          const modes = actions.filter(function (action) {
+            return typeof action === 'string' && ['all', 'any'].includes(action.trim().toLowerCase());
+          });
+          const checks = actions.filter(function (action) {
+            return typeof action !== 'string' || !['all', 'any'].includes(action.trim().toLowerCase());
+          });
+          return actions.every(validAction) && modes.length <= 1 && (!modes.length || checks.length > 0);
+        }
+        return validAction(actions);
       });
     }
 
@@ -1617,6 +1646,9 @@
       if (!view.color || view.color === 'primary') delete view.color;
       if (view.default !== true) delete view.default;
       if (view.count !== true && view.count !== false) delete view.count;
+      if (typeof view.permission === 'string' && view.permission.includes(',')) {
+        view.permission = view.permission.split(',').map(function (action) { return action.trim(); }).join(',');
+      }
       if (!view.permission ||
         (typeof view.permission === 'string' && !view.permission.trim()) ||
         (Array.isArray(view.permission) && !view.permission.length) ||
