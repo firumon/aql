@@ -688,7 +688,7 @@
       const countControl = '<select data-bind-path="count" data-kind="count">' +
         options(['auto', 'true', 'false'], count, ['Auto · compact default', 'Always show', 'Hide']) + '</select>';
       const permissionControl = '<textarea data-bind-path="permission" data-kind="permission" ' +
-        'placeholder="read&#10;or: any,read,update&#10;or: [&quot;all&quot;,&quot;read&quot;,&quot;update&quot;]">' + esc(permissionValue) + '</textarea>';
+        'placeholder="read&#10;or: any,read,update&#10;or: {&quot;Outlets&quot;:&quot;read,update&quot;}">' + esc(permissionValue) + '</textarea>';
       const defaultControl = '<div class="field"><div class="field-head"><label>Default view</label>' +
         '<button type="button" class="hint" title="Used when no view was remembered.">i</button></div>' +
         '<div class="check-field"><input type="checkbox" data-bind-path="default" data-kind="default-flag"' +
