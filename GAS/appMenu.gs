@@ -871,36 +871,35 @@ function app_saveResourceActions(resourceName, actionsJson) {
 
 function app_showListViewsManagerDialog() {
   const html = HtmlService.createHtmlOutputFromFile('listViewsManager')
-    .setWidth(940)
-    .setHeight(660)
-    .setTitle('Manage Resource List Views');
-  SpreadsheetApp.getUi().showModalDialog(html, 'Manage Resource List Views');
+    .setWidth(1120)
+    .setHeight(780)
+    .setTitle('Manage List Views');
+  SpreadsheetApp.getUi().showModalDialog(html, 'Manage List Views');
 }
 
-/**
- * Fetches all data needed for the List Views Manager UI
- */
 function app_getListViewsManagerData() {
   try {
-    var resources = getAllResourcesConfigs({ includeInactive: true });
-    var resourceList = resources.map(function(res) {
-      var headers = [];
+    const resources = getAllResourcesConfigs({ includeInactive: true });
+    const resourceList = resources.map(function(res) {
+      let headers = [];
       try {
         if (!res.functional && res.fileId && res.sheetName) {
-          var ss = openSpreadsheetById(res.fileId);
-          var sheet = ss.getSheetByName(res.sheetName);
+          const ss = openSpreadsheetById(res.fileId);
+          const sheet = ss.getSheetByName(res.sheetName);
           if (sheet) {
             headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
           }
         }
-      } catch (e) { /* skip */ }
+      } catch (e) {}
 
-      // Identify by APP.Resources `Name` only. The old `menus[0].label` fallback surfaced the
-      // first menu entry's label, so sub-menu resources (Products, Warehouses) all displayed
-      // "Manage" instead of their own name.
       return {
         name: res.name,
         headers: headers,
+        additionalActions: Array.isArray(res.additionalActions)
+          ? res.additionalActions.map(function(action) {
+            return typeof action === 'string' ? action : ((action && action.action) || '');
+          }).filter(Boolean)
+          : [],
         listViews: res.listViews || [],
         listViewsMode: (res.listViewsMode || 'auto').toString()
       };

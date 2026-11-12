@@ -2,806 +2,2413 @@
 <html>
 <head>
   <base target="_top">
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <meta charset="utf-8">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <style>
-    body { 
-      font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; 
-      padding: 16px; 
-      background: #F1F1F3; 
-      color: #1e293b; 
-      font-size: 13px;
-      line-height: 1.5;
+    :root {
+      --navy: #000077;
+      --navy-soft: #000055;
+      --gold: #fbbf24;
+      --ink: #1e293b;
+      --muted: #64748b;
+      --line: #cbd5e1;
+      --canvas: #f1f1f3;
+      --white: #fff;
+      --blue: #000077;
+      --blue-soft: #e0e7ff;
+      --green: #065f46;
+      --red: #991b1b;
+      --shadow: 0 1px 3px rgba(15, 23, 42, .08);
     }
-    h2, h3, h4 { margin: 0; color: #000077; font-weight: 700; }
-    .g { margin: 12px 0; }
-    label { 
-      display: block; 
-      font-size: 11px; 
-      font-weight: 600; 
-      margin-bottom: 6px; 
-      color: #475569; 
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 20px;
+      background: var(--canvas);
+      color: var(--ink);
+      font: 13px/1.5 Inter, Arial, sans-serif;
     }
-    input, select, textarea { 
-      width: 100%; 
-      padding: 9px 12px; 
-      box-sizing: border-box; 
-      border: 1px solid #cbd5e1; 
-      border-radius: 8px; 
-      font-size: 13px; 
-      font-family: inherit;
-      background: #fff;
-      color: #0f172a;
-      transition: all 0.2s ease;
-      box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
-    }
-    input:focus, select:focus, textarea:focus {
-      outline: none;
-      border-color: #000077;
-      box-shadow: 0 0 0 3px rgba(0, 0, 119, 0.15);
-    }
-    .btn { 
-      padding: 9px 16px; 
-      border: 0; 
-      border-radius: 8px; 
-      font-weight: 600; 
-      cursor: pointer; 
-      font-size: 13px; 
-      transition: all 0.2s; 
-      display: inline-flex;
+    button, input, select, textarea { font: inherit; }
+    button { cursor: pointer; }
+    .shell { max-width: 1280px; margin: 0 auto; }
+    .hero {
+      display: flex;
       align-items: center;
-      gap: 6px;
-      box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+      gap: 12px;
+      margin-bottom: 14px;
+      padding: 0 0 12px;
+      border-bottom: 2px solid var(--line);
+      color: var(--ink);
     }
-    .btn:hover {
-      transform: translateY(-1px);
+    .hero-mark {
+      width: 42px;
+      height: 42px;
+      flex: 0 0 42px;
+      display: grid;
+      place-items: center;
+      border-radius: 10px;
+      color: var(--navy);
+      background: #e0e7ff;
+      border: 1px solid #c7d2fe;
+      font-size: 21px;
+      font-weight: 800;
     }
-    .btn:active {
-      transform: translateY(0);
+    .hero-copy { position: relative; z-index: 1; }
+    .eyebrow {
+      margin: 0 0 2px;
+      color: #3730a3;
+      font-size: 10px;
+      font-weight: 800;
+      letter-spacing: .13em;
+      text-transform: uppercase;
     }
-    .btn:disabled { 
-      opacity: 0.5; 
-      cursor: not-allowed; 
-      transform: none;
-      box-shadow: none;
-    }
-    .btn-primary { 
-      background: #000077; 
-      color: #fff; 
-      box-shadow: 0 4px 6px -1px rgba(0, 0, 119, 0.2);
-    }
-    .btn-primary:hover {
-      background: #000055;
-    }
-    .btn-secondary { 
-      background: #fff; 
-      color: #475569; 
-      border: 1px solid #cbd5e1; 
-    }
-    .btn-secondary:hover {
-      background: #f8fafc;
-    }
-    .btn-danger { 
-      background: #fee2e2; 
-      color: #991b1b; 
-      border: 1px solid #fca5a5;
-    }
-    .btn-danger:hover {
-      background: #fecaca;
-    }
-    .btn-sm { 
-      padding: 5px 10px; 
-      font-size: 11px; 
+    .hero h1 { margin: 0; color: var(--navy); font-size: 18px; line-height: 1.25; font-weight: 700; }
+    .hero p { margin: 4px 0 0; color: var(--muted); font-size: 12px; }
+    .hero-side { margin-left: auto; position: relative; z-index: 1; }
+    .top-tag {
+      padding: 6px 10px;
+      border: 1px solid #c7d2fe;
       border-radius: 6px;
+      color: #3730a3;
+      background: #e0e7ff;
+      font-size: 11px;
+      white-space: nowrap;
     }
-    .view-item { 
-      display: flex; 
-      justify-content: space-between; 
-      align-items: center; 
-      border-left: 4px solid #F58841; 
-      background: #fff; 
-      padding: 12px 16px; 
-      margin-bottom: 10px; 
-      border-radius: 8px; 
-      box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05);
-      border-top: 1px solid #e2e8f0;
-      border-right: 1px solid #e2e8f0;
-      border-bottom: 1px solid #e2e8f0;
+    .card {
+      margin-top: 14px;
+      padding: 16px;
+      background: var(--white);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      box-shadow: var(--shadow);
     }
-    .view-info b { 
-      display: block; 
-      font-size: 14px; 
-      color: #0f172a;
+    .context-head, .section-head, .editor-head, .preview-head, .order-head {
+      display: flex;
+      align-items: center;
+      gap: 12px;
     }
-    .view-info span { 
-      font-size: 11px; 
-      color: #64748b; 
-      margin-top: 2px;
-      display: inline-block;
+    .context-head { justify-content: space-between; margin-bottom: 12px; }
+    .section-title { margin: 0; color: var(--navy); font-size: 14px; font-weight: 700; }
+    .subline { margin: 2px 0 0; color: var(--muted); font-size: 11px; }
+    .context-grid { display: grid; grid-template-columns: 1.15fr 1.15fr .85fr; gap: 12px; }
+    .field { min-width: 0; }
+    .field-head { display: flex; align-items: center; gap: 6px; margin-bottom: 5px; }
+    .field-head label {
+      color: #475569;
+      font-size: 11px;
+      font-weight: 700;
     }
-    .modal { 
-      position: fixed; 
-      top: 0; 
-      left: 0; 
-      right: 0; 
-      bottom: 0; 
-      background: rgba(15, 23, 42, 0.6); 
-      backdrop-filter: blur(4px);
-      display: flex; 
-      align-items: center; 
-      justify-content: center; 
-      z-index: 100; 
-    }
-    .modal-content { 
-      background: #F1F1F3; 
-      width: 860px; 
-      max-height: 90vh; 
-      border-radius: 12px; 
-      padding: 24px; 
-      box-shadow: 0 20px 25px -5px rgba(0,0,0,0.15), 0 10px 10px -5px rgba(0,0,0,0.04); 
-      overflow-y: auto; 
+    .hint {
+      width: 15px;
+      height: 15px;
+      padding: 0;
+      display: inline-grid;
+      place-items: center;
       border: 1px solid #cbd5e1;
+      border-radius: 50%;
+      color: #64748b;
+      background: #f8fafc;
+      font-size: 10px;
+      font-weight: 700;
+      line-height: 1;
     }
-    .msg { 
-      padding: 12px 16px; 
-      border-radius: 8px; 
-      font-size: 12px; 
-      margin: 12px 0; 
-      display: none; 
-      font-weight: 500;
+    input[type="text"], input[type="number"], select, textarea {
+      width: 100%;
+      min-width: 0;
+      padding: 8px 12px;
+      border: 1px solid #cbd5e1;
+      border-radius: 8px;
+      outline: none;
+      color: var(--ink);
+      background: #fff;
+      transition: border .15s ease, box-shadow .15s ease;
     }
-    .ok { 
-      background: #ecfdf5; 
-      color: #065f46; 
-      border: 1px solid #a7f3d0; 
+    textarea { min-height: 76px; resize: vertical; }
+    input:focus, select:focus, textarea:focus {
+      border-color: var(--blue);
+      box-shadow: 0 0 0 3px rgba(0,0,119,.15);
     }
-    .er { 
-      background: #fef2f2; 
-      color: #991b1b; 
-      border: 1px solid #fca5a5; 
-    }
-    .hidden { display: none; }
-    .flex { display: flex; gap: 8px; align-items: center; }
-    .loader { 
-      text-align: center; 
-      padding: 40px; 
-      color: #64748b; 
-      font-size: 14px;
-      font-weight: 500;
-    }
-    .condition-row { 
-      display: grid; 
-      grid-template-columns: 1fr 1fr 1.5fr 40px; 
-      gap: 8px; 
-      align-items: end; 
-      margin-bottom: 8px; 
-      padding: 10px; 
-      background: #fff; 
-      border-radius: 8px; 
-      border: 1px solid #cbd5e1; 
-      box-shadow: 0 1px 2px 0 rgba(0,0,0,0.02);
-    }
-    .group-box { 
-      border: 2px solid #cbd5e1; 
-      border-radius: 10px; 
-      padding: 16px; 
-      margin: 12px 0; 
-      background: #f8fafc; 
-    }
-    .group-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
-    .logic-toggle { 
-      padding: 6px 14px; 
-      border: 1px solid #cbd5e1; 
-      border-radius: 6px; 
-      background: #fff; 
-      font-weight: 600; 
-      cursor: pointer; 
-      font-size: 12px; 
-      transition: all 0.2s;
-    }
-    .logic-toggle.active { 
-      background: #000077; 
-      color: #fff; 
-      border-color: #000077; 
-    }
-    .chip-preview { 
-      display: inline-flex; 
-      align-items: center; 
-      padding: 4px 12px; 
-      border-radius: 16px; 
-      font-size: 11px; 
-      font-weight: 600; 
-      margin-right: 6px; 
-      margin-bottom: 6px; 
+    input::placeholder, textarea::placeholder { color: #9aa5b6; }
+    .context-actions { display: flex; align-items: end; gap: 8px; }
+    .context-actions .field { flex: 1; }
+    .button {
+      min-height: 36px;
+      padding: 8px 13px;
+      display: inline-flex;
+      justify-content: center;
+      align-items: center;
+      gap: 7px;
       border: 1px solid transparent;
+      border-radius: 8px;
+      color: #fff;
+      background: var(--blue);
+      font-weight: 700;
+      white-space: nowrap;
+      box-shadow: 0 1px 2px rgba(0,0,0,.05);
+      transition: transform .12s ease, box-shadow .12s ease, background .12s ease;
     }
-    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-    .checks { display: flex; gap: 16px; flex-wrap: wrap; }
-    .checks label { display: flex; align-items: center; gap: 6px; font-size: 13px; cursor: pointer; color: #334155; font-weight: 500; }
-    .checks input[type="checkbox"] { width: auto; box-shadow: none; cursor: pointer; }
-
-    /* Operator friendly labels */
-    .op-label { font-size: 11px; color: #64748b; }
-
-    /* Custom scrollbars */
-    ::-webkit-scrollbar {
-      width: 6px;
-      height: 6px;
+    .button:hover { transform: translateY(-1px); box-shadow: 0 4px 6px rgba(0,0,119,.2); }
+    .button:not(.secondary):not(.gold):not(.danger):hover { background: var(--navy-soft); }
+    .button.secondary { color: #475569; background: #fff; border-color: #cbd5e1; }
+    .button.secondary:hover { background: #f8fafc; }
+    .button.gold { color: #92400e; background: #fef3c7; border-color: #fde68a; }
+    .button.danger { color: var(--red); background: #fff; border-color: #fca5a5; }
+    .button.small { min-height: 30px; padding: 5px 9px; font-size: 11px; }
+    .button:disabled { opacity: .55; cursor: not-allowed; transform: none; box-shadow: none; }
+    .mode-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 13px;
+      padding-top: 12px;
+      border-top: 1px solid #edf0f5;
     }
-    ::-webkit-scrollbar-track {
-      background: #f1f5f9;
+    .mode-label { color: var(--muted); font-size: 11px; font-weight: 700; }
+    .mode-select { width: 190px; padding: 7px 9px; }
+    .mode-note { color: var(--muted); font-size: 11px; }
+    .notice {
+      margin-top: 11px;
+      padding: 9px 11px;
+      border: 1px solid #d9e5ff;
+      border-radius: 9px;
+      color: #314b7b;
+      background: #f3f7ff;
+      font-size: 11px;
     }
-    ::-webkit-scrollbar-thumb {
-      background: #cbd5e1;
-      border-radius: 3px;
+    .notice.warning { border-color: #f0dfb5; color: #73551c; background: #fff9eb; }
+    .notice.error { border-color: #efc9cd; color: #8d3037; background: #fff4f4; }
+    .editor-card { padding: 0; overflow: hidden; }
+    .editor-head { padding: 14px 16px 12px; justify-content: space-between; border-bottom: 1px solid var(--line); }
+    .editor-title-wrap { min-width: 0; }
+    .editor-title { margin: 0; color: var(--navy); font-size: 15px; font-weight: 700; }
+    .editor-hint { margin: 2px 0 0; color: var(--muted); font-size: 11px; }
+    .editor-actions { display: flex; gap: 7px; }
+    .tabs {
+      display: flex;
+      gap: 4px;
+      padding: 8px 12px 0;
+      overflow-x: auto;
+      border-bottom: 1px solid var(--line);
+      background: #fbfcfe;
     }
-    ::-webkit-scrollbar-thumb:hover {
-      background: #94a3b8;
+    .tab {
+      position: relative;
+      flex: 0 0 auto;
+      padding: 9px 11px 10px;
+      border: 0;
+      border-radius: 8px 8px 0 0;
+      color: #66728a;
+      background: transparent;
+      font-size: 11px;
+      font-weight: 700;
+    }
+    .tab:hover { color: var(--navy); background: #f0f3f9; }
+    .tab.active { color: var(--blue); background: #fff; }
+    .tab.active:after {
+      content: "";
+      position: absolute;
+      height: 2px;
+      right: 9px;
+      bottom: -1px;
+      left: 9px;
+      border-radius: 2px;
+      background: var(--blue);
+    }
+    .tab-body { padding: 16px; min-height: 275px; }
+    .form-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 13px 15px; }
+    .field.wide { grid-column: 1 / -1; }
+    .field.span-two { grid-column: span 2; }
+    .check-field {
+      min-height: 41px;
+      padding: 9px 11px;
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      border: 1px solid var(--line);
+      border-radius: 9px;
+      background: #fbfcfe;
+    }
+    .check-field input { width: 16px; height: 16px; accent-color: var(--blue); }
+    .check-field label { color: #43516a; font-size: 12px; font-weight: 600; }
+    .mini-help { display: block; margin-top: 5px; color: var(--muted); font-size: 10px; }
+    .empty-panel {
+      min-height: 220px;
+      display: grid;
+      place-items: center;
+      padding: 28px;
+      text-align: center;
+      color: var(--muted);
+    }
+    .empty-mark {
+      width: 46px;
+      height: 46px;
+      margin: 0 auto 10px;
+      display: grid;
+      place-items: center;
+      border-radius: 10px;
+      color: var(--blue);
+      background: var(--blue-soft);
+      font-size: 22px;
+      font-weight: 700;
+    }
+    .empty-panel strong { display: block; margin-bottom: 4px; color: var(--navy); font-size: 13px; }
+    .empty-panel p { max-width: 420px; margin: 0; }
+    .builder-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 12px; }
+    .builder-title { margin: 0; color: var(--navy); font-size: 12px; font-weight: 700; }
+    .builder-note { margin: 3px 0 0; color: var(--muted); font-size: 10px; }
+    .node {
+      margin-top: 9px;
+      padding: 12px;
+      border: 1px solid #dfe5ef;
+      border-radius: 10px;
+      background: #fcfdff;
+    }
+    .node.group-node { border-left: 3px solid #90a9e5; }
+    .node.condition-node { border-left: 3px solid var(--gold); background: #fffefa; }
+    .node-top { display: flex; align-items: center; gap: 8px; }
+    .node-title { margin-right: auto; color: #46536a; font-size: 11px; font-weight: 700; }
+    .node-controls { display: flex; align-items: center; gap: 7px; }
+    .node-controls select { width: auto; min-width: 82px; padding: 5px 7px; font-size: 11px; }
+    .node-fields { display: grid; grid-template-columns: 1.15fr 1fr 1.2fr 1.35fr; gap: 8px; margin-top: 10px; }
+    .node-fields .field-head { margin-bottom: 3px; }
+    .node-fields .field-head label { font-size: 10px; }
+    .node-fields input, .node-fields select { padding: 7px 8px; font-size: 11px; }
+    .node-children { margin: 9px 0 0 15px; padding-left: 11px; border-left: 1px dashed #cbd5e4; }
+    .tree-add { display: flex; gap: 6px; margin-top: 9px; }
+    .aggregate-list { display: grid; gap: 8px; margin-top: 10px; }
+    .aggregate-row { display: grid; grid-template-columns: minmax(150px,1fr) repeat(4, auto) 30px; align-items: center; gap: 8px; }
+    .aggregate-row input[type="text"] { padding: 7px 8px; }
+    .aggregate-choice { display: flex; gap: 4px; align-items: center; color: #58657b; font-size: 10px; }
+    .aggregate-choice input { accent-color: var(--blue); }
+    .template-list { display: grid; gap: 6px; }
+    .template-row { display: grid; grid-template-columns: minmax(0,1fr) 132px 30px; gap: 6px; }
+    .template-row.single-template { grid-template-columns: minmax(0,1fr) 132px; }
+    .template-row input, .template-row select { padding: 7px 8px; font-size: 11px; }
+    .action-suggestion { margin-bottom: 6px; padding: 7px 8px; font-size: 11px; }
+    .template-buttons { display: flex; gap: 6px; margin-top: 7px; }
+    .rule-card {
+      margin-top: 9px;
+      padding: 12px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: #fcfdff;
+    }
+    .rule-grid { display: grid; grid-template-columns: 1.3fr .75fr .9fr .85fr 34px; gap: 9px; align-items: end; }
+    .rule-grid input, .rule-grid select { padding: 8px 9px; }
+    .rule-divider { height: 1px; margin: 11px 0; background: #edf0f5; }
+    .rule-extra { display: grid; grid-template-columns: 1fr 1fr; gap: 11px; }
+    .map-head { display: flex; align-items: center; gap: 8px; margin: 10px 0 6px; }
+    .map-head strong { color: #47546c; font-size: 11px; }
+    .map-row { display: grid; grid-template-columns: 1fr 1fr 30px; gap: 7px; margin-top: 7px; }
+    .style-box { margin-top: 12px; padding: 12px; border: 1px solid var(--line); border-radius: 10px; }
+    .style-box h4 { margin: 0 0 8px; color: var(--navy); font-size: 12px; }
+    .style-config { display: grid; grid-template-columns: 180px 1fr; gap: 10px; align-items: end; }
+    .list-order { display: grid; gap: 7px; margin-top: 12px; }
+    .order-row {
+      display: grid;
+      grid-template-columns: 26px minmax(0, 1fr) 72px auto;
+      align-items: center;
+      gap: 9px;
+      padding: 8px 9px;
+      border: 1px solid var(--line);
+      border-radius: 9px;
+      background: #fff;
+    }
+    .order-row.dragging { opacity: .45; }
+    .grip { color: #8591a5; cursor: grab; text-align: center; font-size: 16px; user-select: none; }
+    .order-name { min-width: 0; }
+    .order-name strong { display: block; overflow: hidden; color: var(--navy); text-overflow: ellipsis; white-space: nowrap; }
+    .order-name span { color: var(--muted); font-size: 10px; }
+    .position-input { padding: 6px 7px !important; text-align: center; }
+    .order-buttons { display: flex; gap: 5px; }
+    .order-buttons .button { min-width: 30px; padding: 4px 7px; }
+    .preview-card { padding: 0; overflow: hidden; }
+    .preview-head { justify-content: space-between; padding: 12px 15px; }
+    .preview-head-left { display: flex; align-items: center; gap: 8px; }
+    .preview-badge {
+      padding: 3px 7px;
+      border-radius: 999px;
+      color: #53617a;
+      background: #eef1f6;
+      font-size: 9px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .06em;
+    }
+    pre {
+      max-height: 225px;
+      margin: 0;
+      padding: 13px 15px;
+      overflow: auto;
+      border-top: 1px solid var(--line);
+      color: #26344e;
+      background: #f9fafc;
+      font: 10px/1.5 ui-monospace, SFMono-Regular, Consolas, monospace;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .footer {
+      position: sticky;
+      bottom: 0;
+      z-index: 5;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin-top: 14px;
+      padding: 10px 12px;
+      border: 1px solid #dce2ed;
+      border-radius: 12px;
+      background: rgba(255,255,255,.96);
+      box-shadow: 0 5px 20px rgba(17, 30, 68, .08);
+      backdrop-filter: blur(8px);
+    }
+    .save-status { color: var(--muted); font-size: 11px; }
+    .save-status.success { color: var(--green); }
+    .save-status.error { color: var(--red); }
+    .footer-actions { display: flex; align-items: center; gap: 7px; }
+    .advanced { margin-top: 15px; border-top: 1px solid #edf0f5; padding-top: 10px; }
+    .advanced summary { color: #65728a; cursor: pointer; font-size: 11px; font-weight: 700; }
+    .advanced p { margin: 5px 0 8px; color: var(--muted); font-size: 10px; }
+    .resource-empty { padding: 18px; color: var(--muted); text-align: center; }
+    .resource-empty strong { display: block; margin-bottom: 4px; color: var(--navy); }
+    .hidden { display: none !important; }
+    @media (max-width: 850px) {
+      body { padding: 10px; }
+      .context-grid { grid-template-columns: 1fr 1fr; }
+      .context-grid > .context-actions { grid-column: 1 / -1; }
+      .form-grid { grid-template-columns: 1fr 1fr; }
+      .node-fields { grid-template-columns: 1fr 1fr; }
+      .rule-grid { grid-template-columns: 1fr 1fr; }
+      .rule-grid .remove-rule { grid-column: 2; justify-self: end; }
+      .aggregate-row { grid-template-columns: 1fr 1fr 1fr; }
+    }
+    @media (max-width: 560px) {
+      body { padding: 7px; }
+      .hero { padding: 0 0 10px; }
+      .hero-side { display: none; }
+      .hero h1 { font-size: 18px; }
+      .context-grid, .form-grid, .rule-extra, .style-config { grid-template-columns: 1fr; }
+      .field.span-two { grid-column: auto; }
+      .context-actions { flex-wrap: wrap; }
+      .mode-row { align-items: flex-start; flex-direction: column; }
+      .mode-select { width: 100%; }
+      .node-fields { grid-template-columns: 1fr; }
+      .template-row { grid-template-columns: minmax(0,1fr) 110px 28px; }
+      .template-row.single-template { grid-template-columns: minmax(0,1fr) 110px; }
+      .order-row { grid-template-columns: 22px minmax(0,1fr) 58px; }
+      .order-buttons { grid-column: 2 / -1; justify-content: flex-end; }
+      .footer { align-items: stretch; flex-direction: column; }
+      .footer-actions { justify-content: flex-end; }
     }
   </style>
 </head>
 <body>
-
-<div id="mainLoader" class="loader">Loading List Views Manager...</div>
-
-<div id="app" class="hidden">
-  <div class="g">
-    <label>Select Resource</label>
-    <select id="resSelect" onchange="onResourceSelect()">
-      <option value="">-- Choose a Resource --</option>
-    </select>
-  </div>
-
-  <div id="managerUI" class="hidden">
-    <div id="msg" class="msg"></div>
-    <div style="display:flex; justify-content:space-between; align-items:center; margin: 20px 0 10px 0">
-      <h3 id="resTitle">Resource List Views</h3>
-      <button id="addViewBtn" class="btn btn-primary" onclick="openEditor()">+ Add New View</button>
-    </div>
-
-    <div id="viewsList"></div>
-  </div>
-</div>
-
-<!-- Editor Modal -->
-<div id="editor" class="modal hidden">
-  <div class="modal-content">
-    <h3 id="editorTitle">Edit View</h3>
-
-    <div class="row" style="margin-top:12px">
-      <div class="g">
-        <label>View Name</label>
-        <input type="text" id="viewName" placeholder="e.g. Pending/New">
+  <main class="shell">
+    <header class="hero">
+      <div class="hero-mark">≋</div>
+      <div class="hero-copy">
+        <p class="eyebrow">Resource workspace</p>
+        <h1>Manage List Views</h1>
+        <p>Build clear list settings for each resource, one section at a time.</p>
       </div>
-      <div class="g">
-        <label>Chip Color</label>
-        <input type="text" id="viewColor" list="colorSuggestions" placeholder="e.g. primary, red-10, #e11d48" oninput="updateColorPreview()">
-        <datalist id="colorSuggestions">
-          <!-- Brand colors (theme-aware) -->
-          <option value="primary">Brand - Primary</option>
-          <option value="secondary">Brand - Secondary</option>
-          <option value="accent">Brand - Accent</option>
-          <option value="positive">Brand - Positive (green)</option>
-          <option value="negative">Brand - Negative (red)</option>
-          <option value="warning">Brand - Warning (orange)</option>
-          <option value="info">Brand - Info (cyan)</option>
-          <option value="dark">Brand - Dark</option>
-          <!-- Quasar palette samples: any family-shade combo works -->
-          <option value="red-10">Palette - red-10</option>
-          <option value="pink-6">Palette - pink-6</option>
-          <option value="purple-7">Palette - purple-7</option>
-          <option value="indigo-6">Palette - indigo-6</option>
-          <option value="light-blue-4">Palette - light-blue-4</option>
-          <option value="teal-8">Palette - teal-8</option>
-          <option value="green-9">Palette - green-9</option>
-          <option value="amber-8">Palette - amber-8</option>
-          <option value="deep-orange-7">Palette - deep-orange-7</option>
-          <option value="blue-grey-6">Palette - blue-grey-6</option>
-          <option value="grey-7">Palette - grey-7</option>
-        </datalist>
-        <div style="display:flex; align-items:center; gap:6px; margin-top:6px">
-          <span id="colorPreview" style="width:14px; height:14px; border-radius:4px; border:1px solid #cbd5e1; background:transparent; flex:none"></span>
-          <span style="font-size:11px; color:#64748b">Brand name, Quasar palette (<code>red-10</code>, <code>light-blue-4</code>) or Hex (<code>#e11d48</code>). Blank = default.</span>
+      <div class="hero-side"><span class="top-tag">Sheet settings · Live JSON preview</span></div>
+    </header>
+    <section class="card" id="resourceCard">
+      <div class="context-head">
+        <div>
+          <h2 class="section-title">Choose what to edit</h2>
+          <p class="subline">Pick a resource, then open a view or make a new one.</p>
+        </div>
+        <span class="preview-badge" id="resourceCount">Loading</span>
+      </div>
+      <div class="context-grid">
+        <div class="field">
+          <div class="field-head">
+            <label for="resourceSelect">Resource</label>
+            <button type="button" class="hint" title="Choose the APP.Resources row to edit.">i</button>
+          </div>
+          <select id="resourceSelect"><option value="">Loading resources…</option></select>
+        </div>
+        <div class="field">
+          <div class="field-head">
+            <label for="viewSelect">List view</label>
+            <button type="button" class="hint" title="Choose an existing view to edit.">i</button>
+          </div>
+          <select id="viewSelect" disabled><option value="">Choose a resource first</option></select>
+        </div>
+        <div class="context-actions">
+          <button type="button" class="button secondary" data-action="edit-view" disabled id="editViewButton">Edit view</button>
+          <button type="button" class="button gold" data-action="new-view" disabled id="newViewButton">＋ New view</button>
         </div>
       </div>
-    </div>
-
-    <div class="checks" style="margin: 8px 0 16px 0">
-      <label><input type="checkbox" id="viewDefault"> Set as Default View</label>
-    </div>
-
-    <div style="border-top: 1px solid #f1f5f9; padding-top: 15px">
-      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 10px">
-        <h4>Filter Conditions</h4>
+      <div class="mode-row">
+        <span class="mode-label">Cell mode</span>
+        <select class="mode-select" id="modeSelect" disabled>
+          <option value="auto">Auto · blank cell</option>
+          <option value="custom">Custom · save views</option>
+          <option value="off">Off · save []</option>
+        </select>
+        <span class="mode-note" id="modeNote">Choose a resource to see its current mode.</span>
       </div>
-      <div id="filterRoot"></div>
-    </div>
-
-    <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:20px; border-top:1px solid #f1f5f9; padding-top:15px">
-      <button class="btn btn-secondary" onclick="closeEditor()">Cancel</button>
-      <button class="btn btn-primary" id="saveBtn" onclick="saveView()">Save View</button>
-    </div>
-  </div>
-</div>
-
-<script>
-  var DATA = { resources: [] };
-  var ACTIVE_RES = null;
-  var EDIT_IDX = -1;
-
-  var OPERATORS = [
-    { code: 'eq', label: 'Is equal to' },
-    { code: 'neq', label: 'Is not equal to' },
-    { code: 'in', label: 'Is one of' },
-    { code: 'not_in', label: 'Is not one of' },
-    { code: 'gt', label: 'Greater than' },
-    { code: 'gte', label: 'Greater than or equal' },
-    { code: 'lt', label: 'Less than' },
-    { code: 'lte', label: 'Less than or equal' },
-    { code: 'contains', label: 'Contains' }
-  ];
-
-  // Mirrors TOKENS in FRONTENT/src/utils/tokenEvaluator.js and the copy in
-  // GAS/actionManager.html — keep all three in sync.
-  // `param` tokens take a value after a colon, e.g. $daysIn:30.
-  var TOKENS = [
-    { code: '$now', label: 'Now (timestamp)', group: 'Date & Time' },
-    { code: '$dateTime', label: 'Now (YYYY-MM-DD HH:mm:ss)', group: 'Date & Time' },
-    { code: '$date', label: 'Date (YYYY-MM-DD)', group: 'Date & Time', param: '0' },
-    { code: '$day', label: 'Day of year (1-366)', group: 'Date & Time' },
-    { code: '$month', label: 'Month (01-12)', group: 'Date & Time', param: '0' },
-    { code: '$year', label: 'Current year (YYYY)', group: 'Date & Time' },
-    { code: '$week', label: 'Current ISO week (1-53)', group: 'Date & Time' },
-    { code: '$startOfDay', label: 'Start of day (timestamp)', group: 'Date & Time', param: '0' },
-    { code: '$endOfDay', label: 'End of day (timestamp)', group: 'Date & Time', param: '0' },
-    { code: '$startOfMonth', label: 'Start of month (timestamp)', group: 'Date & Time', param: '0' },
-    { code: '$endOfMonth', label: 'End of month (timestamp)', group: 'Date & Time', param: '0' },
-
-    { code: '$daysAgo', label: 'N days ago', group: 'Relative Days', param: '7' },
-    { code: '$daysIn', label: 'In N days', group: 'Relative Days', param: '30' },
-
-    { code: '$hoursAgo', label: 'N hours ago', group: 'Relative Hours', param: '24' },
-    { code: '$hoursIn', label: 'In N hours', group: 'Relative Hours', param: '24' },
-
-    { code: '$userCode', label: 'My user code', group: 'Current User' },
-    { code: '$userEmail', label: 'My email', group: 'Current User' },
-    { code: '$userName', label: 'My name', group: 'Current User' },
-    { code: '$userDesignation', label: 'My designation', group: 'Current User' },
-    { code: '$userRole', label: 'My primary role', group: 'Current User' },
-    { code: '$userRoles', label: 'My roles (list)', group: 'Current User', list: true },
-    { code: '$userRegion', label: 'My region code', group: 'Current User' },
-    { code: '$userRegions', label: 'My accessible regions (list)', group: 'Current User', list: true }
-  ];
-
-  /**
-   * Builds the token <select> markup, grouped by TOKENS[].group.
-   * `selectedVal` is the current condition value, which for a param token looks like "$daysIn:30".
-   */
-  function buildTokenOptions(selectedVal) {
-    var currentCode = (selectedVal || '').split(':')[0];
-    var groups = [];
-    var byGroup = {};
-
-    TOKENS.forEach(function(t) {
-      if (!byGroup[t.group]) { byGroup[t.group] = []; groups.push(t.group); }
-      byGroup[t.group].push(t);
-    });
-
-    return '<option value="">Token...</option>' + groups.map(function(g) {
-      return '<optgroup label="' + esc(g) + '">' + byGroup[g].map(function(t) {
-        var sel = (currentCode === t.code) ? ' selected' : '';
-        return '<option value="' + t.code + '"' + sel + '>' + esc(t.label) + '</option>';
-      }).join('') + '</optgroup>';
-    }).join('');
-  }
-
-  window.onload = function() {
-    google.script.run
-      .withSuccessHandler(function(res) {
-        DATA = res;
-        initUI();
-      })
-      .withFailureHandler(function(err) { showMsg(err.message, true); })
-      .app_getListViewsManagerData();
-  };
-
-  function initUI() {
-    var sel = document.getElementById('resSelect');
-    DATA.resources.forEach(function(r) {
-      var opt = document.createElement('option');
-      opt.value = r.name;
-      opt.textContent = r.name;
-      sel.appendChild(opt);
-    });
-    document.getElementById('mainLoader').classList.add('hidden');
-    document.getElementById('app').classList.remove('hidden');
-  }
-
-  function onResourceSelect() {
-    var name = document.getElementById('resSelect').value;
-    if (!name) { document.getElementById('managerUI').classList.add('hidden'); return; }
-    ACTIVE_RES = DATA.resources.find(function(r) { return r.name === name; });
-    ACTIVE_RES.listViewsMode = normalizeMode(ACTIVE_RES.listViewsMode);
-    if (ACTIVE_RES.listViews && ACTIVE_RES.listViews.length > 0) {
-      ACTIVE_RES.listViewsMode = 'custom';
-    }
-    document.getElementById('resTitle').textContent = 'List Views for ' + ACTIVE_RES.name;
-    renderViews();
-    document.getElementById('managerUI').classList.remove('hidden');
-  }
-
-  function normalizeMode(mode) {
-    var m = (mode || '').toString().trim().toLowerCase();
-    if (m === 'off' || m === 'custom') return m;
-    return 'auto';
-  }
-
-  function renderViews() {
-    var list = document.getElementById('viewsList');
-    var mode = normalizeMode(ACTIVE_RES && ACTIVE_RES.listViewsMode);
-    var hasStatus = (ACTIVE_RES && ACTIVE_RES.headers || []).some(function(h) {
-      return (h || '').toString().trim().toLowerCase() === 'status';
-    });
-
-    list.innerHTML = '';
-    if (!ACTIVE_RES.listViews || ACTIVE_RES.listViews.length === 0) {
-      var autoChecked = mode !== 'off';
-      var hint = hasStatus
-        ? 'Fallback will show default Active/Inactive based on Status.'
-        : 'Fallback will show no chips because this resource has no Status column.';
-
-      list.innerHTML =
-        '<div style="padding:14px; border:1px solid #e2e8f0; border-radius:8px; background:#f8fafc">' +
-          '<div style="font-weight:600; margin-bottom:8px">No custom list views configured.</div>' +
-          '<div style="font-size:12px; color:#64748b; margin-bottom:12px">' + esc(hint) + '</div>' +
-          '<div style="display:flex; gap:8px; align-items:center; max-width:640px">' +
-            '<select id="emptyModeSelect" style="flex:1">' +
-              '<option value="auto" ' + (autoChecked ? 'selected' : '') + '>Fallback to default Active/Inactive</option>' +
-              '<option value="off" ' + (!autoChecked ? 'selected' : '') + '>Switch off ListViews for ' + esc(ACTIVE_RES.name) + '</option>' +
-            '</select>' +
-            '<button class="btn btn-secondary" onclick="applyEmptyMode()">Update</button>' +
-          '</div>' +
-        '</div>';
-      return;
-    }
-
-    ACTIVE_RES.listViews.forEach(function(view, i) {
-      var div = document.createElement('div');
-      div.className = 'view-item';
-      var condCount = countConditions(view.filter);
-      var defaultTag = view.default ? ' <span style="color:#2563eb; font-weight:600">[DEFAULT]</span>' : '';
-      div.innerHTML =
-        '<div class="view-info">' +
-          '<b>' + esc(view.name) + defaultTag + '</b>' +
-          '<span>Color: ' + (view.color || 'default') + ' | Conditions: ' + condCount + '</span>' +
-        '</div>' +
-        '<div class="flex">' +
-          '<button class="btn btn-secondary btn-sm" onclick="openEditor(' + i + ')">Edit</button>' +
-          '<button class="btn btn-danger btn-sm" onclick="removeView(' + i + ')">Delete</button>' +
-        '</div>';
-      list.appendChild(div);
-    });
-  }
-
-  function countConditions(filter) {
-    if (!filter) return 0;
-    if (filter.type === 'condition') return 1;
-    if (filter.type === 'group' && Array.isArray(filter.items)) {
-      var total = 0;
-      filter.items.forEach(function(item) { total += countConditions(item); });
-      return total;
-    }
-    return 0;
-  }
-
-  function openEditor(idx) {
-    EDIT_IDX = typeof idx === 'number' ? idx : -1;
-    document.getElementById('editor').classList.remove('hidden');
-
-    if (EDIT_IDX > -1) {
-      var v = ACTIVE_RES.listViews[EDIT_IDX];
-      document.getElementById('editorTitle').textContent = 'Edit View';
-      document.getElementById('viewName').value = v.name || '';
-      document.getElementById('viewColor').value = v.color || '';
-      document.getElementById('viewDefault').checked = !!v.default;
-      renderFilterGroup(document.getElementById('filterRoot'), v.filter || { type: 'group', logic: 'AND', items: [] });
-    } else {
-      document.getElementById('editorTitle').textContent = 'New View';
-      document.getElementById('viewName').value = '';
-      document.getElementById('viewColor').value = '';
-      document.getElementById('viewDefault').checked = false;
-      renderFilterGroup(document.getElementById('filterRoot'), { type: 'group', logic: 'AND', items: [] });
-    }
-
-    updateColorPreview();
-  }
-
-  // Brand keywords resolve against the AQL theme; anything else is handed to the browser's
-  // own CSS color parser. Quasar palette names (red-10, light-blue-4) are not resolvable
-  // here — the swatch stays neutral, but the frontend resolves them at runtime.
-  var BRAND_HEX = {
-    primary:   '#0F2B4A',
-    secondary: '#D4A843',
-    accent:    '#E8C060',
-    positive:  '#1A7A4A',
-    negative:  '#C0362C',
-    info:      '#1A6FAD',
-    warning:   '#C97B1A',
-    dark:      '#071824'
-  };
-
-  function updateColorPreview() {
-    var swatch = document.getElementById('colorPreview');
-    if (!swatch) return;
-    var value = (document.getElementById('viewColor').value || '').trim();
-
-    swatch.style.background = 'transparent';
-    if (!value) return;
-
-    if (BRAND_HEX[value]) {
-      swatch.style.background = BRAND_HEX[value];
-      return;
-    }
-
-    // Let the browser validate hex/rgb/named CSS colors; invalid values leave it untouched.
-    swatch.style.background = value;
-    if (!swatch.style.background) swatch.style.background = 'transparent';
-  }
-
-  function closeEditor() {
-    document.getElementById('editor').classList.add('hidden');
-  }
-
-  function renderFilterGroup(container, group) {
-    container.innerHTML = '';
-    var box = document.createElement('div');
-    box.className = 'group-box';
-
-    var header = document.createElement('div');
-    header.className = 'group-header';
-    header.innerHTML =
-      '<div class="flex">' +
-        '<span style="font-size:12px; font-weight:600; color:#475569">Match</span>' +
-        '<button class="logic-toggle ' + (group.logic === 'AND' ? 'active' : '') + '" onclick="toggleLogic(this, \'AND\')">ALL (AND)</button>' +
-        '<button class="logic-toggle ' + (group.logic === 'OR' ? 'active' : '') + '" onclick="toggleLogic(this, \'OR\')">ANY (OR)</button>' +
-      '</div>' +
-      '<div class="flex">' +
-        '<button class="btn btn-secondary btn-sm" onclick="addCondition(this)">+ Condition</button>' +
-        '<button class="btn btn-secondary btn-sm" onclick="addNestedGroup(this)">+ Group</button>' +
-      '</div>';
-    box.appendChild(header);
-
-    var itemsContainer = document.createElement('div');
-    itemsContainer.className = 'group-items';
-    box.appendChild(itemsContainer);
-    container.appendChild(box);
-
-    (group.items || []).forEach(function(item) {
-      if (item.type === 'group') {
-        var nestedDiv = document.createElement('div');
-        itemsContainer.appendChild(nestedDiv);
-        renderFilterGroup(nestedDiv, item);
-      } else if (item.type === 'condition') {
-        appendConditionRow(itemsContainer, item);
-      }
-    });
-  }
-
-  function appendConditionRow(container, condition) {
-    var row = document.createElement('div');
-    row.className = 'condition-row';
-
-    var colOpts = (ACTIVE_RES.headers || []).map(function(h) {
-      return '<option value="' + esc(h) + '"' + (condition.column === h ? ' selected' : '') + '>' + esc(h) + '</option>';
-    }).join('');
-
-    var opOpts = OPERATORS.map(function(op) {
-      return '<option value="' + op.code + '"' + (condition.operator === op.code ? ' selected' : '') + '>' + op.label + '</option>';
-    }).join('');
-
-    var valueStr = '';
-    if (Array.isArray(condition.value)) {
-      valueStr = condition.value.join(', ');
-    } else {
-      valueStr = (condition.value || '').toString();
-    }
-
-    row.innerHTML =
-      '<div>' +
-        '<label>Column</label>' +
-        '<select class="c-col"><option value="">-- Select --</option>' + colOpts + '</select>' +
-      '</div>' +
-      '<div>' +
-        '<label>Operator</label>' +
-        '<select class="c-op" onchange="onOperatorChange(this)">' + opOpts + '</select>' +
-      '</div>' +
-      '<div>' +
-        '<label>Value <span class="op-label">(comma-separate for lists)</span></label>' +
-        '<div class="flex">' +
-          '<input type="text" class="c-val" value="' + esc(valueStr) + '" style="flex:1">' +
-          '<select class="c-token" style="width:auto; min-width: 80px" onchange="onTokenSelect(this)">' +
-            buildTokenOptions(valueStr) +
-          '</select>' +
-        '</div>' +
-      '</div>' +
-      '<div><button class="btn btn-danger btn-sm" style="margin-top:20px" onclick="removeItem(this)">X</button></div>';
-
-    container.appendChild(row);
-  }
-
-  function toggleLogic(btn, logic) {
-    var parent = btn.parentElement;
-    parent.querySelectorAll('.logic-toggle').forEach(function(b) { b.classList.remove('active'); });
-    btn.classList.add('active');
-  }
-
-  function addCondition(btn) {
-    var groupBox = btn.closest('.group-box');
-    var itemsContainer = groupBox.querySelector('.group-items');
-    appendConditionRow(itemsContainer, { column: '', operator: 'eq', value: '' });
-  }
-
-  function addNestedGroup(btn) {
-    var groupBox = btn.closest('.group-box');
-    var itemsContainer = groupBox.querySelector('.group-items');
-    var div = document.createElement('div');
-    itemsContainer.appendChild(div);
-    renderFilterGroup(div, { type: 'group', logic: 'AND', items: [] });
-  }
-
-  function removeItem(btn) {
-    var el = btn.closest('.condition-row') || btn.closest('.group-box').parentElement;
-    el.remove();
-  }
-
-  function onOperatorChange(sel) {
-    // No special handling needed — value input handles both single and list
-  }
-
-  function onTokenSelect(sel) {
-    var row = sel.closest('.condition-row');
-    var valInput = row.querySelector('.c-val');
-    if (!sel.value) return;
-
-    var token = null;
-    TOKENS.forEach(function(t) { if (t.code === sel.value) token = t; });
-
-    // Parameterised tokens are written as "$daysIn:30" — seed the default so the admin
-    // only has to edit the number.
-    valInput.value = (token && token.param) ? (sel.value + ':' + token.param) : sel.value;
-  }
-
-  function readFilterFromDOM(container) {
-    var groupBox = container.querySelector('.group-box');
-    if (!groupBox) return { type: 'group', logic: 'AND', items: [] };
-
-    var logicBtns = groupBox.querySelector('.group-header').querySelectorAll('.logic-toggle');
-    var logic = 'AND';
-    logicBtns.forEach(function(b) { if (b.classList.contains('active') && b.textContent.indexOf('OR') !== -1) logic = 'OR'; });
-
-    var items = [];
-    var itemsContainer = groupBox.querySelector('.group-items');
-
-    Array.from(itemsContainer.children).forEach(function(child) {
-      if (child.classList.contains('condition-row')) {
-        var col = child.querySelector('.c-col').value.trim();
-        var op = child.querySelector('.c-op').value;
-        var rawVal = child.querySelector('.c-val').value.trim();
-
-        if (!col) return; // skip empty conditions
-
-        var value = rawVal;
-        if (op === 'in' || op === 'not_in') {
-          value = rawVal.split(',').map(function(v) { return v.trim(); }).filter(Boolean);
-        }
-
-        items.push({ type: 'condition', column: col, operator: op, value: value });
-      } else {
-        // Nested group
-        var nested = readFilterFromDOM(child);
-        if (nested && nested.items && nested.items.length > 0) {
-          items.push(nested);
-        }
-      }
-    });
-
-    return { type: 'group', logic: logic, items: items };
-  }
-
-  function saveView() {
-    var name = document.getElementById('viewName').value.trim();
-    if (!name) { alert('Please enter a view name'); return; }
-
-    var filter = readFilterFromDOM(document.getElementById('filterRoot'));
-
-    var view = {
-      name: name,
-      filter: filter
+      <div id="resourceNotice"></div>
+    </section>
+    <section id="editorHost"></section>
+    <section id="orderHost"></section>
+    <section id="previewHost"></section>
+    <footer class="footer">
+      <div id="saveStatus" class="save-status">Choose a resource to begin.</div>
+      <div class="footer-actions">
+        <button type="button" class="button secondary" data-action="close-dialog">Close</button>
+        <button type="button" class="button" data-action="save" id="saveButton" disabled>Save to sheet</button>
+      </div>
+    </footer>
+  </main>
+  <datalist id="tokenOptions">
+    <option value="$now"><option value="$date"><option value="$dateTime">
+    <option value="$day"><option value="$month"><option value="$year"><option value="$week">
+    <option value="$startOfDay"><option value="$endOfDay"><option value="$startOfMonth"><option value="$endOfMonth">
+    <option value="$daysAgo:7"><option value="$daysIn:7"><option value="$hoursAgo:24"><option value="$hoursIn:24">
+    <option value="$userCode"><option value="$userEmail"><option value="$userName"><option value="$userDesignation">
+    <option value="$userRole"><option value="$userRoles"><option value="$userRegion"><option value="$userRegions">
+  </datalist>
+  <script>
+    const TAB_LIST = [
+      { id: 'basic', label: 'Basic' },
+      { id: 'filter', label: 'Filter' },
+      { id: 'group', label: 'Group' },
+      { id: 'order', label: 'Order' },
+      { id: 'search', label: 'Search & page' },
+      { id: 'target', label: 'Target & actions' },
+      { id: 'item', label: 'Item view' }
+    ];
+    const KNOWN_KEYS = [
+      'name', 'label', 'icon', 'color', 'default', 'count', 'permission', 'filter',
+      'group', 'order', 'search', 'limit', 'paginate', 'perPage', 'threshold',
+      'item', 'actions', 'target'
+    ];
+    const VALUE_OPERATORS = [
+      'eq', 'neq', 'ne', 'in', 'not_in', 'nin', 'notin', 'gt', 'gte', 'lt', 'lte',
+      'contains', 'empty', 'notEmpty', 'not_empty', 'notempty'
+    ];
+    const GROUP_AGGREGATES = ['sum', 'min', 'max', 'avg'];
+    const ORDER_AGGREGATES = ['min', 'max', 'sum', 'count'];
+    const state = {
+      resources: [],
+      resourceName: '',
+      views: [],
+      mode: 'auto',
+      selectedId: '',
+      editorOpen: false,
+      draft: null,
+      isNew: false,
+      newViewReturnMode: '',
+      activeTab: 'basic',
+      searchMode: 'compact',
+      valueKinds: {},
+      styleModes: {},
+      extraText: '{}',
+      dragIndex: -1,
+      nextId: 1,
+      saving: false
+    };
+    const $ = function (selector) { return document.querySelector(selector); };
+    const esc = function (value) {
+      return String(value == null ? '' : value)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    };
+    const clone = function (value) { return JSON.parse(JSON.stringify(value)); };
+    const isObject = function (value) {
+      return value !== null && typeof value === 'object' && !Array.isArray(value);
+    };
+    const selected = function (value, current) { return String(value) === String(current) ? ' selected' : ''; };
+    const checked = function (value) { return value ? ' checked' : ''; };
+    const currentResource = function () {
+      return state.resources.find(function (item) { return item.name === state.resourceName; }) || null;
+    };
+    const selectedView = function () {
+      return state.views.find(function (item) { return String(item.__managerId) === String(state.selectedId); }) || null;
+    };
+    const addIds = function (views) {
+      return (Array.isArray(views) ? views : []).map(function (view) {
+        const result = typeof view === 'string' ? { name: view } : (isObject(view) ? clone(view) : {});
+        result.__managerId = state.nextId++;
+        return result;
+      });
+    };
+    const fieldControl = function (label, hint, control, extraClass) {
+      return '<div class="field ' + (extraClass || '') + '"><div class="field-head"><label>' +
+        esc(label) + '</label><button type="button" class="hint" title="' + esc(hint) + '">i</button></div>' +
+        control + '</div>';
+    };
+    const textControl = function (path, value, placeholder, kind) {
+      return '<input type="text" data-bind-path="' + esc(path) + '" data-kind="' + (kind || 'text') +
+        '" value="' + esc(value) + '" placeholder="' + esc(placeholder || '') + '">';
+    };
+    const fieldList = function () {
+      return '<datalist id="fieldOptions">' + (currentResource() && Array.isArray(currentResource().headers)
+        ? currentResource().headers.map(function (header) {
+          return '<option value="' + esc(header) + '"></option>';
+        }).join('') : '') + '</datalist>';
+    };
+    const columnControl = function (path, value, placeholder) {
+      return '<input type="text" list="fieldOptions" data-bind-path="' + esc(path) +
+        '" data-kind="text" value="' + esc(value) + '" placeholder="' + esc(placeholder || 'Field or relation path') + '">';
+    };
+    const options = function (items, value, labels) {
+      return items.map(function (item, index) {
+        return '<option value="' + esc(item) + '"' + selected(item, value) + '>' +
+          esc(labels ? labels[index] : item) + '</option>';
+      }).join('');
+    };
+    const selectControl = function (path, items, value, labels) {
+      return '<select data-bind-path="' + esc(path) + '" data-kind="text">' + options(items, value, labels) + '</select>';
     };
 
-    var color = document.getElementById('viewColor').value.trim();
-    if (color) view.color = color;
-
-    if (document.getElementById('viewDefault').checked) {
-      // Clear default from all other views
-      (ACTIVE_RES.listViews || []).forEach(function(v, i) {
-        if (EDIT_IDX === -1 || i !== EDIT_IDX) delete v.default;
-      });
-      view.default = true;
+    function init(data) {
+      state.resources = Array.isArray(data && data.resources) ? data.resources : [];
+      $('#resourceCount').textContent = state.resources.length + ' resources';
+      const select = $('#resourceSelect');
+      select.innerHTML = '<option value="">Choose a resource…</option>' + state.resources.map(function (item) {
+        return '<option value="' + esc(item.name) + '">' + esc(item.name) + '</option>';
+      }).join('');
+      render();
+      setStatus('Choose a resource to begin.');
     }
 
-    if (EDIT_IDX > -1) {
-      ACTIVE_RES.listViews[EDIT_IDX] = view;
-    } else {
-      if (!ACTIVE_RES.listViews) ACTIVE_RES.listViews = [];
-      ACTIVE_RES.listViews.push(view);
-    }
-    ACTIVE_RES.listViewsMode = 'custom';
-
-    syncToServer({ editorFlow: true });
-  }
-
-  function removeView(idx) {
-    if (!confirm('Permanently delete this list view?')) return;
-    ACTIVE_RES.listViews.splice(idx, 1);
-    if (ACTIVE_RES.listViews.length === 0) {
-      ACTIVE_RES.listViewsMode = 'off';
-    }
-    syncToServer();
-  }
-
-  function applyEmptyMode() {
-    var selector = document.getElementById('emptyModeSelect');
-    ACTIVE_RES.listViewsMode = selector ? normalizeMode(selector.value) : 'auto';
-    syncToServer();
-  }
-
-  function syncToServer(opts) {
-    var options = opts || {};
-    var editorFlow = options.editorFlow === true;
-    var btn = editorFlow ? document.getElementById('saveBtn') : null;
-    if (btn) {
-      btn.disabled = true;
-      btn.textContent = 'Saving...';
+    function render() {
+      renderResourceContext();
+      renderEditor();
+      renderOrder();
+      renderPreview();
+      $('#saveButton').disabled = !currentResource() || state.saving;
     }
 
-    google.script.run
-      .withSuccessHandler(function() {
-        if (btn) {
-          btn.disabled = false;
-          btn.textContent = 'Save View';
-          closeEditor();
+    function renderResourceContext() {
+      const resource = currentResource();
+      const modeSelect = $('#modeSelect');
+      const viewSelect = $('#viewSelect');
+      $('#resourceSelect').value = state.resourceName;
+      if (!resource) {
+        viewSelect.innerHTML = '<option value="">Choose a resource first</option>';
+        viewSelect.disabled = true;
+        modeSelect.disabled = true;
+        $('#editViewButton').disabled = true;
+        $('#newViewButton').disabled = true;
+        $('#modeNote').textContent = 'Choose a resource to see its current mode.';
+        $('#resourceNotice').innerHTML = '';
+        return;
+      }
+      state.mode = state.mode || resource.listViewsMode || 'auto';
+      modeSelect.disabled = state.editorOpen && state.isNew;
+      modeSelect.value = state.mode;
+      viewSelect.disabled = state.views.length === 0;
+      viewSelect.innerHTML = state.views.length
+        ? '<option value="">Choose an existing view…</option>' + state.views.map(function (view) {
+          const name = String(view.name || '(unnamed view)');
+          const label = view.label && view.label !== name ? ' · ' + view.label : '';
+          return '<option value="' + esc(view.__managerId) + '"' + selected(view.__managerId, state.selectedId) +
+            '>' + esc(name + label) + '</option>';
+        }).join('')
+        : '<option value="">No saved views</option>';
+      const hasSelection = !!selectedView();
+      $('#editViewButton').disabled = !hasSelection || state.editorOpen;
+      $('#newViewButton').disabled = state.editorOpen;
+      $('#modeNote').textContent = state.editorOpen && state.isNew
+        ? 'New views need Custom mode. Cancel restores the previous mode.'
+        : (state.mode === 'custom'
+          ? state.views.length + ' custom view' + (state.views.length === 1 ? '' : 's') + ' in this resource.'
+          : (state.mode === 'off' ? 'The cell stores [] and sends no configured views.' : 'A blank cell sends no configured views.'));
+      if (state.mode !== 'custom' && state.views.length) {
+        $('#resourceNotice').innerHTML = '<div class="notice warning">Changing this cell to ' +
+          esc(state.mode) + ' will clear its custom views when you save. Choose Custom to keep and edit them.</div>';
+      } else if (state.mode === 'auto') {
+        $('#resourceNotice').innerHTML = '<div class="notice">Create a custom view to use Custom mode. ' +
+          'A blank cell or [] gives the app no configured views.</div>';
+      } else {
+        $('#resourceNotice').innerHTML = '';
+      }
+    }
+
+    function renderEditor() {
+      const host = $('#editorHost');
+      if (!currentResource()) {
+        host.innerHTML = '<section class="card"><div class="empty-panel"><div><div class="empty-mark">1</div>' +
+          '<strong>Start with a resource</strong>' +
+          '<p>The view editor and sheet preview will appear after you choose a resource.</p>' +
+          '</div></div></section>';
+        return;
+      }
+      if (!state.editorOpen || !state.draft) {
+        const view = selectedView();
+        if (!view) {
+          host.innerHTML = '<section class="card"><div class="empty-panel"><div><div class="empty-mark">＋</div>' +
+            '<strong>No view is open</strong><p>Choose an existing view to edit, or make a new view for this resource.</p></div></div></section>';
+          return;
         }
-        renderViews();
-        showMsg('Saved successfully.');
-      })
-      .withFailureHandler(function(err) {
-        if (btn) {
-          btn.disabled = false;
-          btn.textContent = 'Save View';
-        }
-        showMsg(err.message, true);
-      })
-      .app_saveResourceListViews(
-        ACTIVE_RES.name,
-        JSON.stringify(ACTIVE_RES.listViews || []),
-        normalizeMode(ACTIVE_RES.listViewsMode)
+        const label = view.label && view.label !== view.name ? ' · ' + view.label : '';
+        host.innerHTML = '<section class="card"><div class="empty-panel"><div><div class="empty-mark">✓</div>' +
+          '<strong>' + esc(view.name || 'Unnamed view') + '</strong><p>' + esc(label || 'This view is ready to edit.') +
+          ' Use the Edit view button above to open its sections.</p></div></div></section>';
+        return;
+      }
+      host.innerHTML = renderEditorCard();
+    }
+
+    function renderEditorCard() {
+      const draft = state.draft;
+      const currentTab = TAB_LIST.find(function (tab) { return tab.id === state.activeTab; }) || TAB_LIST[0];
+      const panel = {
+        basic: renderBasicPanel,
+        filter: renderFilterPanel,
+        group: renderGroupPanel,
+        order: renderOrderPanel,
+        search: renderSearchPanel,
+        target: renderTargetPanel,
+        item: renderItemPanel
+      }[currentTab.id]();
+      return '<section class="card editor-card">' +
+        '<div class="editor-head"><div class="editor-title-wrap"><h2 class="editor-title">' +
+        (state.isNew ? 'Create a list view' : 'Edit ' + esc(draft.name || 'list view')) +
+        '</h2><p class="editor-hint">Set the values you need. Defaults stay out of the saved cell.</p></div>' +
+        '<div class="editor-actions"><button type="button" class="button secondary small" data-action="cancel-editor">Cancel</button>' +
+        '<button type="button" class="button secondary small" data-action="apply-editor">Done</button></div></div>' +
+        '<nav class="tabs" aria-label="List view settings">' + TAB_LIST.map(function (tab) {
+          return '<button type="button" class="tab' + (tab.id === state.activeTab ? ' active' : '') +
+            '" data-action="tab" data-tab="' + tab.id + '">' + tab.label + '</button>';
+        }).join('') + '</nav><div class="tab-body">' + fieldList() + panel + '</div></section>';
+    }
+
+    function renderBasicPanel() {
+      const view = state.draft;
+      const count = view.count === true ? 'true' : (view.count === false ? 'false' : 'auto');
+      const permissionValue = isObject(view.permission) || Array.isArray(view.permission)
+        ? JSON.stringify(view.permission, null, 2) : (view.permission || '');
+      const countControl = '<select data-bind-path="count" data-kind="count">' +
+        options(['auto', 'true', 'false'], count, ['Auto · compact default', 'Always show', 'Hide']) + '</select>';
+      const permissionControl = '<textarea data-bind-path="permission" data-kind="permission" ' +
+        'placeholder="read&#10;or: [&quot;read&quot;,&quot;update&quot;]">' + esc(permissionValue) + '</textarea>';
+      const defaultControl = '<div class="field"><div class="field-head"><label>Default view</label>' +
+        '<button type="button" class="hint" title="Used when no view was remembered.">i</button></div>' +
+        '<div class="check-field"><input type="checkbox" data-bind-path="default" data-kind="default-flag"' +
+        checked(view.default === true) + '><label>Use as the default view</label></div>' +
+        '<span class="mini-help">This clears the flag on other views.</span></div>';
+      return '<div class="form-grid">' +
+        fieldControl(
+          'Name',
+          'Code name used by view rules and overrides. Keep it unique.',
+          textControl('name', view.name, 'Example: Planned')
+        ) +
+        fieldControl(
+          'Tab label',
+          'Text shown on the tab. Leave blank to use Name.',
+          textControl('label', view.label, 'Uses Name when blank')
+        ) +
+        fieldControl(
+          'Tab icon',
+          'Optional icon name shown beside the tab label.',
+          textControl('icon', view.icon, 'Leave blank for no icon')
+        ) +
+        fieldControl(
+          'Tab color',
+          'Quasar color name or CSS color. The default is primary.',
+          textControl('color', view.color === 'primary' ? '' : view.color, 'primary (default)')
+        ) +
+        fieldControl(
+          'Count badge',
+          'true always shows count; false hides it; auto shows it while searching. Auto is omitted.',
+          countControl
+        ) +
+        fieldControl(
+          'View permission',
+          'Action, action list, or resource-to-actions JSON. Every check must pass.',
+          permissionControl,
+          'span-two'
+        ) +
+        defaultControl +
+        '</div><details class="advanced"><summary>Custom developer keys</summary>' +
+        '<p>Extra root keys stay in JSON. The shared app ignores keys it does not read, unless ' +
+        'a custom view override uses them.</p>' +
+        '<textarea id="extraKeys" spellcheck="false">' + esc(state.extraText) + '</textarea></details>';
+    }
+
+    function renderFilterPanel() {
+      const node = state.draft.filter;
+      const caution = '<div class="notice warning">For shared lists, keep row rules in ' +
+        'resource Data/useList.js. This Filter key only changes this view.</div>';
+      if (!node) {
+        const empty = '<div class="empty-panel"><div><div class="empty-mark">⌕</div>' +
+          '<strong>No view filter</strong><p>Leave this empty for shared row rules. ' +
+          'Add a group only when this view needs its own filter.</p>' +
+          '<div style="margin-top:12px"><button type="button" class="button secondary" ' +
+          'data-action="add-filter">＋ Add filter group</button></div></div></div>';
+        return caution + empty;
+      }
+      const header = '<div class="builder-head"><div><h3 class="builder-title">Filter rules</h3>' +
+        '<p class="builder-note">Groups use AND or OR. Values can be text, numbers, JSON, or tokens.</p>' +
+        '</div><div class="editor-actions">' +
+        '<button type="button" class="button secondary small" data-action="clear-filter">Clear</button>' +
+        '<button type="button" class="button secondary small" data-action="add-filter">＋ Add condition</button>' +
+        '</div></div>';
+      return caution + header + nodeMarkup(node, 'filter', false);
+    }
+
+    function renderGroupPanel() {
+      const rules = Array.isArray(state.draft.group) ? state.draft.group : [];
+      const header = '<div class="builder-head"><div><h3 class="builder-title">Group rows</h3>' +
+        '<p class="builder-note">Each rule keeps the first row for each value. Tokens and aggregates add facts.</p>' +
+        '</div><button type="button" class="button secondary small" data-action="add-group">' +
+        '＋ Add group rule</button></div>';
+      return header +
+        (!rules.length ? '<div class="empty-panel"><div><div class="empty-mark">⌗</div><strong>No grouping</strong>' +
+          '<p>Leave this empty to show every row from the selected source.</p></div></div>' : '') +
+        rules.map(function (rule, index) {
+          rule = isObject(rule) ? rule : {};
+          const column = fieldControl(
+            'Column',
+            'Field name or safe dot path used to make buckets.',
+            columnControl('group.' + index + '.column', rule.column)
+          );
+          const tokenInput = '<input type="text" list="tokenOptions" data-bind-path="group.' + index +
+            '.token" data-kind="optional" value="' + esc(rule.token) + '" placeholder="No token">';
+          const token = fieldControl(
+            'Token',
+            'Optional built-in or custom token converts the column value.',
+            tokenInput
+          );
+          const remove = '<div class="field remove-rule"><button type="button" class="button danger small" ' +
+            'data-action="remove-group" data-index="' + index + '">Remove</button></div>';
+          const aggregateHead = '<div class="builder-head"><div><h4 class="builder-title">Aggregates ' +
+            '<button type="button" class="hint" title="Use sum, min, max, or avg to add facts by group.">i</button></h4>' +
+            '<p class="builder-note">Optional totals by source field.</p></div>' +
+            '<button type="button" class="button secondary small" data-action="add-aggregate" ' +
+            'data-index="' + index + '">＋ Add field</button></div>';
+          return '<div class="rule-card"><div class="rule-grid">' +
+            column + token + remove + '</div><div class="rule-divider"></div>' +
+            aggregateHead + aggregateRows(rule.aggregate, index) + '</div>';
+        }).join('');
+    }
+
+    function aggregateRows(aggregate, index) {
+      const entries = isObject(aggregate) ? Object.keys(aggregate) : [];
+      return '<div class="aggregate-list">' + entries.map(function (field) {
+        const values = Array.isArray(aggregate[field]) ? aggregate[field] : [aggregate[field]];
+        return '<div class="aggregate-row"><input type="text" list="fieldOptions" data-aggregate-field data-index="' + index +
+          '" data-old-field="' + esc(field) + '" value="' + esc(field) + '" placeholder="Field path">' +
+          GROUP_AGGREGATES.map(function (name) {
+            return '<label class="aggregate-choice"><input type="checkbox" data-aggregate-choice data-index="' + index +
+              '" data-field="' + esc(field) + '" value="' + name + '"' + checked(values.indexOf(name) !== -1) + '>' + name + '</label>';
+          }).join('') + '<button type="button" class="button danger small" data-action="remove-aggregate" data-index="' + index +
+          '" data-field="' + esc(field) + '">×</button></div>';
+      }).join('') + '</div>';
+    }
+
+    function renderOrderPanel() {
+      const rules = Array.isArray(state.draft.order) ? state.draft.order : [];
+      const header = '<div class="builder-head"><div><h3 class="builder-title">Sort order</h3>' +
+        '<p class="builder-note">Rules run from top to bottom. A blank list keeps source order.</p>' +
+        '</div><button type="button" class="button secondary small" data-action="add-order">' +
+        '＋ Add sort rule</button></div>';
+      return header +
+        (!rules.length ? '<div class="empty-panel"><div><div class="empty-mark">↕</div><strong>Source order</strong>' +
+          '<p>No sort is set for this view.</p></div></div>' : '') +
+        rules.map(function (rule, index) {
+          rule = isObject(rule) ? rule : {};
+          const onMode = rule.on === false || rule.on === null ? 'never' : (rule.on && rule.on !== true ? 'conditions' : 'all');
+          const aggregate = rule.aggregate || '';
+          const column = fieldControl(
+            'Column',
+            'Field or safe dot path. Use an aggregate for child arrays.',
+            columnControl('order.' + index + '.column', rule.column)
+          );
+          const direction = fieldControl(
+            'Direction',
+            'Choose which end of the values comes first.',
+            selectControl('order.' + index + '.order', ['asc', 'desc'], rule.order || 'asc', ['Ascending', 'Descending'])
+          );
+          const valueType = fieldControl(
+            'Value type',
+            'Auto reads dates, numbers, then text. Pick a type for mixed values.',
+            selectControl('order.' + index + '.type', ['auto', 'text', 'number', 'date', 'unix', 'epoch'], rule.type || 'auto')
+          );
+          const aggregateField = fieldControl(
+            'Child aggregate',
+            'Optional operation for a child array path.',
+            selectControl(
+              'order.' + index + '.aggregate',
+              ['', 'min', 'max', 'sum', 'count'],
+              aggregate,
+              ['None', 'Minimum', 'Maximum', 'Sum', 'Count']
+            )
+          );
+          const remove = '<div class="field remove-rule"><button type="button" class="button danger small" ' +
+            'data-action="remove-order" data-index="' + index + '">Remove</button></div>';
+          const conditionMode = '<div class="field"><div class="field-head"><label>Apply this rule</label>' +
+            '<button type="button" class="hint" title="Use the Filter condition builder here.">i</button></div>' +
+            '<select data-action="order-on-mode" data-index="' + index + '">' +
+            options(['all', 'never', 'conditions'], onMode, ['All rows', 'Never', 'Only when conditions match']) +
+            '</select></div>';
+          const conditionTree = onMode === 'conditions'
+            ? '<div class="conditional-tree">' + nodeMarkup(rule.on, 'order.' + index + '.on', false) + '</div>'
+            : '';
+          return '<div class="rule-card"><div class="rule-grid">' +
+            column + direction + valueType + aggregateField + remove +
+            '</div><div class="rule-divider"></div><div class="rule-extra">' +
+            conditionMode + '</div>' + conditionTree + '</div>';
+        }).join('');
+    }
+
+    function renderSearchPanel() {
+      const draft = state.draft;
+      const raw = draft.search;
+      const value = Array.isArray(raw)
+        ? raw.join('\n')
+        : (typeof raw === 'string' ? raw : (raw === true ? 'true' : ''));
+      const mode = Array.isArray(raw) ? 'array' : state.searchMode;
+      const paginate = draft.paginate !== false;
+      const note = '<div class="notice">Leave Search fields empty to use the app defaults. ' +
+        'Compact comma text keeps the cell small.</div>';
+      const fields = '<textarea id="searchFields" data-search-fields ' +
+        'placeholder="Leave empty to use inferred fields">' + esc(value) + '</textarea>';
+      const modeSelect = '<select id="searchMode">' +
+        options(['compact', 'array'], mode, ['Compact comma text', 'JSON array']) + '</select>';
+      const limit = '<input type="number" min="0" step="1" data-bind-path="limit" ' +
+        'data-kind="optional-number" value="' + esc(draft.limit) + '" placeholder="No cap">';
+      const pagination = '<div class="field"><div class="field-head"><label>Pagination</label>' +
+        '<button type="button" class="hint" title="Checked omits paginate. Unchecked saves paginate:false.">i</button></div>' +
+        '<div class="check-field"><input type="checkbox" data-bind-path="paginate" ' +
+        'data-kind="paginate-flag"' + checked(paginate) + '><label>Paginate the list</label></div></div>';
+      const perPageValue = draft.perPage == null || Number(draft.perPage) === 25 ? '' : draft.perPage;
+      const thresholdValue = draft.threshold == null || Number(draft.threshold) === 35 ? '' : draft.threshold;
+      const perPage = '<input type="number" min="1" step="1" data-bind-path="perPage" ' +
+        'data-kind="optional-number" value="' + esc(perPageValue) + '" placeholder="25">';
+      const threshold = '<input type="number" min="0" step="1" data-bind-path="threshold" ' +
+        'data-kind="optional-number" value="' + esc(thresholdValue) + '" placeholder="35">';
+      return note +
+        '<div class="form-grid" style="margin-top:13px">' +
+        fieldControl('Search fields', 'Comma form: Code,Progress,$outlet.Name. Use JSON arrays for commas in names.', fields, 'wide') +
+        fieldControl('Saved form', 'A JSON array can hold a field name that contains a comma.', modeSelect) +
+        fieldControl('Row limit', 'Maximum rows after search. Blank means no cap; zero means no rows.', limit) +
+        pagination +
+        fieldControl('Rows per page', 'Default is 25. Blank leaves it out of the cell.', perPage) +
+        fieldControl('Pagination threshold', 'Default is 35. Blank leaves it out; zero paginates any non-empty list.', threshold) +
+        '</div>';
+    }
+
+    function renderTargetPanel() {
+      const target = state.draft.target;
+      const mode = targetMode(target);
+      const stringTarget = typeof target === 'string' ? target : '';
+      const objectTarget = isObject(target) ? target : {};
+      const query = isObject(objectTarget.query) ? objectTarget.query : {};
+      const queryRows = Object.keys(query).map(function (key) {
+        const field = typeof query[key] === 'string' ? query[key] : '';
+        return '<div class="map-row" data-target-query-row>' +
+          '<input type="text" data-target-query data-query-name value="' + esc(key) +
+          '" placeholder="URL query name" aria-label="URL query name">' +
+          '<input type="text" list="fieldOptions" data-target-query data-query-field value="' + esc(field) +
+          '" placeholder="Row field or path" aria-label="Row field or path">' +
+          '<button type="button" class="button secondary small" data-action="remove-target-query" data-query-key="' +
+          esc(key) + '" aria-label="Remove query value">×</button></div>';
+      }).join('');
+      const actions = isObject(state.draft.actions) ? state.draft.actions : {};
+      const actionNames = Array.isArray(currentResource().additionalActions) ? currentResource().additionalActions : [];
+      const actionOptions = actionNames.map(function (action) {
+        return '<option value="' + esc(action) + '">' + esc(action) + '</option>';
+      }).join('') || '<option value="" disabled>No actions configured</option>';
+      const targetSelect = '<select id="targetMode">' +
+        options(['default', 'false', 'action', 'object'], mode,
+          ['Default · View', 'No row click', 'Named action', 'Object target']) + '</select>';
+      const actionField = mode === 'action' ? fieldControl(
+        'Action name',
+        'Action on this resource, such as edit, add, or approve.',
+        textControl('target', stringTarget, 'view, edit, add…')
+      ) : '';
+      const destination = mode === 'object'
+        ? '<div class="field wide"><div class="rule-extra">' +
+          fieldControl(
+            'Destination resource',
+            'Leave blank for this resource, or name another resource.',
+            textControl('target.resource', objectTarget.resource, currentResource().name)
+          ) +
+          fieldControl(
+            'Action',
+            'Blank uses the index action.',
+            textControl('target.action', objectTarget.action, 'index')
+          ) +
+          fieldControl(
+            'Row code field',
+            'Record actions need a code from the clicked row.',
+            textControl('target.code', objectTarget.code, 'Code')
+          ) +
+          '</div></div>'
+        : '';
+      const queryBuilder = mode === 'object'
+        ? '<div class="field wide"><div class="builder-head"><div><h3 class="builder-title">Query values</h3>' +
+          '<p class="builder-note">Each URL name reads a field from the clicked row.</p></div>' +
+          '<button type="button" class="button secondary small" data-action="add-target-query">＋ Add pair</button></div>' +
+          queryRows + '</div>'
+        : '';
+      const onlyInput = '<select class="action-suggestion" data-action="action-suggestion" ' +
+        'data-target-path="actions.only" aria-label="Add an existing action">' +
+        '<option value="">Add an existing action…</option>' + actionOptions + '</select>' +
+        '<textarea data-bind-path="actions.only" data-kind="string-list" ' +
+        'placeholder="Postpone&#10;Cancel">' +
+        esc(Array.isArray(actions.only) ? actions.only.join('\n') : '') + '</textarea>';
+      const excludeInput = '<select class="action-suggestion" data-action="action-suggestion" ' +
+        'data-target-path="actions.exclude" aria-label="Add an existing action">' +
+        '<option value="">Add an existing action…</option>' + actionOptions + '</select>' +
+        '<textarea data-bind-path="actions.exclude" data-kind="string-list" ' +
+        'placeholder="Delete">' + esc(Array.isArray(actions.exclude) ? actions.exclude.join('\n') : '') +
+        '</textarea>';
+      const density = '<div class="field"><div class="field-head"><label>Button density</label>' +
+        '<button type="button" class="hint" title="Compact buttons are the default.">i</button></div>' +
+        '<div class="check-field"><input type="checkbox" data-bind-path="actions.dense" ' +
+        'data-kind="actions-dense"' + checked(actions.dense !== false) +
+        '><label>Use compact buttons</label></div></div>';
+      const sizes = ['', 'xs', 'sm', 'md', 'lg', 'xl'];
+      const sizeLabels = ['md (default)', 'xs', 'sm', 'md', 'lg', 'xl'];
+      const savedSize = actions.size || '';
+      if (savedSize && sizes.indexOf(savedSize) < 0) {
+        sizes.push(savedSize);
+        sizeLabels.push('Current custom: ' + savedSize);
+      }
+      const sizeInput = '<select data-bind-path="actions.size" data-kind="optional">' +
+        options(sizes, savedSize === 'md' ? '' : savedSize, sizeLabels) + '</select>';
+      return '<div class="form-grid">' +
+        fieldControl(
+          'Row click target',
+          'Missing or true opens View. False stops the click. A string names an action.',
+          targetSelect,
+          'span-two'
+        ) +
+        actionField + destination + queryBuilder +
+        '</div><div class="rule-divider"></div><div class="builder-head"><div><h3 class="builder-title">Inline actions</h3>' +
+        '<p class="builder-note">These settings change actions already defined for this resource.</p>' +
+        '</div></div><div class="form-grid">' +
+        fieldControl(
+          'Show only these actions',
+          'Use exact action names, one per line. This list sets button order; blank keeps AdditionalActions config order. Only eligible actions show.',
+          onlyInput
+        ) +
+        fieldControl('Hide these actions', 'Select an action to add it. Use exact names, one per line.', excludeInput) +
+        density +
+        fieldControl(
+          'Button size',
+          'Choose a standard Quasar size. md is the default.',
+          sizeInput
+        ) +
+        '</div>';
+    }
+
+    function renderItemPanel() {
+      const item = isObject(state.draft.item) ? state.draft.item : {};
+      const layout = layoutField(item, 'layout', 'label,caption', 'Main layout uses label and caption slots.');
+      const metaLayout = layoutField(item, 'metaLayout', 'chip,caption,label', 'Meta layout uses chip, label, and caption slots.');
+      const labels = templateField(
+        'labels',
+        'Labels',
+        'Add one template for each label slot. Join fields in one input, such as {Code} - {Name}.',
+        item.labels,
+        '{Code} - {Name}',
+        true
       );
-  }
+      const captions = templateField(
+        'captions',
+        'Captions',
+        'Add one template for each caption slot. Join fields in one input, such as {Code} - {Name}.',
+        item.captions,
+        '{Code} - {Name}',
+        true
+      );
+      const metaChip = templateField(
+        'metaChip',
+        'Meta chips',
+        'One input fills the next chip slot. Add fields from the menu or type {Code} - {Name}.',
+        item.metaChip,
+        '{Code} - {Name}'
+      );
+      const metaLabel = templateField(
+        'metaLabel',
+        'Meta labels',
+        'One input fills the next meta label slot. Add fields from the menu or type {Code} - {Name}.',
+        item.metaLabel,
+        '{Code} - {Name}'
+      );
+      const metaCaption = templateField(
+        'metaCaption',
+        'Meta captions',
+        'One input fills the next meta caption slot. Add fields from the menu or type {Code} - {Name}.',
+        item.metaCaption,
+        '{Code} - {Name}'
+      );
+      return '<div class="notice">These templates fill AppList slots. Use {Field} syntax, or pick a field from the menu to add it at the cursor.</div>' +
+        '<div class="form-grid" style="margin-top:13px">' +
+        layout + metaLayout +
+        labels + captions + metaChip + metaLabel + metaCaption + '</div>' +
+        styleEditor('icon', 'Row icon', 'Icon name shown on the row.') +
+        styleEditor('color', 'Row color', 'Quasar color name such as primary, positive, or red-6.') +
+        styleEditor('highlight', 'Highlight color', 'A non-empty value turns highlighting on.');
+    }
 
-  function showMsg(m, isErr) {
-    var el = document.getElementById('msg');
-    el.style.display = 'block';
-    el.className = 'msg ' + (isErr ? 'er' : 'ok');
-    el.textContent = m;
-    if (!isErr) setTimeout(function() { el.style.display = 'none'; }, 3000);
-  }
+    function layoutField(item, key, placeholder, hint) {
+      const value = item[key];
+      const noSlots = value === '' || (Array.isArray(value) && value.length === 0);
+      const label = key === 'layout' ? 'Hide main text slots' : 'Hide all meta slots';
+      const emptyHint = key === 'layout'
+        ? 'Saves layout: []. AppList hides main labels and captions; meta content is unchanged.'
+        : 'Saves metaLayout: []. AppList hides chips, meta labels, and meta captions; main text is unchanged.';
+      const control = '<input type="text" data-bind-path="item.' + key + '" data-kind="csv" ' +
+        'value="' + esc(listText(value)) + '" placeholder="' + esc(placeholder) + '">' +
+        '<div class="check-field"><input type="checkbox" data-action="empty-layout" data-key="' + key +
+        '"' + checked(noSlots) + '><label>' + label + '</label><button type="button" class="hint" title="' +
+        esc(emptyHint) + '">i</button></div>' +
+        '<span class="mini-help">' + esc(emptyHint) + '</span>';
+      return '<div class="field"><div class="field-head"><label>' +
+        esc(key === 'layout' ? 'Main layout' : 'Meta layout') +
+        '</label><button type="button" class="hint" title="' + esc(hint) + '">i</button></div>' +
+        control + '</div>';
+    }
 
-  function esc(v) {
-    return (v == null ? '' : String(v)).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
-  }
-</script>
+    function templateField(key, label, hint, value, placeholder, allowMultiple) {
+      let rows = Array.isArray(value)
+        ? value.slice()
+        : (typeof value === 'string' ? (value === '' ? [''] : value.split(',')) : []);
+      const visibleRows = allowMultiple ? rows : rows.slice(0, 1);
+      const displayRows = visibleRows.length ? visibleRows : [''];
+      const headers = currentResource() && Array.isArray(currentResource().headers) ? currentResource().headers : [];
+      const safeHeaders = headers.filter(function (header) { return /^[\w$]+(?:\.[\w$]+)*$/.test(String(header)); });
+      const fieldOptions = '<option value="">Insert field…</option>' + safeHeaders.map(function (header) {
+        return '<option value="' + esc(header) + '">' + esc(header) + '</option>';
+      }).join('') + (safeHeaders.length ? '' : '<option value="" disabled>No sheet fields found</option>');
+      const rowHtml = displayRows.map(function (item, index) {
+        const text = item == null || item === false ? '' : item;
+        const input = '<input type="text" data-template-value data-key="' + key + '" data-index="' + index +
+          '" value="' + esc(text) + '" placeholder="' + esc(placeholder) + '">';
+        const suggestion = '<select class="template-suggestion" data-action="template-suggestion" ' +
+          'data-key="' + key + '" data-index="' + index + '" aria-label="Insert a field into ' + esc(label) + '">' +
+          fieldOptions + '</select>';
+        const canRemove = allowMultiple;
+        const remove = canRemove
+          ? '<button type="button" class="button danger small" data-action="remove-template" ' +
+            'data-key="' + key + '" data-index="' + index + '" aria-label="Remove template">×</button>'
+          : '';
+        return '<div class="template-row' + (canRemove ? '' : ' single-template') + '">' + input + suggestion + remove + '</div>';
+      }).join('');
+      const buttons = allowMultiple
+        ? '<div class="template-buttons"><button type="button" class="button secondary small" ' +
+          'data-action="add-template" data-key="' + key + '">＋ Add another</button></div>'
+        : '';
+      return fieldControl(label, hint, '<div class="template-list">' + rowHtml + '</div>' + buttons);
+    }
 
+    function styleEditor(key, title, hint) {
+      const item = isObject(state.draft.item) ? state.draft.item : {};
+      const value = item[key];
+      const isMap = isObject(value);
+      const mode = state.styleModes[key] || (isMap ? 'map' : 'static');
+      const staticValue = typeof value === 'string' ? value : '';
+      const mapValue = isMap ? value : {};
+      const modeControl = '<select data-action="style-mode" data-key="' + key + '">' +
+        options(['static', 'map'], mode, ['One value', 'Map by field']) + '</select>';
+      let editor = '';
+      if (mode === 'static') {
+        const input = '<input type="text" data-bind-path="item.' + key +
+          '" data-kind="optional" value="' + esc(staticValue) + '" placeholder="Leave blank for default">';
+        editor = '<div class="style-config">' + fieldControl(title, hint, input) + '</div>';
+      } else {
+        const source = fieldControl(
+          'Source field',
+          'Field path whose value selects a map result.',
+          columnControl('item.' + key + '.column', mapValue.column)
+        );
+        const defaultResult = fieldControl(
+          'Default result',
+          hint,
+          textControl('item.' + key + '.default', mapValue.default, 'No match gives blank')
+        );
+        editor = '<div class="style-config">' + source +
+          defaultResult + '</div><div class="map-head"><strong>Value map</strong>' +
+          '<button type="button" class="hint" title="Match a row value to a text result.">i</button>' +
+          '<button type="button" class="button secondary small" data-action="add-map" data-key="' + key + '">' +
+          '＋ Add value</button></div>' +
+          mapRows(key, mapValue.map);
+      }
+      return '<div class="style-box"><h4>' + esc(title) +
+        '</h4><div class="style-config"><div class="field">' +
+        '<div class="field-head"><label>Value type</label>' +
+        '<button type="button" class="hint" title="Use one fixed result or a row field map.">i</button></div>' +
+        modeControl + '</div><div>' + editor + '</div></div></div>';
+    }
+
+    function mapRows(key, map) {
+      const entries = isObject(map) ? Object.keys(map) : [];
+      const resultLabels = { icon: 'Icon name', color: 'Color name', highlight: 'Highlight color' };
+      const resultLabel = resultLabels[key] || 'Map result';
+      const resultHint = key === 'icon'
+        ? 'Icon name used when the row value matches.'
+        : (key === 'color' ? 'Quasar color name used when the row value matches.' :
+          'Highlight color used when the row value matches.');
+      return '<div class="map-list">' + entries.map(function (entry) {
+        const source = '<div><div class="field-head"><label>Row value</label>' +
+          '<button type="button" class="hint" title="Value read from the source field.">i</button></div>' +
+          '<input type="text" data-map-key data-style="' + key + '" data-old-key="' + esc(entry) +
+          '" value="' + esc(entry) + '" placeholder="Value"></div>';
+        const result = '<div><div class="field-head"><label>' + resultLabel + '</label>' +
+          '<button type="button" class="hint" title="' + resultHint + '">i</button></div>' +
+          '<input type="text" data-map-value data-style="' + key + '" data-map-key-value="' +
+          esc(entry) + '" value="' + esc(map[entry]) + '" placeholder="' + esc(resultLabel) + '"></div>';
+        const remove = '<button type="button" class="button danger small" data-action="remove-map" ' +
+          'data-key="' + key + '" data-map-key="' + esc(entry) + '">×</button>';
+        return '<div class="map-row">' + source + result + remove + '</div>';
+      }).join('') + '</div>';
+    }
+
+    function nodeMarkup(node, path, canRemove) {
+      if (!isObject(node)) node = { type: 'group', logic: 'AND', items: [] };
+      if (node.type === 'condition') {
+        const kind = state.valueKinds[path] || guessValueKind(node.value);
+        const operator = node.operator || node.op || 'eq';
+        const remove = canRemove
+          ? '<button type="button" class="button danger small" data-action="remove-node" ' +
+            'data-path="' + esc(path) + '">Remove</button>'
+          : '';
+        const column = fieldControl(
+          'Column',
+          'Field name or safe dot path.',
+          columnControl(path + '.column', node.column)
+        );
+        const operatorSelect = '<select data-node-path="' + esc(path) +
+          '" data-node-key="operator">' + options(VALUE_OPERATORS, operator) + '</select>';
+        const operatorField = fieldControl('Operator', 'How the row value is compared.', operatorSelect);
+        const kindSelect = '<select data-action="value-kind" data-path="' + esc(path) + '">' +
+          options(['text', 'number', 'boolean', 'json'], kind,
+            ['Text / token', 'Number', 'Boolean', 'JSON list']) + '</select>';
+        const kindField = fieldControl('Value type', 'Text can also be a $ token.', kindSelect);
+        const noValue = ['empty', 'notempty', 'not_empty'].indexOf(operator.toLowerCase()) >= 0;
+        const value = noValue
+          ? '<div class="field"><div class="field-head"><label>Value</label>' +
+            '<button type="button" class="hint" title="This operator does not use a value.">i</button>' +
+            '</div><div class="notice">No value needed.</div></div>'
+          : fieldControl(
+            'Value',
+            'Use a token for user or date values. JSON values must be valid JSON.',
+            valueControl(node.value, kind, path)
+          );
+        return '<div class="node condition-node"><div class="node-top">' +
+          '<span class="node-title">Condition</span>' + remove +
+          '</div><div class="node-fields">' + column + operatorField + kindField + value + '</div></div>';
+      }
+      const items = Array.isArray(node.items) ? node.items : [];
+      const logic = '<select data-node-path="' + esc(path) + '" data-node-key="logic">' +
+        options(['AND', 'OR'], node.logic || 'AND') + '</select>';
+      const removeGroup = canRemove
+        ? '<button type="button" class="button danger small" data-action="remove-node" ' +
+          'data-path="' + esc(path) + '">Remove</button>'
+        : '';
+      const addCondition = '<button type="button" class="button secondary small" data-action="add-node" ' +
+        'data-path="' + esc(path) + '" data-node-type="condition">＋ Condition</button>';
+      const addGroup = '<button type="button" class="button secondary small" data-action="add-node" ' +
+        'data-path="' + esc(path) + '" data-node-type="group">＋ Group</button>';
+      return '<div class="node group-node"><div class="node-top">' +
+        '<span class="node-title">Condition group</span><div class="node-controls">' +
+        '<button type="button" class="hint" title="AND needs every rule. OR needs one rule.">i</button>' +
+        logic + removeGroup + '</div></div><div class="node-children">' + items.map(function (item, index) {
+          return nodeMarkup(item, path + '.items.' + index, true);
+        }).join('') + '<div class="tree-add">' + addCondition + addGroup + '</div></div></div>';
+    }
+
+    function valueControl(value, kind, path) {
+      const str = value == null ? '' : (typeof value === 'object' ? JSON.stringify(value) : String(value));
+      if (kind === 'boolean') {
+        return '<select data-node-path="' + esc(path) + '" data-node-key="value" data-value-kind="boolean">' +
+          options(['true', 'false'], str === 'false' ? 'false' : 'true', ['true', 'false']) + '</select>';
+      }
+      if (kind === 'json') {
+        return '<textarea data-node-path="' + esc(path) + '" data-node-key="value" ' +
+          'data-value-kind="json" placeholder="[&quot;A&quot;,&quot;B&quot;]">' +
+          esc(str) + '</textarea>';
+      }
+      return '<input type="' + (kind === 'number' ? 'number' : 'text') + '" list="' + (kind === 'text' ? 'tokenOptions' : '') +
+        '" data-node-path="' + esc(path) + '" data-node-key="value" data-value-kind="' + kind + '" value="' + esc(str) +
+        '" placeholder="' + (kind === 'text' ? '$date or a text value' : '0') + '">';
+    }
+
+    function guessValueKind(value) {
+      if (typeof value === 'number') return 'number';
+      if (typeof value === 'boolean') return 'boolean';
+      if (Array.isArray(value) || isObject(value)) return 'json';
+      return 'text';
+    }
+
+    function renderOrder() {
+      const host = $('#orderHost');
+      const resource = currentResource();
+      if (!resource) { host.innerHTML = ''; return; }
+      const views = workingViewsRaw();
+      if (!views.length) { host.innerHTML = ''; return; }
+      host.innerHTML = '<section class="card"><div class="order-head"><div><h2 class="section-title">List order</h2>' +
+        '<p class="subline">Drag a row or set its number. This order becomes the tab order in the app.</p></div>' +
+        '<span class="preview-badge">' + views.length + ' view' + (views.length === 1 ? '' : 's') + '</span></div>' +
+        '<div class="list-order">' + views.map(function (view, index) {
+          const name = view.name || '(unnamed view)';
+          const label = view.label && view.label !== name ? view.label : 'View name';
+          return '<div class="order-row" draggable="true" data-order-row data-index="' + index + '">' +
+            '<span class="grip" title="Drag to reorder">⠿</span><div class="order-name"><strong>' + esc(name) +
+            '</strong><span>' + esc(label) + '</span></div><input class="position-input" type="number" min="1" max="' +
+            views.length + '" step="1" value="' + (index + 1) + '" data-action="order-position" data-index="' + index +
+            '" title="View position">' +
+            '<div class="order-buttons"><button type="button" class="button secondary small" data-action="move-up" data-index="' + index +
+            '" aria-label="Move up">↑</button><button type="button" class="button secondary small" data-action="move-down" data-index="' +
+            index + '" aria-label="Move down">↓</button><button type="button" class="button danger small" data-action="delete-view" data-id="' +
+            esc(view.__managerId) + '" aria-label="Delete view">×</button></div></div>';
+        }).join('') + '</div></section>';
+    }
+
+    function renderPreview() {
+      const host = $('#previewHost');
+      if (!currentResource()) { host.innerHTML = ''; return; }
+      let cellText = '';
+      if (state.mode === 'off') cellText = '[]';
+      if (state.mode === 'custom') {
+        try {
+          cellText = JSON.stringify(workingViews(), null, 2);
+        } catch (error) {
+          cellText = 'Preview error: ' + error.message;
+        }
+      }
+      const modeLabel = state.mode === 'custom' ? 'Custom JSON array' : (state.mode === 'off' ? 'Off · []' : 'Auto · blank cell');
+      host.innerHTML = '<section class="card preview-card"><div class="preview-head"><div class="preview-head-left">' +
+        '<h2 class="section-title">ListViews cell preview</h2><span class="preview-badge">' + esc(modeLabel) + '</span></div>' +
+        '<button type="button" class="button secondary small" data-action="copy-preview">Copy</button></div>' +
+        '<pre id="jsonPreview">' + esc(cellText || '(blank cell)') + '</pre></section>';
+    }
+
+    function openEditor(view, isNew) {
+      state.editorOpen = true;
+      state.isNew = !!isNew;
+      state.newViewReturnMode = state.isNew ? state.mode : '';
+      state.activeTab = 'basic';
+      state.draft = view ? clone(view) : { name: '', __managerId: 'new-' + state.nextId++ };
+      normalizeEditorView(state.draft);
+      state.extraText = JSON.stringify(extraKeys(state.draft), null, 2);
+      state.searchMode = Array.isArray(state.draft.search) ? 'array' : 'compact';
+      state.valueKinds = {};
+      state.styleModes = {};
+      if (state.isNew) {
+        state.mode = 'custom';
+        $('#modeSelect').value = 'custom';
+      }
+      setStatus(state.isNew ? 'New view draft. Save when it is ready.' : 'Editing view. Save to write the whole resource list.');
+      render();
+    }
+
+    function normalizeEditorView(view) {
+      if (isObject(view.filter)) normalizeFilterOperators(view.filter);
+      if (Array.isArray(view.order)) {
+        view.order.forEach(function (rule) {
+          if (!isObject(rule) || !Object.prototype.hasOwnProperty.call(rule, 'on')) return;
+          if (rule.on === true || rule.on === false || rule.on == null) return;
+          rule.on = normalizeOrderCondition(rule.on);
+        });
+      }
+    }
+
+    function normalizeFilterOperators(node) {
+      if (!isObject(node)) return;
+      if (node.type === 'group' && Array.isArray(node.items)) {
+        node.items.forEach(normalizeFilterOperators);
+      } else if (node.type === 'condition') {
+        const operator = node.operator || node.op;
+        if (operator) node.operator = canonicalOperator(operator);
+        delete node.op;
+      }
+    }
+
+    function normalizeOrderCondition(node) {
+      if (Array.isArray(node)) {
+        return { type: 'group', logic: 'AND', items: node.map(normalizeOrderCondition) };
+      }
+      if (!isObject(node)) return node;
+      const normalized = clone(node);
+      if (normalized.type === 'group' || (!normalized.type && Array.isArray(normalized.items))) {
+        normalized.type = 'group';
+        normalized.logic = String(normalized.logic || 'AND').toUpperCase();
+        if (Array.isArray(normalized.items)) {
+          normalized.items = normalized.items.map(normalizeOrderCondition);
+        }
+      } else if (normalized.type === 'condition' || (!normalized.type && normalized.column != null)) {
+        normalized.type = 'condition';
+        const operator = normalized.operator || normalized.op || normalized.oper;
+        if (operator) normalized.operator = canonicalOperator(operator);
+        delete normalized.op;
+        delete normalized.oper;
+      }
+      return normalized;
+    }
+
+    function canonicalOperator(value) {
+      const operator = String(value).toLowerCase();
+      const aliases = {
+        ne: 'neq',
+        nin: 'not_in',
+        notin: 'not_in',
+        not_empty: 'notEmpty',
+        notempty: 'notEmpty'
+      };
+      return aliases[operator] || operator;
+    }
+
+    function cancelEditor() {
+      if (state.isNew && state.newViewReturnMode) state.mode = state.newViewReturnMode;
+      state.editorOpen = false;
+      state.draft = null;
+      state.isNew = false;
+      state.newViewReturnMode = '';
+      state.extraText = '{}';
+      render();
+      setStatus('Draft closed. No sheet change was made.');
+    }
+
+    function applyEditor() {
+      const clean = validateAndCleanDraft();
+      if (!clean) return false;
+      if (state.isNew) {
+        const id = state.draft.__managerId;
+        clean.__managerId = id;
+        state.views.push(clean);
+        state.selectedId = id;
+      } else {
+        const id = state.draft.__managerId;
+        clean.__managerId = id;
+        const index = state.views.findIndex(function (view) { return String(view.__managerId) === String(id); });
+        if (index >= 0) state.views[index] = clean;
+      }
+      clearOtherDefaults(state.views, clean.__managerId);
+      state.editorOpen = false;
+      state.draft = null;
+      state.isNew = false;
+      state.newViewReturnMode = '';
+      state.extraText = '{}';
+      state.mode = 'custom';
+      render();
+      setStatus('View draft added to this session. Save to write the ListViews cell.');
+      return true;
+    }
+
+    function validateAndCleanDraft() {
+      const view = clone(state.draft || {});
+      view.__managerId = state.draft && state.draft.__managerId;
+      if (!String(view.name || '').trim()) {
+        showError('Add a view Name before saving.');
+        state.activeTab = 'basic';
+        renderEditor();
+        return null;
+      }
+      view.name = String(view.name).trim();
+      const names = workingViewsRaw().filter(function (item) {
+        return String(item.__managerId) !== String(view.__managerId);
+      });
+      if (names.some(function (item) { return String(item.name || '').toLowerCase() === view.name.toLowerCase(); })) {
+        setStatus('This Name is already used. The app allows it, but view overrides may clash.', 'error');
+      }
+      try {
+        const extra = JSON.parse(state.extraText || '{}');
+        if (!isObject(extra)) throw new Error('Custom developer keys must be a JSON object.');
+        Object.keys(extra).forEach(function (key) {
+          if (KNOWN_KEYS.indexOf(key) !== -1) throw new Error('Move the known key "' + key + '" to its tab field.');
+          view[key] = extra[key];
+        });
+      } catch (error) {
+        showError('Custom developer keys: ' + error.message);
+        state.activeTab = 'basic';
+        renderEditor();
+        return null;
+      }
+      if (view.target !== '' && view.target != null && !validTarget(view.target)) {
+        showError('Target must be true, false, an action name, or an object. Query must be a plain map of ' +
+          'non-empty URL names to non-empty row field paths.');
+        state.activeTab = 'target';
+        renderEditor();
+        return null;
+      }
+      cleanDefaults(view);
+      const filterError = validateTree(view.filter, 'Filter');
+      if (filterError) { showError(filterError); state.activeTab = 'filter'; renderEditor(); return null; }
+      if (Array.isArray(view.group)) {
+        for (let i = 0; i < view.group.length; i++) {
+          if (!String(view.group[i].column || '').trim()) {
+            showError('Every Group rule needs a column.');
+            state.activeTab = 'group';
+            renderEditor();
+            return null;
+          }
+          if (view.group[i].aggregate != null && !isObject(view.group[i].aggregate)) {
+            showError('Group aggregates must map field names to sum, min, max, or avg.');
+            state.activeTab = 'group';
+            renderEditor();
+            return null;
+          }
+          if (isObject(view.group[i].aggregate)) {
+            const invalidAggregate = Object.keys(view.group[i].aggregate).some(function (field) {
+              const values = Array.isArray(view.group[i].aggregate[field])
+                ? view.group[i].aggregate[field] : [view.group[i].aggregate[field]];
+              return !field.trim() || values.some(function (value) { return GROUP_AGGREGATES.indexOf(value) < 0; });
+            });
+            if (invalidAggregate) {
+              showError('Group aggregate values must be sum, min, max, or avg.');
+              state.activeTab = 'group';
+              renderEditor();
+              return null;
+            }
+          }
+        }
+      }
+      if (Array.isArray(view.order)) {
+        for (let i = 0; i < view.order.length; i++) {
+          if (!String(view.order[i].column || '').trim()) {
+            showError('Every Order rule needs a column.');
+            state.activeTab = 'order';
+            renderEditor();
+            return null;
+          }
+          if (view.order[i].on && view.order[i].on !== true) {
+            const onError = validateTree(view.order[i].on, 'Order condition');
+            if (onError) { showError(onError); state.activeTab = 'order'; renderEditor(); return null; }
+          }
+          if (view.order[i].aggregate && ORDER_AGGREGATES.indexOf(view.order[i].aggregate) < 0) {
+            showError('Order aggregates must be min, max, sum, or count.');
+            state.activeTab = 'order';
+            renderEditor();
+            return null;
+          }
+        }
+      }
+      const numericKeys = [
+        { key: 'limit', minimum: 0 },
+        { key: 'perPage', minimum: 1 },
+        { key: 'threshold', minimum: 0 }
+      ];
+      for (const item of numericKeys) {
+        if (view[item.key] != null && (!Number.isInteger(Number(view[item.key])) || Number(view[item.key]) < item.minimum)) {
+          showError(item.key + ' must be a whole number of ' + item.minimum + ' or more.');
+          state.activeTab = 'search';
+          renderEditor();
+          return null;
+        }
+      }
+      if (view.permission != null && !validPermission(view.permission)) {
+        showError('Permission must be an action name, an action list, or a resource-to-actions object.');
+        state.activeTab = 'basic';
+        renderEditor();
+        return null;
+      }
+      const styleError = validateStyles(view.item);
+      if (styleError) { showError(styleError); state.activeTab = 'item'; renderEditor(); return null; }
+      return view;
+    }
+
+    function validateTree(node, title) {
+      if (node == null) return '';
+      if (!isObject(node)) return title + ' must be a condition or group.';
+      if (node.type === 'group') {
+        if (node.logic !== 'AND' && node.logic !== 'OR') return title + ' group logic must be AND or OR.';
+        const items = Array.isArray(node.items) ? node.items : [];
+        for (let i = 0; i < items.length; i++) {
+          const error = validateTree(items[i], title);
+          if (error) return error;
+        }
+        return '';
+      }
+      if (node.type === 'condition') {
+        if (!String(node.column || '').trim()) return title + ' conditions need a column.';
+        if (VALUE_OPERATORS.indexOf(String(node.operator || node.op || '').toLowerCase()) < 0) {
+          return title + ' conditions need a supported operator.';
+        }
+        return '';
+      }
+      return title + ' nodes must be a group or condition.';
+    }
+
+    function validateStyles(item) {
+      if (!isObject(item)) return '';
+      const mainLayouts = ['label', 'caption'];
+      const metaLayouts = ['chip', 'label', 'caption'];
+      for (const key of ['layout', 'metaLayout']) {
+        if (item[key] == null) continue;
+        if (item[key] === '' || (Array.isArray(item[key]) && !item[key].length)) continue;
+        const allowed = key === 'layout' ? mainLayouts : metaLayouts;
+        const values = Array.isArray(item[key]) ? item[key] : String(item[key]).split(',');
+        if (values.some(function (value) { return allowed.indexOf(String(value).trim()) < 0; })) {
+          return key + ' only supports ' + allowed.join(' and ') + '.';
+        }
+      }
+      for (const key of ['labels', 'captions', 'metaChip', 'metaLabel', 'metaCaption']) {
+        if (item[key] == null) continue;
+        const values = Array.isArray(item[key]) ? item[key] : [item[key]];
+        if (values.some(function (value) {
+          return value !== null && value !== false && typeof value !== 'string';
+        })) return key + ' needs text, false, or null values.';
+      }
+      for (const key of ['icon', 'color', 'highlight']) {
+        if (isObject(item[key])) {
+          if (!String(item[key].column || '').trim()) return 'The ' + key + ' map needs a source field.';
+          if (!isObject(item[key].map)) return 'The ' + key + ' map needs a value map object.';
+          if (Object.keys(item[key].map).some(function (mapKey) { return typeof item[key].map[mapKey] !== 'string'; })) {
+            return 'Every ' + key + ' map result must be text.';
+          }
+          if (item[key].default != null && typeof item[key].default !== 'string') {
+            return 'The ' + key + ' map default must be text.';
+          }
+        }
+      }
+      return '';
+    }
+
+    function validPermission(value) {
+      const validAction = function (action) { return typeof action === 'string' && action.trim().length > 0; };
+      if (typeof value === 'string') return validAction(value);
+      if (Array.isArray(value)) return value.every(validAction);
+      if (!isObject(value)) return false;
+      return Object.keys(value).every(function (resource) {
+        const actions = value[resource];
+        return resource.trim().length > 0 &&
+          (validAction(actions) || (Array.isArray(actions) && actions.every(validAction)));
+      });
+    }
+
+    function validTarget(value) {
+      if (typeof value === 'boolean' || (typeof value === 'string' && value.trim())) return true;
+      if (!isObject(value)) return false;
+      return Object.keys(value).every(function (key) {
+        if (key === 'query') {
+          const query = value.query;
+          if (!isObject(query) || ![Object.prototype, null].includes(Object.getPrototypeOf(query))) return false;
+          return Object.entries(query).every(function (entry) {
+            return entry[0].trim() && typeof entry[1] === 'string' && entry[1].trim();
+          });
+        }
+        return ['resource', 'action', 'code'].indexOf(key) >= 0 &&
+          (typeof value[key] === 'string' || value[key] == null);
+      });
+    }
+
+    function clearOtherDefaults(views, selectedId) {
+      const selectedView = views.find(function (view) {
+        return String(view.__managerId) === String(selectedId);
+      });
+      if (!selectedView || selectedView.default !== true) return;
+      views.forEach(function (view) {
+        if (String(view.__managerId) !== String(selectedId)) delete view.default;
+      });
+    }
+
+    function cleanConditionTree(node) {
+      if (!isObject(node) || node.type !== 'group') return;
+      if (node.logic === 'AND') delete node.logic;
+      if (Array.isArray(node.items)) node.items.forEach(cleanConditionTree);
+    }
+
+    function cleanDefaults(view) {
+      view.name = String(view.name || '').trim();
+      if (!String(view.label || '').trim() || view.label === view.name) delete view.label;
+      if (!view.icon) delete view.icon;
+      if (!view.color || view.color === 'primary') delete view.color;
+      if (view.default !== true) delete view.default;
+      if (view.count !== true && view.count !== false) delete view.count;
+      if (!view.permission ||
+        (typeof view.permission === 'string' && !view.permission.trim()) ||
+        (Array.isArray(view.permission) && !view.permission.length) ||
+        (isObject(view.permission) && !Object.keys(view.permission).length)) delete view.permission;
+      if (!view.filter || (view.filter.type === 'group' && (!view.filter.items || !view.filter.items.length))) delete view.filter;
+      if (isObject(view.filter)) cleanConditionTree(view.filter);
+      if (!Array.isArray(view.group) || !view.group.length) delete view.group;
+      else view.group = view.group.filter(function (rule) {
+        if (!isObject(rule)) return false;
+        if (isObject(rule.aggregate)) {
+          Object.keys(rule.aggregate).forEach(function (field) {
+            if (!String(field).trim() || !rule.aggregate[field] || (Array.isArray(rule.aggregate[field]) && !rule.aggregate[field].length)) {
+              delete rule.aggregate[field];
+            }
+          });
+          if (!Object.keys(rule.aggregate).length) delete rule.aggregate;
+        }
+        if (!rule.token) delete rule.token;
+        return true;
+      });
+      if (!Array.isArray(view.order) || !view.order.length) delete view.order;
+      else view.order = view.order.filter(function (rule) {
+        if (!isObject(rule)) return false;
+        if (!rule.order || rule.order === 'asc') delete rule.order;
+        if (!rule.type || rule.type === 'auto') delete rule.type;
+        if (!rule.aggregate) delete rule.aggregate;
+        if (rule.on === true || rule.on === 'all') delete rule.on;
+        if (isObject(rule.on)) cleanConditionTree(rule.on);
+        return true;
+      });
+      if (Array.isArray(view.search)) {
+        view.search = view.search.map(function (field) { return String(field).trim(); }).filter(Boolean);
+        if (!view.search.length) delete view.search;
+      } else if (typeof view.search === 'string') {
+        view.search = view.search.trim();
+        if (!view.search) delete view.search;
+      } else if (view.search === false || view.search == null) delete view.search;
+      if (view.limit === '' || view.limit == null) delete view.limit;
+      if (view.paginate !== false) delete view.paginate;
+      if (view.perPage == null || Number(view.perPage) === 25) delete view.perPage;
+      if (view.threshold == null || Number(view.threshold) === 35) delete view.threshold;
+      if (isObject(view.item)) {
+        cleanItem(view.item);
+        if (!Object.keys(view.item).length) delete view.item;
+      }
+      if (isObject(view.actions)) {
+        if (!Array.isArray(view.actions.only) || !view.actions.only.length) delete view.actions.only;
+        if (!Array.isArray(view.actions.exclude) || !view.actions.exclude.length) delete view.actions.exclude;
+        if (view.actions.dense !== false) delete view.actions.dense;
+        if (!view.actions.size || view.actions.size === 'md') delete view.actions.size;
+        if (!Object.keys(view.actions).length) delete view.actions;
+      }
+      if (view.target === true || view.target === 'view' || view.target === '' || view.target == null) delete view.target;
+      if (isObject(view.target)) {
+        if (isObject(view.target.query) && [Object.prototype, null].includes(Object.getPrototypeOf(view.target.query))) {
+          const query = Object.create(null);
+          Object.keys(view.target.query).forEach(function (key) {
+            const name = key.trim();
+            const field = typeof view.target.query[key] === 'string' ? view.target.query[key].trim() : '';
+            if (name && field) query[name] = field;
+          });
+          if (Object.keys(query).length) view.target.query = query;
+          else delete view.target.query;
+        }
+        const resource = currentResource();
+        if (resource && view.target.resource === resource.name) delete view.target.resource;
+        if (view.target.action === 'index') delete view.target.action;
+        Object.keys(view.target).forEach(function (key) {
+          if (key === 'query') return;
+          if (!String(view.target[key] || '').trim()) delete view.target[key];
+        });
+        if (!Object.keys(view.target).length) delete view.target;
+      }
+      delete view.__managerId;
+      return view;
+    }
+
+    function cleanItem(item) {
+      ['layout', 'metaLayout'].forEach(function (key) {
+        if (Array.isArray(item[key]) && item[key].length) {
+          item[key] = item[key].map(function (value) { return String(value).trim(); }).join(',');
+        }
+        if (typeof item[key] === 'string') {
+          item[key] = item[key].split(',').map(function (part) { return part.trim(); }).join(',');
+        }
+      });
+      ['labels', 'captions', 'metaChip', 'metaLabel', 'metaCaption'].forEach(function (key) {
+        if (Array.isArray(item[key]) && item[key].length &&
+          item[key].every(function (value) { return typeof value === 'string' && value.indexOf(',') < 0 && value !== ''; })) {
+          item[key] = item[key].join(',');
+        }
+      });
+      ['icon', 'color', 'highlight'].forEach(function (key) {
+        if (item[key] === '') delete item[key];
+        if (isObject(item[key])) {
+          const style = item[key];
+          if (isObject(style.map)) {
+            Object.keys(style.map).forEach(function (mapKey) {
+              if (!String(mapKey).trim()) delete style.map[mapKey];
+            });
+          }
+          if (!style.default) delete style.default;
+        }
+      });
+    }
+
+    function save() {
+      const resource = currentResource();
+      if (!resource || state.saving) return;
+      let views = state.views;
+      if (state.editorOpen) {
+        const cleaned = validateAndCleanDraft();
+        if (!cleaned) return;
+        cleaned.__managerId = state.draft.__managerId;
+        views = state.views.slice();
+        if (state.isNew) views.push(cleaned);
+        else {
+          const index = views.findIndex(function (view) {
+            return String(view.__managerId) === String(cleaned.__managerId);
+          });
+          if (index >= 0) views[index] = cleaned;
+        }
+      }
+      if (state.editorOpen && state.draft.default === true) {
+        clearOtherDefaults(views, state.draft.__managerId);
+      }
+      const invalidTarget = views.find(function (view) {
+        return view.target !== '' && view.target != null && !validTarget(view.target);
+      });
+      if (invalidTarget) {
+        showError('Target for "' + String(invalidTarget.name || 'unnamed') + '" is invalid. Query must be a plain ' +
+          'map of non-empty URL names to non-empty row field paths.');
+        return;
+      }
+      const output = views.map(function (view) {
+        const item = clone(view);
+        cleanDefaults(item);
+        return item;
+      });
+      if (state.mode === 'custom' && !output.length) {
+        showError('Custom mode needs at least one view. Add a view, or choose Auto or Off.');
+        return;
+      }
+      const json = JSON.stringify(output);
+      state.saving = true;
+      render();
+      setStatus('Saving ListViews cell…');
+      google.script.run
+        .withSuccessHandler(function () {
+          resource.listViews = state.mode === 'custom' ? clone(output) : [];
+          resource.listViewsMode = state.mode;
+          state.views = addIds(state.mode === 'custom' ? output : []);
+          state.selectedId = state.views.length ? String(state.views[0].__managerId) : '';
+          state.editorOpen = false;
+          state.draft = null;
+          state.isNew = false;
+          state.newViewReturnMode = '';
+          state.extraText = '{}';
+          state.saving = false;
+          render();
+          setStatus('Saved. Sign in again to load the new app config.', 'success');
+        })
+        .withFailureHandler(function (error) {
+          state.saving = false;
+          render();
+          showError(error && error.message ? error.message : String(error));
+        })
+        .app_saveResourceListViews(resource.name, json, state.mode);
+    }
+
+    function workingViewsRaw() {
+      let views = state.views.slice();
+      if (state.editorOpen && state.draft) {
+        const draft = clone(state.draft);
+        if (state.isNew) views.push(draft);
+        else {
+          const index = views.findIndex(function (view) {
+            return String(view.__managerId) === String(draft.__managerId);
+          });
+          if (index >= 0) views[index] = draft;
+        }
+      }
+      return views;
+    }
+
+    function workingViews() {
+      const views = workingViewsRaw().map(function (view) { return clone(view); });
+      if (state.editorOpen && state.draft.default === true) clearOtherDefaults(views, state.draft.__managerId);
+      return views.map(function (view) {
+        const item = clone(view);
+        if (state.editorOpen && String(item.__managerId) === String(state.draft.__managerId)) {
+          try {
+            const extra = JSON.parse(state.extraText || '{}');
+            if (isObject(extra)) Object.keys(extra).forEach(function (key) {
+              if (KNOWN_KEYS.indexOf(key) < 0) item[key] = extra[key];
+            });
+          } catch (error) {}
+        }
+        cleanDefaults(item);
+        return item;
+      });
+    }
+
+    function extraKeys(view) {
+      const result = clone(view || {});
+      KNOWN_KEYS.forEach(function (key) { delete result[key]; });
+      delete result.__managerId;
+      return result;
+    }
+
+    function targetMode(target) {
+      if (target === false) return 'false';
+      if (typeof target === 'string') return 'action';
+      if (isObject(target)) return 'object';
+      return 'default';
+    }
+
+    function listText(value) {
+      return Array.isArray(value) ? value.join(',') : (value || '');
+    }
+
+    function getPath(root, path) {
+      return String(path).split('.').reduce(function (current, key) {
+        return current == null ? undefined : current[key];
+      }, root);
+    }
+
+    function setPath(root, path, value, remove) {
+      const parts = String(path).split('.');
+      let current = root;
+      for (let i = 0; i < parts.length - 1; i++) {
+        const key = parts[i];
+        if (current[key] == null || typeof current[key] !== 'object') current[key] = /^\d+$/.test(parts[i + 1]) ? [] : {};
+        current = current[key];
+      }
+      const last = parts[parts.length - 1];
+      if (remove) delete current[last];
+      else current[last] = value;
+    }
+
+    function updateBoundControl(control) {
+      const path = control.dataset.bindPath;
+      const kind = control.dataset.kind || 'text';
+      const value = control.value;
+      if (kind === 'default-flag') {
+        if (control.checked) setPath(state.draft, path, true, false);
+        else setPath(state.draft, path, null, true);
+      } else if (kind === 'paginate-flag') {
+        if (control.checked) setPath(state.draft, path, null, true);
+        else setPath(state.draft, path, false, false);
+      } else if (kind === 'actions-dense') {
+        if (control.checked) setPath(state.draft, path, null, true);
+        else setPath(state.draft, path, false, false);
+      } else if (kind === 'count') {
+        if (value === 'auto') setPath(state.draft, path, null, true);
+        else setPath(state.draft, path, value === 'true', false);
+      } else if (kind === 'permission') {
+        const trimmed = value.trim();
+        if (!trimmed) setPath(state.draft, path, null, true);
+        else if (trimmed[0] === '[' || trimmed[0] === '{') {
+          try { setPath(state.draft, path, JSON.parse(trimmed), false); }
+          catch (error) { setPath(state.draft, path, value, false); }
+        } else setPath(state.draft, path, value, false);
+      } else if (kind === 'optional-number') {
+        if (value === '') setPath(state.draft, path, null, true);
+        else setPath(state.draft, path, Number(value), false);
+      } else if (kind === 'csv') {
+        if (!value.trim()) setPath(state.draft, path, null, true);
+        else setPath(state.draft, path, value.trim(), false);
+      } else if (kind === 'string-list') {
+        const result = value.split(/\r?\n/).map(function (item) { return item.trim(); }).filter(Boolean);
+        if (!result.length) setPath(state.draft, path, null, true);
+        else setPath(state.draft, path, result, false);
+      } else if (kind === 'optional') {
+        if (!value.trim()) setPath(state.draft, path, null, true);
+        else setPath(state.draft, path, value.trim(), false);
+      } else if (kind === 'text' && value === '' && path === 'label') {
+        setPath(state.draft, path, null, true);
+      } else setPath(state.draft, path, value, false);
+      updatePreviewOnly();
+    }
+
+    function updateNodeControl(control) {
+      const path = control.dataset.nodePath;
+      const key = control.dataset.nodeKey;
+      const kind = control.dataset.valueKind || 'text';
+      let value = control.value;
+      if (key === 'value') {
+        if (kind === 'number') value = value === '' ? '' : Number(value);
+        if (kind === 'boolean') value = value === 'true';
+        if (kind === 'json') {
+          try { value = JSON.parse(value); }
+          catch (error) { showError('Enter a valid JSON value.'); return; }
+        }
+      }
+      setPath(state.draft, path + '.' + key, value, false);
+      updatePreviewOnly();
+    }
+
+    function updatePreviewOnly() {
+      renderPreview();
+      renderOrder();
+    }
+
+    function addNode(parentPath, type) {
+      const item = type === 'condition'
+        ? { type: 'condition', column: '', operator: 'eq', value: '' }
+        : { type: 'group', logic: 'AND', items: [] };
+      if (parentPath === 'filter-new') {
+        state.draft.filter = { type: 'group', logic: 'AND', items: [item] };
+      } else if (parentPath === 'filter') {
+        if (state.draft.filter.type !== 'group') {
+          state.draft.filter = { type: 'group', logic: 'AND', items: [state.draft.filter, item] };
+        } else state.draft.filter.items.push(item);
+      } else {
+        const parent = getPath(state.draft, parentPath);
+        if (!isObject(parent) || parent.type !== 'group') return;
+        if (!Array.isArray(parent.items)) parent.items = [];
+        parent.items.push(item);
+      }
+      renderEditor();
+      updatePreviewOnly();
+    }
+
+    function removeNode(path) {
+      if (path === 'filter') delete state.draft.filter;
+      else if (/\.on$/.test(path)) setPath(state.draft, path, null, true);
+      else {
+        const parts = path.split('.');
+        const index = Number(parts.pop());
+        if (parts.pop() !== 'items') return;
+        const parent = getPath(state.draft, parts.join('.'));
+        if (parent && Array.isArray(parent.items)) parent.items.splice(index, 1);
+      }
+      renderEditor();
+      updatePreviewOnly();
+    }
+
+    function handleAction(button) {
+      const action = button.dataset.action;
+      if (action === 'tab') {
+        state.activeTab = button.dataset.tab;
+        renderEditor();
+      } else if (action === 'new-view') {
+        openEditor(null, true);
+      } else if (action === 'edit-view') {
+        const view = selectedView();
+        if (view) openEditor(view, false);
+      } else if (action === 'cancel-editor') {
+        cancelEditor();
+      } else if (action === 'apply-editor') {
+        applyEditor();
+      } else if (action === 'clear-filter') {
+        delete state.draft.filter;
+        renderEditor();
+        updatePreviewOnly();
+      } else if (action === 'add-filter') {
+        if (!state.draft.filter) addNode('filter-new', 'condition');
+        else addNode('filter', 'condition');
+      } else if (action === 'add-node') {
+        addNode(button.dataset.path, button.dataset.nodeType);
+      } else if (action === 'remove-node') {
+        removeNode(button.dataset.path);
+      } else if (action === 'add-group') {
+        if (!Array.isArray(state.draft.group)) state.draft.group = [];
+        state.draft.group.push({ column: '' });
+        renderEditor();
+        updatePreviewOnly();
+      } else if (action === 'remove-group') {
+        state.draft.group.splice(Number(button.dataset.index), 1);
+        if (!state.draft.group.length) delete state.draft.group;
+        renderEditor();
+        updatePreviewOnly();
+      } else if (action === 'add-aggregate') {
+        const rule = state.draft.group[Number(button.dataset.index)];
+        if (!isObject(rule.aggregate)) rule.aggregate = {};
+        const field = (currentResource().headers || []).find(function (header) { return !rule.aggregate[header]; }) || '';
+        rule.aggregate[field] = 'sum';
+        renderEditor();
+        updatePreviewOnly();
+      } else if (action === 'remove-aggregate') {
+        const rule = state.draft.group[Number(button.dataset.index)];
+        if (rule && rule.aggregate) {
+          delete rule.aggregate[button.dataset.field];
+          if (!Object.keys(rule.aggregate).length) delete rule.aggregate;
+        }
+        renderEditor();
+        updatePreviewOnly();
+      } else if (action === 'add-order') {
+        if (!Array.isArray(state.draft.order)) state.draft.order = [];
+        state.draft.order.push({ column: '', order: 'asc', type: 'auto' });
+        renderEditor();
+        updatePreviewOnly();
+      } else if (action === 'add-target-query') {
+        if (!isObject(state.draft.target)) state.draft.target = { resource: '', action: '', code: '' };
+        if (!isObject(state.draft.target.query)) state.draft.target.query = Object.create(null);
+        state.draft.target.query[''] = '';
+        renderEditor();
+        updatePreviewOnly();
+      } else if (action === 'remove-target-query') {
+        const target = state.draft.target;
+        if (isObject(target) && isObject(target.query)) {
+          delete target.query[button.dataset.queryKey];
+          if (!Object.keys(target.query).length) delete target.query;
+        }
+        renderEditor();
+        updatePreviewOnly();
+      } else if (action === 'remove-order') {
+        state.draft.order.splice(Number(button.dataset.index), 1);
+        if (!state.draft.order.length) delete state.draft.order;
+        renderEditor();
+        updatePreviewOnly();
+      } else if (action === 'style-mode') {
+        state.styleModes[button.dataset.key] = button.value;
+        const path = 'item.' + button.dataset.key;
+        const current = getPath(state.draft, path);
+        if (button.value === 'map' && !isObject(current)) setPath(state.draft, path, { column: '', map: {} }, false);
+        if (button.value === 'static' && isObject(current)) setPath(state.draft, path, '', false);
+        renderEditor();
+        updatePreviewOnly();
+      } else if (action === 'add-map') {
+        const path = 'item.' + button.dataset.key;
+        const style = getPath(state.draft, path);
+        if (!isObject(style.map)) style.map = {};
+        style.map[''] = '';
+        renderEditor();
+        updatePreviewOnly();
+      } else if (action === 'remove-map') {
+        const style = getPath(state.draft, 'item.' + button.dataset.key);
+        if (style && isObject(style.map)) delete style.map[button.dataset.mapKey];
+        renderEditor();
+        updatePreviewOnly();
+      } else if (action === 'add-template') {
+        templateRows(button.dataset.key).push('');
+        renderEditor();
+        updatePreviewOnly();
+      } else if (action === 'remove-template') {
+        const rows = templateRows(button.dataset.key);
+        rows.splice(Number(button.dataset.index), 1);
+        if (!rows.length) delete state.draft.item[button.dataset.key];
+        renderEditor();
+        updatePreviewOnly();
+      } else if (action === 'value-kind') {
+        state.valueKinds[button.dataset.path] = button.value;
+        renderEditor();
+      } else if (action === 'order-on-mode') {
+        const rule = state.draft.order[Number(button.dataset.index)];
+        if (button.value === 'all') delete rule.on;
+        else if (button.value === 'never') rule.on = false;
+        else rule.on = { type: 'group', logic: 'AND', items: [{ type: 'condition', column: '', operator: 'eq', value: '' }] };
+        renderEditor();
+        updatePreviewOnly();
+      } else if (action === 'move-up') {
+        moveView(Number(button.dataset.index), Number(button.dataset.index) - 1);
+      } else if (action === 'move-down') {
+        moveView(Number(button.dataset.index), Number(button.dataset.index) + 1);
+      } else if (action === 'delete-view') {
+        deleteView(button.dataset.id);
+      } else if (action === 'copy-preview') {
+        copyPreview();
+      } else if (action === 'save') {
+        save();
+      } else if (action === 'close-dialog') {
+        google.script.host.close();
+      }
+    }
+
+    function handleChange(control) {
+      if (control.id === 'resourceSelect') {
+        const selectedName = control.value;
+        if (state.editorOpen && !confirm('Discard the open view draft and change resource?')) {
+          control.value = state.resourceName;
+          return;
+        }
+        const resource = state.resources.find(function (item) { return item.name === selectedName; });
+        state.resourceName = selectedName;
+        state.views = addIds(resource && resource.listViews);
+        state.mode = resource && resource.listViewsMode ? resource.listViewsMode : 'auto';
+        state.selectedId = '';
+        state.editorOpen = false;
+        state.draft = null;
+        state.isNew = false;
+        state.newViewReturnMode = '';
+        render();
+        setStatus(selectedName ? 'Loaded ' + selectedName + '.' : 'Choose a resource to begin.');
+      } else if (control.id === 'viewSelect') {
+        if (state.editorOpen && !confirm('Discard the open view draft and switch view?')) {
+          control.value = state.selectedId;
+          return;
+        }
+        state.selectedId = control.value;
+        state.editorOpen = false;
+        state.draft = null;
+        state.isNew = false;
+        state.newViewReturnMode = '';
+        const view = selectedView();
+        if (view) openEditor(view, false);
+        render();
+      } else if (control.id === 'modeSelect') {
+        state.mode = control.value;
+        render();
+        updatePreviewOnly();
+      } else if (control.id === 'searchMode') {
+        state.searchMode = control.value;
+        if (control.value === 'array' && typeof state.draft.search === 'string') {
+          state.draft.search = state.draft.search.split(',').map(function (item) { return item.trim(); }).filter(Boolean);
+          if (!state.draft.search.length) delete state.draft.search;
+        } else if (control.value === 'compact' && Array.isArray(state.draft.search)) {
+          const compact = state.draft.search.join(',');
+          if (compact) state.draft.search = compact;
+          else delete state.draft.search;
+        }
+        renderEditor();
+        updatePreviewOnly();
+      } else if (control.id === 'targetMode') {
+        if (control.value === 'default') delete state.draft.target;
+        if (control.value === 'false') state.draft.target = false;
+        if (control.value === 'action') state.draft.target = '';
+        if (control.value === 'object') state.draft.target = { resource: '', action: '', code: '' };
+        renderEditor();
+        updatePreviewOnly();
+      } else if (control.matches('[data-bind-path]')) {
+        updateBoundControl(control);
+        if (control.dataset.kind === 'csv' &&
+          ['item.layout', 'item.metaLayout'].indexOf(control.dataset.bindPath) >= 0) renderEditor();
+      } else if (control.matches('[data-node-path]')) {
+        updateNodeControl(control);
+      } else if (control.matches('[data-action="empty-layout"]')) {
+        const path = 'item.' + control.dataset.key;
+        if (control.checked) setPath(state.draft, path, [], false);
+        else setPath(state.draft, path, null, true);
+        renderEditor();
+        updatePreviewOnly();
+      } else if (control.matches('[data-action="action-suggestion"]')) {
+        const target = document.querySelector('[data-bind-path="' + control.dataset.targetPath + '"]');
+        const actionName = control.value;
+        if (target && actionName) {
+          const actions = target.value.split(/\r?\n/).map(function (item) { return item.trim(); }).filter(Boolean);
+          if (actions.indexOf(actionName) < 0) actions.push(actionName);
+          target.value = actions.join('\n');
+          updateBoundControl(target);
+        }
+        control.value = '';
+      } else if (control.matches('[data-action="template-suggestion"]')) {
+        const row = control.closest('.template-row');
+        const input = row && row.querySelector('[data-template-value]');
+        if (input && control.value) {
+          const value = '{' + control.value + '}';
+          const start = typeof input.selectionStart === 'number' ? input.selectionStart : input.value.length;
+          const end = typeof input.selectionEnd === 'number' ? input.selectionEnd : input.value.length;
+          input.setRangeText(value, start, end, 'end');
+          updateTemplateValue(input);
+        }
+        control.value = '';
+      } else if (control.matches('[data-template-value]')) {
+        updateTemplateValue(control);
+      } else if (control.matches('[data-action="value-kind"]')) {
+        state.valueKinds[control.dataset.path] = control.value;
+        renderEditor();
+      } else if (control.matches('[data-action="style-mode"]')) {
+        handleAction(control);
+      } else if (control.matches('[data-action="order-on-mode"]')) {
+        handleAction(control);
+      } else if (control.matches('[data-search-fields]')) {
+        updateSearch(control.value);
+      } else if (control.matches('[data-aggregate-choice]')) {
+        updateAggregateChoices(control);
+      } else if (control.matches('[data-aggregate-field]')) {
+        renameAggregateField(control);
+      } else if (control.matches('[data-map-key]')) {
+        renameMapKey(control);
+      } else if (control.matches('[data-map-value]')) {
+        const style = getPath(state.draft, 'item.' + control.dataset.style);
+        if (style && isObject(style.map)) style.map[control.dataset.mapKeyValue] = control.value;
+        updatePreviewOnly();
+      } else if (control.matches('[data-action="order-position"]')) {
+        moveView(Number(control.dataset.index), Number(control.value) - 1);
+      }
+    }
+
+    function handleInput(control) {
+      if (control.matches('[data-target-query]')) {
+        const target = state.draft.target;
+        if (!isObject(target)) return;
+        const query = Object.create(null);
+        document.querySelectorAll('[data-target-query-row]').forEach(function (row) {
+          const nameInput = row.querySelector('[data-query-name]');
+          const fieldInput = row.querySelector('[data-query-field]');
+          const name = nameInput ? nameInput.value.trim() : '';
+          query[name] = fieldInput ? fieldInput.value.trim() : '';
+          const removeButton = row.querySelector('[data-action="remove-target-query"]');
+          if (removeButton) removeButton.dataset.queryKey = name;
+        });
+        if (Object.keys(query).length) target.query = query;
+        else delete target.query;
+        updatePreviewOnly();
+      } else if (control.matches('[data-bind-path]')) updateBoundControl(control);
+      else if (control.matches('[data-node-path]')) {
+        if (control.dataset.nodeKey !== 'value' || control.dataset.valueKind !== 'json') updateNodeControl(control);
+      } else if (control.matches('[data-template-value]')) updateTemplateValue(control);
+      else if (control.matches('[data-search-fields]')) updateSearch(control.value);
+      else if (control.id === 'extraKeys') {
+        state.extraText = control.value;
+        updatePreviewOnly();
+      }
+    }
+
+    function templateRows(key) {
+      if (!isObject(state.draft.item)) state.draft.item = {};
+      const value = state.draft.item[key];
+      if (Array.isArray(value)) return value;
+      if (typeof value === 'string') {
+        state.draft.item[key] = value === '' ? [''] : value.split(',');
+      } else state.draft.item[key] = [];
+      return state.draft.item[key];
+    }
+
+    function updateTemplateValue(control) {
+      const key = control.dataset.key;
+      if (key === 'labels' || key === 'captions') {
+        const rows = templateRows(key);
+        rows[Number(control.dataset.index)] = control.value;
+      } else if (control.value === '') {
+        delete state.draft.item[key];
+      } else state.draft.item[key] = [control.value];
+      updatePreviewOnly();
+    }
+
+    function updateSearch(value) {
+      if (state.searchMode === 'array') {
+        const fields = String(value).split(/\r?\n/).map(function (item) { return item.trim(); }).filter(Boolean);
+        if (fields.length) state.draft.search = fields;
+        else delete state.draft.search;
+      } else {
+        const compact = String(value).split(/\r?\n/).join(',').trim();
+        if (compact) state.draft.search = compact;
+        else delete state.draft.search;
+      }
+      updatePreviewOnly();
+    }
+
+    function updateAggregateChoices(control) {
+      const index = Number(control.dataset.index);
+      const field = control.dataset.field;
+      const rule = state.draft.group[index];
+      if (!isObject(rule.aggregate)) rule.aggregate = {};
+      const selectedValues = Array.from(document.querySelectorAll('[data-aggregate-choice][data-index="' + index + '"]:checked'))
+        .filter(function (item) { return item.dataset.field === field; })
+        .map(function (item) { return item.value; });
+      if (!selectedValues.length) delete rule.aggregate[field];
+      else rule.aggregate[field] = selectedValues.length === 1 ? selectedValues[0] : selectedValues;
+      if (!Object.keys(rule.aggregate).length) delete rule.aggregate;
+      updatePreviewOnly();
+    }
+
+    function renameAggregateField(control) {
+      const index = Number(control.dataset.index);
+      const oldName = control.dataset.oldField;
+      const newName = control.value.trim();
+      const rule = state.draft.group[index];
+      if (!rule || !isObject(rule.aggregate) || oldName === newName) return;
+      const value = rule.aggregate[oldName];
+      delete rule.aggregate[oldName];
+      if (newName) rule.aggregate[newName] = value;
+      control.dataset.oldField = newName;
+      renderEditor();
+      updatePreviewOnly();
+    }
+
+    function renameMapKey(control) {
+      const key = control.dataset.style;
+      const style = getPath(state.draft, 'item.' + key);
+      const oldName = control.dataset.oldKey;
+      const newName = control.value.trim();
+      if (!style || !isObject(style.map) || oldName === newName) return;
+      const value = style.map[oldName];
+      delete style.map[oldName];
+      if (newName) style.map[newName] = value;
+      renderEditor();
+      updatePreviewOnly();
+    }
+
+    function moveView(from, to) {
+      const views = workingViewsRaw();
+      if (from < 0 || from >= views.length) return;
+      to = Math.max(0, Math.min(views.length - 1, to));
+      if (from === to) return;
+      if (state.editorOpen && !applyEditor()) return;
+      const item = state.views.splice(from, 1)[0];
+      state.views.splice(to, 0, item);
+      state.selectedId = String(item.__managerId);
+      render();
+      setStatus('View order changed. Save to write it to the sheet.');
+    }
+
+    function deleteView(id) {
+      if (state.editorOpen) {
+        showError('Finish or cancel the open draft before deleting a view.');
+        return;
+      }
+      const view = state.views.find(function (item) { return String(item.__managerId) === String(id); });
+      if (!view || !confirm('Delete the view "' + (view.name || 'unnamed') + '" from this resource?')) return;
+      state.views = state.views.filter(function (item) { return String(item.__managerId) !== String(id); });
+      state.selectedId = state.views.length ? String(state.views[0].__managerId) : '';
+      state.mode = state.views.length ? 'custom' : (state.mode === 'custom' ? 'off' : state.mode);
+      render();
+      setStatus('View removed from this session. Save to write the change.');
+    }
+
+    function copyPreview() {
+      const text = $('#jsonPreview') ? $('#jsonPreview').textContent : '';
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(function () { setStatus('Preview copied.', 'success'); })
+          .catch(function () { legacyCopy(text); });
+      } else legacyCopy(text);
+    }
+
+    function legacyCopy(text) {
+      const area = document.createElement('textarea');
+      area.value = text;
+      document.body.appendChild(area);
+      area.select();
+      document.execCommand('copy');
+      area.remove();
+      setStatus('Preview copied.', 'success');
+    }
+
+    function setStatus(message, type) {
+      const status = $('#saveStatus');
+      status.textContent = message;
+      status.className = 'save-status' + (type ? ' ' + type : '');
+    }
+
+    function showError(message) {
+      setStatus(message, 'error');
+      const notice = $('#resourceNotice');
+      notice.innerHTML = '<div class="notice error">' + esc(message) + '</div>';
+    }
+
+    document.addEventListener('click', function (event) {
+      const button = event.target.closest('button[data-action]');
+      if (button && !button.disabled) handleAction(button);
+    });
+    document.addEventListener('input', function (event) {
+      if (event.target.matches('[data-bind-path], [data-node-path], [data-search-fields], [data-template-value], #extraKeys, [data-target-query]')) {
+        handleInput(event.target);
+      }
+    });
+    document.addEventListener('change', function (event) {
+      const control = event.target;
+      const selectors = [
+        '#resourceSelect', '#viewSelect', '#modeSelect', '#searchMode', '#targetMode',
+        '[data-bind-path]', '[data-node-path]', '[data-action="value-kind"]',
+        '[data-action="style-mode"]', '[data-action="order-on-mode"]', '[data-search-fields]',
+        '[data-action="empty-layout"]', '[data-action="action-suggestion"]',
+        '[data-action="template-suggestion"]', '[data-template-value]',
+        '[data-aggregate-choice]', '[data-aggregate-field]', '[data-map-key]',
+        '[data-map-value]', '[data-action="order-position"]'
+      ];
+      if (selectors.some(function (selector) { return control.matches(selector); })) {
+        handleChange(control);
+      }
+    });
+    document.addEventListener('dragstart', function (event) {
+      const row = event.target.closest('[data-order-row]');
+      if (!row) return;
+      state.dragIndex = Number(row.dataset.index);
+      row.classList.add('dragging');
+      event.dataTransfer.effectAllowed = 'move';
+    });
+    document.addEventListener('dragend', function (event) {
+      const row = event.target.closest('[data-order-row]');
+      if (row) row.classList.remove('dragging');
+    });
+    document.addEventListener('dragover', function (event) {
+      if (event.target.closest('[data-order-row]')) event.preventDefault();
+    });
+    document.addEventListener('drop', function (event) {
+      const row = event.target.closest('[data-order-row]');
+      if (!row || state.dragIndex < 0) return;
+      event.preventDefault();
+      moveView(state.dragIndex, Number(row.dataset.index));
+      state.dragIndex = -1;
+    });
+    google.script.run
+      .withSuccessHandler(init)
+      .withFailureHandler(function (error) {
+        $('#resourceCount').textContent = 'Load failed';
+        $('#resourceSelect').innerHTML = '<option value="">Could not load resources</option>';
+        setStatus(error && error.message ? error.message : String(error), 'error');
+      })
+      .app_getListViewsManagerData();
+  </script>
 </body>
 </html>

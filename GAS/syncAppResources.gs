@@ -1796,7 +1796,7 @@ function initAppResourcesCodeConfig() {
             { "name": "Overdue", "label": "Overdue", "icon": "running_with_errors", "color": "negative", "default": false, "filter": { "type": "group", "logic": "AND", "items": [{ "type": "condition", "column": "Progress", "operator": "in", "value": ["PENDING_PAYMENT", "PARTIALLY_PAID"] }, { "type": "condition", "column": "DueDate", "operator": "lt", "value": "$daysIn:0" }] } },
             { "name": "PartiallyPaid", "label": "Partially Paid", "icon": "incomplete_circle", "color": "info", "default": false, "filter": { "type": "group", "logic": "AND", "items": [{ "type": "condition", "column": "Progress", "operator": "eq", "value": "PARTIALLY_PAID" }] } },
             { "name": "OutletPendings", "label": "Outlet Pendings", "icon": "storefront", "color": "indigo-6", "default": false, "filter": { "type": "group", "logic": "AND", "items": [{ "type": "condition", "column": "Progress", "operator": "in", "value": ["PENDING_PAYMENT", "PARTIALLY_PAID"] }] } },
-            { "name": "Invoiceable", "label": "Invoiceable", "icon": "request_quote", "color": "warning", "default": false, "filter": { "type": "group", "logic": "AND", "items": [{ "type": "condition", "column": "Progress", "operator": "in", "value": ["PENDING_PAYMENT", "PARTIALLY_PAID"] }] } },
+            { "name": "Invoiceable", "label": "Invoiceable", "icon": "request_quote", "color": "warning", "default": false, "filter": { "type": "group", "logic": "AND", "items": [{ "type": "condition", "column": "Progress", "operator": "in", "value": ["PENDING_PAYMENT", "PARTIALLY_PAID"] }] }, "target": { "action": "add", "query": { "outletCode": "outletCode" } } },
             { "name": "Completed", "label": "Completed", "icon": "task_alt", "color": "positive", "default": false, "filter": { "type": "group", "logic": "AND", "items": [{ "type": "condition", "column": "Progress", "operator": "eq", "value": "PAID" }] } },
             { "name": "Cancelled", "label": "Cancelled", "icon": "block", "color": "grey-7", "default": false, "filter": { "type": "group", "logic": "AND", "items": [{ "type": "condition", "column": "Progress", "operator": "eq", "value": "CANCELLED" }] } }
         ]),
@@ -1952,12 +1952,12 @@ function initAppResourcesCodeConfig() {
             {"id":"rep_1776000000026","name":"payment-log","label":"Payment Log","templateSheet":"PaymentRecords","isRecordLevel":false,"inputs":[{"label":"Date","type":"select","targetCell":"J11","source":{"resource":"OutletPayments","field":"Date"},"default":"All Date","required":false},{"label":"Username","type":"select","targetCell":"J12","source":{"resource":"OutletPayments","field":"Username"},"default":"Any User","required":false},{"label":"Payment Mode","type":"select","targetCell":"J13","source":{"resource":"OutletPayments","field":"Mode"},"default":"Every Mode","required":false}],"pdfOptions":{}}
         ]),
         CustomUIName: '',
-        // Only the payment-domain views live here. The Overdue Invoices and Outlets pills
-        // project OutletConsumptionInvoices at runtime, so they are declared in
-        // `Index/ListSwitcher.js` instead and read the Layer 2 aggregate.
+        // These two views use their projection row sources from OutletPayments/Data/useList.js.
         ListViews: JSON.stringify([
             { "name": "Recent", "label": "Recent", "icon": "history", "color": "indigo-7", "default": true, "filter": { "type": "group", "logic": "AND", "items": [{ "type": "condition", "column": "Status", "operator": "eq", "value": "Active" }] } },
             { "name": "PendingApproval", "label": "Pending Approval", "icon": "schedule", "color": "warning", "default": false, "filter": { "type": "group", "logic": "AND", "items": [{ "type": "condition", "column": "Progress", "operator": "eq", "value": "SUBMITTED" }] } },
+            { "name": "OverdueInvoices", "label": "Overdue Invoices", "icon": "running_with_errors", "color": "negative", "default": false, "count": true, "target": { "action": "add", "query": { "outletCode": "outletCode", "invoiceCode": "code" } } },
+            { "name": "Outlets", "label": "Outlets", "icon": "storefront", "color": "deep-orange", "default": false, "count": true, "target": { "action": "add", "query": { "outletCode": "code" } } },
             { "name": "CompletedPayments", "label": "Completed Payments", "icon": "savings", "color": "teal-7", "default": false, "filter": { "type": "group", "logic": "AND", "items": [{ "type": "condition", "column": "Progress", "operator": "eq", "value": "APPROVED" }] } },
             { "name": "CancelledPayments", "label": "Cancelled Payments", "icon": "block", "color": "grey-7", "default": false, "filter": { "type": "group", "logic": "AND", "items": [{ "type": "condition", "column": "Progress", "operator": "eq", "value": "CANCELLED" }] } }
         ]),
