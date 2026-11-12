@@ -657,9 +657,9 @@ function initAppResourcesCodeConfig() {
         CustomUIName: '',
         ListViews: JSON.stringify([
             { "name": "Recent", "label": "Recent", "icon": "history", "color": "primary", "default": true, "filter": { "type": "group", "logic": "AND", "items": [{ "type": "condition", "column": "Progress", "operator": "neq", "value": "RFQ Processed" }, { "type": "condition", "column": "Status", "operator": "eq", "value": "Active" }] } },
-            { "name": "Drafts", "label": "My Drafts", "icon": "edit_note", "color": "grey-7", "default": false, "filter": { "type": "group", "logic": "AND", "items": [{ "type": "condition", "column": "Progress", "operator": "eq", "value": "Draft" }] } },
+            { "name": "Drafts", "label": "My Drafts", "icon": "edit_note", "color": "grey-7", "default": false, "permission": "create", "filter": { "type": "group", "logic": "AND", "items": [{ "type": "condition", "column": "Progress", "operator": "eq", "value": "Draft" }] } },
             { "name": "PendingApproval", "label": "Pending Approval", "icon": "hourglass_top", "color": "warning", "default": false, "filter": { "type": "group", "logic": "AND", "items": [{ "type": "condition", "column": "Progress", "operator": "eq", "value": "Pending Approval" }] } },
-            { "name": "NeedsRevision", "label": "Needs Revision", "icon": "rate_review", "color": "orange", "default": false, "filter": { "type": "group", "logic": "AND", "items": [{ "type": "condition", "column": "Progress", "operator": "eq", "value": "Revision Required" }] } },
+            { "name": "NeedsRevision", "label": "Needs Revision", "icon": "rate_review", "color": "orange", "default": false, "permission": "create", "filter": { "type": "group", "logic": "AND", "items": [{ "type": "condition", "column": "Progress", "operator": "eq", "value": "Revision Required" }] } },
             { "name": "Approved", "label": "Approved", "icon": "task_alt", "color": "primary", "default": false, "filter": { "type": "group", "logic": "AND", "items": [{ "type": "condition", "column": "Progress", "operator": "eq", "value": "Approved" }] } },
             { "name": "RfqProcessed", "label": "RFQ Processed", "icon": "request_quote", "color": "positive", "default": false, "filter": { "type": "group", "logic": "AND", "items": [{ "type": "condition", "column": "Progress", "operator": "eq", "value": "RFQ Processed" }] } },
             { "name": "Rejected", "label": "Rejected", "icon": "block", "color": "negative", "default": false, "filter": { "type": "group", "logic": "AND", "items": [{ "type": "condition", "column": "Progress", "operator": "eq", "value": "Rejected" }] } }
@@ -778,8 +778,8 @@ function initAppResourcesCodeConfig() {
         Reports: '',
         CustomUIName: '',
         ListViews: JSON.stringify([
-            { "name": "Drafts", "label": "Drafts", "icon": "edit_note", "color": "grey-7", "default": true, "filter": { "type": "group", "logic": "AND", "items": [{ "type": "condition", "column": "Progress", "operator": "eq", "value": "DRAFT" }] } },
-            { "name": "Sent", "label": "Out for Quoting", "icon": "send", "color": "primary", "default": false, "filter": { "type": "group", "logic": "AND", "items": [{ "type": "condition", "column": "Progress", "operator": "eq", "value": "SENT" }] } },
+            { "name": "Drafts", "label": "Drafts", "icon": "edit_note", "color": "grey-7", "default": true, "permission": "create", "filter": { "type": "group", "logic": "AND", "items": [{ "type": "condition", "column": "Progress", "operator": "eq", "value": "DRAFT" }] } },
+            { "name": "Sent", "label": "Out for Quoting", "icon": "send", "color": "primary", "default": false, "permission": "any,assignSupplier,markAsSent,close", "filter": { "type": "group", "logic": "AND", "items": [{ "type": "condition", "column": "Progress", "operator": "eq", "value": "SENT" }] } },
             { "name": "Closed", "label": "Closed", "icon": "lock", "color": "positive", "default": false, "filter": { "type": "group", "logic": "AND", "items": [{ "type": "condition", "column": "Progress", "operator": "eq", "value": "CLOSED" }] } },
             { "name": "Cancelled", "label": "Cancelled", "icon": "block", "color": "negative", "default": false, "filter": { "type": "group", "logic": "AND", "items": [{ "type": "condition", "column": "Progress", "operator": "eq", "value": "CANCELLED" }] } }
         ]),
@@ -924,7 +924,7 @@ function initAppResourcesCodeConfig() {
         Reports: '',
         CustomUIName: '',
         ListViews: JSON.stringify([
-            { "name": "Received", "label": "Awaiting Decision", "icon": "mark_email_read", "color": "warning", "default": true, "filter": { "type": "group", "logic": "AND", "items": [{ "type": "condition", "column": "Progress", "operator": "eq", "value": "RECEIVED" }] } },
+            { "name": "Received", "label": "Awaiting Decision", "icon": "mark_email_read", "color": "warning", "default": true, "permission": "any,reject,create", "filter": { "type": "group", "logic": "AND", "items": [{ "type": "condition", "column": "Progress", "operator": "eq", "value": "RECEIVED" }] } },
             { "name": "Accepted", "label": "Accepted", "icon": "verified", "color": "positive", "default": false, "filter": { "type": "group", "logic": "AND", "items": [{ "type": "condition", "column": "Progress", "operator": "eq", "value": "ACCEPTED" }] } },
             { "name": "Rejected", "label": "Rejected", "icon": "block", "color": "negative", "default": false, "filter": { "type": "group", "logic": "AND", "items": [{ "type": "condition", "column": "Progress", "operator": "eq", "value": "REJECTED" }] } }
         ]),
@@ -1044,8 +1044,8 @@ function initAppResourcesCodeConfig() {
         Reports: '',
         CustomUIName: '',
         ListViews: JSON.stringify([
-            { "name": "Open", "label": "Open Orders", "icon": "receipt_long", "color": "primary", "default": true, "filter": { "type": "group", "logic": "AND", "items": [{ "type": "condition", "column": "Progress", "operator": "in", "value": ["CREATED", "SENT", "ACKNOWLEDGED"] }] } },
-            { "name": "Receiving", "label": "Goods Receiving", "icon": "inventory_2", "color": "orange", "default": false, "filter": { "type": "group", "logic": "AND", "items": [{ "type": "condition", "column": "Progress", "operator": "in", "value": ["ACCEPTED", "GOODS_RECEIVING"] }] } },
+            { "name": "Open", "label": "Open Orders", "icon": "receipt_long", "color": "primary", "default": true, "permission": "any,send,acknowledge,accept,cancel", "filter": { "type": "group", "logic": "AND", "items": [{ "type": "condition", "column": "Progress", "operator": "in", "value": ["CREATED", "SENT", "ACKNOWLEDGED"] }] } },
+            { "name": "Receiving", "label": "Goods Receiving", "icon": "inventory_2", "color": "orange", "default": false, "permission": "accept", "filter": { "type": "group", "logic": "AND", "items": [{ "type": "condition", "column": "Progress", "operator": "in", "value": ["ACCEPTED", "GOODS_RECEIVING"] }] } },
             { "name": "Completed", "label": "Completed", "icon": "task_alt", "color": "positive", "default": false, "filter": { "type": "group", "logic": "AND", "items": [{ "type": "condition", "column": "Progress", "operator": "in", "value": ["GRN_GENERATED", "COMPLETED", "CLOSED"] }] } },
             { "name": "Cancelled", "label": "Cancelled", "icon": "block", "color": "negative", "default": false, "filter": { "type": "group", "logic": "AND", "items": [{ "type": "condition", "column": "Progress", "operator": "eq", "value": "CANCELLED" }] } }
         ]),
@@ -1151,8 +1151,8 @@ function initAppResourcesCodeConfig() {
         Reports: '',
         CustomUIName: '',
         ListViews: JSON.stringify([
-            { "name": "Drafts", "label": "In Progress", "icon": "edit_note", "color": "blue-grey", "default": true, "filter": { "type": "group", "logic": "AND", "items": [{ "type": "condition", "column": "Progress", "operator": "eq", "value": "DRAFT" }] } },
-            { "name": "Confirmed", "label": "Awaiting GRN", "icon": "task_alt", "color": "primary", "default": false, "filter": { "type": "group", "logic": "AND", "items": [{ "type": "condition", "column": "Progress", "operator": "eq", "value": "CONFIRMED" }] } },
+            { "name": "Drafts", "label": "In Progress", "icon": "edit_note", "color": "blue-grey", "default": true, "permission": "create", "filter": { "type": "group", "logic": "AND", "items": [{ "type": "condition", "column": "Progress", "operator": "eq", "value": "DRAFT" }] } },
+            { "name": "Confirmed", "label": "Awaiting GRN", "icon": "task_alt", "color": "primary", "default": false, "permission": "generateGRN", "filter": { "type": "group", "logic": "AND", "items": [{ "type": "condition", "column": "Progress", "operator": "eq", "value": "CONFIRMED" }] } },
             { "name": "GrnGenerated", "label": "GRN Generated", "icon": "receipt_long", "color": "positive", "default": false, "filter": { "type": "group", "logic": "AND", "items": [{ "type": "condition", "column": "Progress", "operator": "eq", "value": "GRN_GENERATED" }] } },
             { "name": "Cancelled", "label": "Cancelled", "icon": "block", "color": "negative", "default": false, "filter": { "type": "group", "logic": "AND", "items": [{ "type": "condition", "column": "Progress", "operator": "eq", "value": "CANCELLED" }] } }
         ]),
@@ -1239,7 +1239,7 @@ function initAppResourcesCodeConfig() {
         CustomUIName: '',
         ListViews: JSON.stringify([
             { "name": "Active", "label": "Valid Receipts", "icon": "fact_check", "color": "positive", "default": true, "filter": { "type": "group", "logic": "AND", "items": [{ "type": "condition", "column": "Status", "operator": "eq", "value": "Active" }] } },
-            { "name": "Invalidated", "label": "Invalidated", "icon": "block", "color": "negative", "default": false, "filter": { "type": "group", "logic": "AND", "items": [{ "type": "condition", "column": "Status", "operator": "eq", "value": "Inactive" }] } }
+            { "name": "Invalidated", "label": "Invalidated", "icon": "block", "color": "negative", "default": false, "permission": "invalidate", "filter": { "type": "group", "logic": "AND", "items": [{ "type": "condition", "column": "Status", "operator": "eq", "value": "Inactive" }] } }
         ])
     },
     {
@@ -1481,12 +1481,12 @@ function initAppResourcesCodeConfig() {
         ]), CustomUIName: '',
         ListViews: JSON.stringify([
             { "name": "Recent", "label": "Recent", "icon": "history", "color": "indigo-7", "default": true, "filter": { "type": "group", "logic": "AND", "items": [{ "type": "condition", "column": "Progress", "operator": "not_in", "value": ["DRAFT"] }] } },
-            { "name": "Drafts", "label": "My Drafts", "icon": "edit_note", "color": "grey-7", "default": false, "filter": { "type": "group", "logic": "AND", "items": [{ "type": "condition", "column": "Progress", "operator": "eq", "value": "DRAFT" }] } },
-            { "name": "PendingApproval", "label": "Awaiting Approval", "icon": "hourglass_top", "color": "warning", "default": false, "filter": { "type": "group", "logic": "AND", "items": [{ "type": "condition", "column": "Progress", "operator": "eq", "value": "PENDING_APPROVAL" }] } },
-            { "name": "NeedsRevision", "label": "Needs Revision", "icon": "rate_review", "color": "orange", "default": false, "filter": { "type": "group", "logic": "AND", "items": [{ "type": "condition", "column": "Progress", "operator": "eq", "value": "REVISION_REQUIRED" }] } },
+            { "name": "Drafts", "label": "My Drafts", "icon": "edit_note", "color": "grey-7", "default": false, "permission": "create", "filter": { "type": "group", "logic": "AND", "items": [{ "type": "condition", "column": "Progress", "operator": "eq", "value": "DRAFT" }] } },
+            { "name": "PendingApproval", "label": "Awaiting Approval", "icon": "hourglass_top", "color": "warning", "default": false, "permission": "approve", "filter": { "type": "group", "logic": "AND", "items": [{ "type": "condition", "column": "Progress", "operator": "eq", "value": "PENDING_APPROVAL" }] } },
+            { "name": "NeedsRevision", "label": "Needs Revision", "icon": "rate_review", "color": "orange", "default": false, "permission": "create", "filter": { "type": "group", "logic": "AND", "items": [{ "type": "condition", "column": "Progress", "operator": "eq", "value": "REVISION_REQUIRED" }] } },
             { "name": "Approved", "label": "Approved", "icon": "task_alt", "color": "positive", "default": false, "filter": { "type": "group", "logic": "AND", "items": [{ "type": "condition", "column": "Progress", "operator": "eq", "value": "APPROVED" }] } },
             { "name": "PartiallyDelivered", "label": "Partially Delivered", "icon": "incomplete_circle", "color": "info", "default": false, "filter": { "type": "group", "logic": "AND", "items": [{ "type": "condition", "column": "Progress", "operator": "eq", "value": "PARTIALLY_DELIVERED" }] } },
-            { "name": "PendingCompletion", "label": "Pending Completion", "icon": "pending_actions", "color": "primary", "default": false, "filter": { "type": "group", "logic": "AND", "items": [{ "type": "condition", "column": "Progress", "operator": "in", "value": ["APPROVED", "PARTIALLY_DELIVERED"] }] } },
+            { "name": "PendingCompletion", "label": "Pending Completion", "icon": "pending_actions", "color": "primary", "default": false, "permission": "any,markDelivered,reallocate", "filter": { "type": "group", "logic": "AND", "items": [{ "type": "condition", "column": "Progress", "operator": "in", "value": ["APPROVED", "PARTIALLY_DELIVERED"] }] } },
             { "name": "Delivered", "label": "Delivered", "icon": "local_shipping", "color": "teal-7", "default": false, "filter": { "type": "group", "logic": "AND", "items": [{ "type": "condition", "column": "Progress", "operator": "eq", "value": "DELIVERED" }] } },
             { "name": "Rejected", "label": "Rejected", "icon": "block", "color": "negative", "default": false, "filter": { "type": "group", "logic": "AND", "items": [{ "type": "condition", "column": "Progress", "operator": "eq", "value": "REJECTED" }] } }
         ]),
@@ -1710,7 +1710,7 @@ function initAppResourcesCodeConfig() {
         ListViews: JSON.stringify([
             { "name": "Recent", "label": "Recent", "icon": "history", "color": "indigo-7", "default": true, "filter": { "type": "group", "logic": "AND", "items": [{ "type": "condition", "column": "Status", "operator": "eq", "value": "Active" }, { "type": "condition", "column": "Progress", "operator": "not_in", "value": ["CANCELLED"] }] } },
             { "name": "Invoiceable", "label": "Invoiceable", "icon": "receipt_long", "color": "warning", "default": false, "filter": { "type": "group", "logic": "AND", "items": [{ "type": "condition", "column": "Status", "operator": "eq", "value": "Active" }, { "type": "condition", "column": "Progress", "operator": "eq", "value": "PENDING_INVOICE_GENERATION" }] } },
-            { "name": "InvoiceableOutlets", "label": "Invoiceable Outlets", "icon": "request_quote", "color": "warning", "default": false, "filter": { "type": "group", "logic": "AND", "items": [{ "type": "condition", "column": "Progress", "operator": "eq", "value": "PENDING_INVOICE_GENERATION" }] } },
+            { "name": "InvoiceableOutlets", "label": "Invoiceable Outlets", "icon": "request_quote", "color": "warning", "default": false, "permission": "create", "filter": { "type": "group", "logic": "AND", "items": [{ "type": "condition", "column": "Progress", "operator": "eq", "value": "PENDING_INVOICE_GENERATION" }] } },
             { "name": "Completed", "label": "Completed", "icon": "task_alt", "color": "positive", "default": false, "filter": { "type": "group", "logic": "AND", "items": [{ "type": "condition", "column": "Progress", "operator": "eq", "value": "INVOICE_GENERATED" }] } },
             { "name": "Cancelled", "label": "Cancelled", "icon": "block", "color": "negative", "default": false, "filter": { "type": "group", "logic": "AND", "items": [{ "type": "condition", "column": "Progress", "operator": "eq", "value": "CANCELLED" }] } }
         ]),

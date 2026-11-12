@@ -1646,6 +1646,23 @@
       if (!view.color || view.color === 'primary') delete view.color;
       if (view.default !== true) delete view.default;
       if (view.count !== true && view.count !== false) delete view.count;
+      if (Array.isArray(view.permission) && view.permission.length && view.permission.every(function (action) {
+        return typeof action === 'string' && !!action.trim();
+      }) && !(view.permission.length === 1 && ['all', 'any'].includes(view.permission[0].trim().toLowerCase()))) {
+        view.permission = view.permission.map(function (action) { return action.trim(); }).join(',');
+      }
+      if (isObject(view.permission)) {
+        Object.keys(view.permission).forEach(function (resource) {
+          const actions = view.permission[resource];
+          if (Array.isArray(actions) && actions.length && actions.every(function (action) {
+            return typeof action === 'string' && !!action.trim();
+          }) && !(actions.length === 1 && ['all', 'any'].includes(actions[0].trim().toLowerCase()))) {
+            view.permission[resource] = actions.map(function (action) { return action.trim(); }).join(',');
+          } else if (typeof actions === 'string' && actions.includes(',')) {
+            view.permission[resource] = actions.split(',').map(function (action) { return action.trim(); }).join(',');
+          }
+        });
+      }
       if (typeof view.permission === 'string' && view.permission.includes(',')) {
         view.permission = view.permission.split(',').map(function (action) { return action.trim(); }).join(',');
       }
