@@ -912,14 +912,15 @@
           '<button type="button" class="button secondary small" data-action="remove-target-query" data-query-key="' +
           esc(key) + '" aria-label="Remove query value">×</button></div>';
       }).join('');
+      const actionsDisabled = state.draft.actions === false;
       const actions = isObject(state.draft.actions) ? state.draft.actions : {};
       const actionNames = Array.isArray(currentResource().additionalActions) ? currentResource().additionalActions : [];
       const actionOptions = actionNames.map(function (action) {
         return '<option value="' + esc(action) + '">' + esc(action) + '</option>';
       }).join('') || '<option value="" disabled>No actions configured</option>';
       const targetSelect = '<select id="targetMode">' +
-        options(['default', 'false', 'action', 'object'], mode,
-          ['Default · View', 'No row click', 'Named action', 'Object target']) + '</select>';
+        options(['default', 'view', 'false', 'action', 'object'], mode,
+          ['Automatic · Based on actions', 'View', 'No row click', 'Named action', 'Object target']) + '</select>';
       const actionField = mode === 'action' ? fieldControl(
         'Action name',
         'Action on this resource, such as edit, add, or approve.',
@@ -976,17 +977,26 @@
       }
       const sizeInput = '<select data-bind-path="actions.size" data-kind="optional">' +
         options(sizes, savedSize === 'md' ? '' : savedSize, sizeLabels) + '</select>';
+      const savedMax = actions.max == null || Number(actions.max) === 3 ? '' : actions.max;
+      const maxInput = '<input type="number" min="0" step="1" data-bind-path="actions.max" ' +
+        'data-kind="optional-number" value="' + esc(savedMax) + '" placeholder="3">';
+      const actionToggle = '<div class="field wide"><div class="check-field">' +
+        '<input type="checkbox" data-bind-path="actions" data-kind="actions-enabled"' +
+        checked(!actionsDisabled) + '><label>Show inline actions</label></div>' +
+        '<span class="mini-help">Turn this off to hide action buttons for this view.</span></div>';
       return '<div class="form-grid">' +
         fieldControl(
           'Row click target',
-          'Missing or true opens View. False stops the click. A string names an action.',
+          'Automatic turns off row clicks when buttons show. With no buttons, it opens View. A set target always wins.',
           targetSelect,
           'span-two'
         ) +
         actionField + destination + queryBuilder +
         '</div><div class="rule-divider"></div><div class="builder-head"><div><h3 class="builder-title">Inline actions</h3>' +
         '<p class="builder-note">These settings change actions already defined for this resource.</p>' +
-        '</div></div><div class="form-grid">' +
+        '</div></div><div class="form-grid">' + actionToggle +
+        '</div><div id="inlineActionFields"' + (actionsDisabled ? ' class="hidden"' : '') +
+        '><div class="form-grid">' +
         fieldControl(
           'Show only these actions',
           'Use exact action names, one per line. This list sets button order; blank keeps AdditionalActions config order. Only eligible actions show.',
@@ -999,27 +1009,29 @@
           'Choose a standard Quasar size. md is the default.',
           sizeInput
         ) +
-        '</div>';
+        fieldControl('Maximum buttons', 'Default is 3. Use 0 to hide all buttons.', maxInput) +
+        '</div></div>';
     }
 
     function renderItemPanel() {
       const item = isObject(state.draft.item) ? state.draft.item : {};
-      const layout = layoutField(item, 'layout', 'label,caption', 'Main layout uses label and caption slots.');
+      const editorItem = { ...item, layout: item.layout ?? 'caption,label' };
+      const layout = layoutField(editorItem, 'layout', 'caption,label', 'Main layout uses caption and label slots.');
       const metaLayout = layoutField(item, 'metaLayout', 'chip,caption,label', 'Meta layout uses chip, label, and caption slots.');
       const labels = templateField(
         'labels',
         'Labels',
-        'Add one template for each label slot. Join fields in one input, such as {Code} - {Name}.',
+        'Leave this blank for the automatic label. Add a template to set it yourself.',
         item.labels,
-        '{Code} - {Name}',
+        'Automatic: Name, first parent Name, then Code with Date',
         true
       );
       const captions = templateField(
         'captions',
         'Captions',
-        'Add one template for each caption slot. Join fields in one input, such as {Code} - {Name}.',
+        'Leave this blank for the automatic caption. Add a template to set it yourself.',
         item.captions,
-        '{Code} - {Name}',
+        'Automatic: Username * Date, Date, Username, Progress, then Code',
         true
       );
       const metaChip = templateField(
@@ -1497,6 +1509,18 @@
           return null;
         }
       }
+      if (isObject(view.actions) && view.actions.max != null) {
+        const max = Number(view.actions.max);
+        if ((typeof view.actions.max !== 'number' && typeof view.actions.max !== 'string') ||
+          (typeof view.actions.max === 'string' && !view.actions.max.trim()) ||
+          !Number.isInteger(max) || max < 0) {
+          showError('actions.max must be a whole number of 0 or more.');
+          state.activeTab = 'target';
+          renderEditor();
+          return null;
+        }
+        view.actions.max = max;
+      }
       if (view.permission != null && !validPermission(view.permission)) {
         showError('Permission must be an action, a valid all/any list, or a resource-to-actions map.');
         state.activeTab = 'basic';
@@ -1716,9 +1740,11 @@
         if (!Array.isArray(view.actions.exclude) || !view.actions.exclude.length) delete view.actions.exclude;
         if (view.actions.dense !== false) delete view.actions.dense;
         if (!view.actions.size || view.actions.size === 'md') delete view.actions.size;
+        if (view.actions.max == null || Number(view.actions.max) === 3) delete view.actions.max;
         if (!Object.keys(view.actions).length) delete view.actions;
       }
-      if (view.target === true || view.target === 'view' || view.target === '' || view.target == null) delete view.target;
+      if (view.target === 'view') view.target = true;
+      if (view.target === '' || view.target == null) delete view.target;
       if (isObject(view.target)) {
         if (isObject(view.target.query) && [Object.prototype, null].includes(Object.getPrototypeOf(view.target.query))) {
           const query = Object.create(null);
@@ -1751,6 +1777,10 @@
         if (typeof item[key] === 'string') {
           item[key] = item[key].split(',').map(function (part) { return part.trim(); }).join(',');
         }
+      });
+      if (item.layout == null || item.layout === 'caption,label') delete item.layout;
+      ['labels', 'captions'].forEach(function (key) {
+        if (item[key] == null) delete item[key];
       });
       ['labels', 'captions', 'metaChip', 'metaLabel', 'metaCaption'].forEach(function (key) {
         if (Array.isArray(item[key]) && item[key].length &&
@@ -1878,6 +1908,7 @@
 
     function targetMode(target) {
       if (target === false) return 'false';
+      if (target === true || target === 'view') return 'view';
       if (typeof target === 'string') return 'action';
       if (isObject(target)) return 'object';
       return 'default';
@@ -1916,6 +1947,12 @@
       } else if (kind === 'paginate-flag') {
         if (control.checked) setPath(state.draft, path, null, true);
         else setPath(state.draft, path, false, false);
+      } else if (kind === 'actions-enabled') {
+        if (control.checked) setPath(state.draft, path, null, true);
+        else setPath(state.draft, path, false, false);
+        renderEditor();
+        updatePreviewOnly();
+        return;
       } else if (kind === 'actions-dense') {
         if (control.checked) setPath(state.draft, path, null, true);
         else setPath(state.draft, path, false, false);
@@ -2182,6 +2219,7 @@
         updatePreviewOnly();
       } else if (control.id === 'targetMode') {
         if (control.value === 'default') delete state.draft.target;
+        if (control.value === 'view') state.draft.target = true;
         if (control.value === 'false') state.draft.target = false;
         if (control.value === 'action') state.draft.target = '';
         if (control.value === 'object') state.draft.target = { resource: '', action: '', code: '' };
