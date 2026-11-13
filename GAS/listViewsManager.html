@@ -1017,7 +1017,7 @@
       const item = isObject(state.draft.item) ? state.draft.item : {};
       const editorItem = { ...item, layout: item.layout ?? 'caption,label' };
       const layout = layoutField(editorItem, 'layout', 'caption,label', 'Main layout uses caption and label slots.');
-      const metaLayout = layoutField(item, 'metaLayout', 'chip,caption,label', 'Meta layout uses chip, label, and caption slots.');
+      const metaLayout = layoutField(item, 'metaLayout', 'chip,caption,label', 'Meta layout uses chip, badge, label, and caption slots.');
       const labels = templateField(
         'labels',
         'Labels',
@@ -1048,6 +1048,13 @@
         item.metaLabel,
         '{Code} - {Name}'
       );
+      const metaBadge = templateField(
+        'metaBadge',
+        'Meta badges',
+        'One input fills the next badge slot. Add fields from the menu or type {Code} - {Name}.',
+        item.metaBadge,
+        '{Code} - {Name}'
+      );
       const metaCaption = templateField(
         'metaCaption',
         'Meta captions',
@@ -1055,13 +1062,43 @@
         item.metaCaption,
         '{Code} - {Name}'
       );
+      const hasEmptyText = Object.prototype.hasOwnProperty.call(item, 'emptyText');
+      const hideEmptyText = hasEmptyText && item.emptyText === '';
+      const emptyText = fieldControl(
+        'Empty text',
+        'Leave blank to use AppList default. Turn on Hide empty message to show no text.',
+        '<input type="text" data-bind-path="item.emptyText" data-kind="optional-text" value="' +
+          esc(item.emptyText || '') + '" placeholder="Leave blank for default"' + (hideEmptyText ? ' disabled' : '') + '>' +
+          '<div class="check-field"><input type="checkbox" data-action="empty-text-mode"' + checked(hideEmptyText) +
+          '><label>Hide empty message</label></div>'
+      );
+      const emptySearchText = fieldControl(
+        'Search empty text',
+        'Use {$term} to show the typed search text. This message is used only when a search has no rows.',
+        '<input type="text" data-bind-path="item.emptySearchText" data-kind="optional-text" value="' +
+          esc(item.emptySearchText || '') + '" placeholder="Leave blank to use Empty text">'
+      );
+      const chipOutline = fieldControl(
+        'Chip outline',
+        'Choose the chip outline style. Default leaves AppList in control.',
+        '<select data-action="chip-outline">' +
+          options(['default', 'outlined', 'solid'], item.chipOutline === true ? 'outlined' :
+            (item.chipOutline === false ? 'solid' : 'default'), ['AppList default', 'Outlined', 'Solid']) +
+          '</select>'
+      );
       return '<div class="notice">These templates fill AppList slots. Use {Field} syntax, or pick a field from the menu to add it at the cursor.</div>' +
         '<div class="form-grid" style="margin-top:13px">' +
         layout + metaLayout +
-        labels + captions + metaChip + metaLabel + metaCaption + '</div>' +
+        labels + captions + metaChip + metaBadge + metaLabel + metaCaption + emptyText + emptySearchText + chipOutline + '</div>' +
         styleEditor('icon', 'Row icon', 'Icon name shown on the row.') +
+        styleEditor('iconColor', 'Icon color', 'Quasar color name used for the row icon.') +
         styleEditor('color', 'Row color', 'Quasar color name such as primary, positive, or red-6.') +
-        styleEditor('highlight', 'Highlight color', 'A non-empty value turns highlighting on.');
+        styleEditor('highlight', 'Highlight color', 'A non-empty value turns highlighting on.') +
+        styleEditor('metaColor', 'Meta color', 'Quasar color name used by the meta area.') +
+        styleEditor('chipColor', 'Chip color', 'Quasar color name used by chips.') +
+        styleEditor('badgeColor', 'Badge color', 'Quasar color name used by badges.') +
+        styleEditor('emptyIcon', 'Empty icon', 'Icon name shown when the list has no rows.') +
+        styleEditor('emptyIconColor', 'Empty icon color', 'Quasar color name used by the empty icon.');
     }
 
     function layoutField(item, key, placeholder, hint) {
@@ -1070,7 +1107,7 @@
       const label = key === 'layout' ? 'Hide main text slots' : 'Hide all meta slots';
       const emptyHint = key === 'layout'
         ? 'Saves layout: []. AppList hides main labels and captions; meta content is unchanged.'
-        : 'Saves metaLayout: []. AppList hides chips, meta labels, and meta captions; main text is unchanged.';
+        : 'Saves metaLayout: []. AppList hides chips, badges, meta labels, and meta captions; main text is unchanged.';
       const control = '<input type="text" data-bind-path="item.' + key + '" data-kind="csv" ' +
         'value="' + esc(listText(value)) + '" placeholder="' + esc(placeholder) + '">' +
         '<div class="check-field"><input type="checkbox" data-action="empty-layout" data-key="' + key +
@@ -1156,7 +1193,12 @@
 
     function mapRows(key, map) {
       const entries = isObject(map) ? Object.keys(map) : [];
-      const resultLabels = { icon: 'Icon name', color: 'Color name', highlight: 'Highlight color' };
+      const resultLabels = {
+        icon: 'Icon name', emptyIcon: 'Icon name',
+        color: 'Color name', iconColor: 'Color name', metaColor: 'Color name',
+        chipColor: 'Color name', badgeColor: 'Color name', emptyIconColor: 'Color name',
+        highlight: 'Highlight color'
+      };
       const resultLabel = resultLabels[key] || 'Map result';
       const resultHint = key === 'icon'
         ? 'Icon name used when the row value matches.'
@@ -1558,7 +1600,7 @@
     function validateStyles(item) {
       if (!isObject(item)) return '';
       const mainLayouts = ['label', 'caption'];
-      const metaLayouts = ['chip', 'label', 'caption'];
+      const metaLayouts = ['chip', 'badge', 'label', 'caption'];
       for (const key of ['layout', 'metaLayout']) {
         if (item[key] == null) continue;
         if (item[key] === '' || (Array.isArray(item[key]) && !item[key].length)) continue;
@@ -1568,14 +1610,14 @@
           return key + ' only supports ' + allowed.join(' and ') + '.';
         }
       }
-      for (const key of ['labels', 'captions', 'metaChip', 'metaLabel', 'metaCaption']) {
+      for (const key of ['labels', 'captions', 'metaChip', 'metaBadge', 'metaLabel', 'metaCaption']) {
         if (item[key] == null) continue;
         const values = Array.isArray(item[key]) ? item[key] : [item[key]];
         if (values.some(function (value) {
           return value !== null && value !== false && typeof value !== 'string';
         })) return key + ' needs text, false, or null values.';
       }
-      for (const key of ['icon', 'color', 'highlight']) {
+      for (const key of ['icon', 'iconColor', 'color', 'highlight', 'metaColor', 'chipColor', 'badgeColor', 'emptyIcon', 'emptyIconColor']) {
         if (isObject(item[key])) {
           if (!String(item[key].column || '').trim()) return 'The ' + key + ' map needs a source field.';
           if (!isObject(item[key].map)) return 'The ' + key + ' map needs a value map object.';
@@ -1586,6 +1628,12 @@
             return 'The ' + key + ' map default must be text.';
           }
         }
+      }
+      for (const key of ['emptyText', 'emptySearchText']) {
+        if (item[key] != null && typeof item[key] !== 'string') return key + ' must be text.';
+      }
+      if (item.chipOutline != null && typeof item.chipOutline !== 'boolean') {
+        return 'chipOutline must be true or false.';
       }
       return '';
     }
@@ -1743,8 +1791,8 @@
         if (view.actions.max == null || Number(view.actions.max) === 3) delete view.actions.max;
         if (!Object.keys(view.actions).length) delete view.actions;
       }
-      if (view.target === 'view') view.target = true;
-      if (view.target === '' || view.target == null) delete view.target;
+      if (view.target === 'view' || view.target === null) view.target = true;
+      if (view.target === '') delete view.target;
       if (isObject(view.target)) {
         if (isObject(view.target.query) && [Object.prototype, null].includes(Object.getPrototypeOf(view.target.query))) {
           const query = Object.create(null);
@@ -1782,13 +1830,13 @@
       ['labels', 'captions'].forEach(function (key) {
         if (item[key] == null) delete item[key];
       });
-      ['labels', 'captions', 'metaChip', 'metaLabel', 'metaCaption'].forEach(function (key) {
+      ['labels', 'captions', 'metaChip', 'metaBadge', 'metaLabel', 'metaCaption'].forEach(function (key) {
         if (Array.isArray(item[key]) && item[key].length &&
           item[key].every(function (value) { return typeof value === 'string' && value.indexOf(',') < 0 && value !== ''; })) {
           item[key] = item[key].join(',');
         }
       });
-      ['icon', 'color', 'highlight'].forEach(function (key) {
+      ['icon', 'iconColor', 'color', 'highlight', 'metaColor', 'chipColor', 'badgeColor', 'emptyIcon', 'emptyIconColor'].forEach(function (key) {
         if (item[key] === '') delete item[key];
         if (isObject(item[key])) {
           const style = item[key];
@@ -1800,6 +1848,8 @@
           if (!style.default) delete style.default;
         }
       });
+      if (item.emptyText == null) delete item.emptyText;
+      if (item.emptySearchText == null || item.emptySearchText === '') delete item.emptySearchText;
     }
 
     function save() {
@@ -1908,7 +1958,7 @@
 
     function targetMode(target) {
       if (target === false) return 'false';
-      if (target === true || target === 'view') return 'view';
+      if (target === true || target === 'view' || target === null) return 'view';
       if (typeof target === 'string') return 'action';
       if (isObject(target)) return 'object';
       return 'default';
@@ -1969,6 +2019,9 @@
       } else if (kind === 'optional-number') {
         if (value === '') setPath(state.draft, path, null, true);
         else setPath(state.draft, path, Number(value), false);
+      } else if (kind === 'optional-text') {
+        if (value === '') setPath(state.draft, path, null, true);
+        else setPath(state.draft, path, value, false);
       } else if (kind === 'csv') {
         if (!value.trim()) setPath(state.draft, path, null, true);
         else setPath(state.draft, path, value.trim(), false);
@@ -2235,6 +2288,17 @@
         const path = 'item.' + control.dataset.key;
         if (control.checked) setPath(state.draft, path, [], false);
         else setPath(state.draft, path, null, true);
+        renderEditor();
+        updatePreviewOnly();
+      } else if (control.matches('[data-action="empty-text-mode"]')) {
+        if (control.checked) setPath(state.draft, 'item.emptyText', '', false);
+        else setPath(state.draft, 'item.emptyText', null, true);
+        renderEditor();
+        updatePreviewOnly();
+      } else if (control.matches('[data-action="chip-outline"]')) {
+        state.draft.item = isObject(state.draft.item) ? state.draft.item : {};
+        if (control.value === 'default') delete state.draft.item.chipOutline;
+        else state.draft.item.chipOutline = control.value === 'outlined';
         renderEditor();
         updatePreviewOnly();
       } else if (control.matches('[data-action="action-suggestion"]')) {
