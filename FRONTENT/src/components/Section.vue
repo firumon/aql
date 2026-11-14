@@ -5,7 +5,7 @@
        section identity, so a placeholder that re-resolves also animates. -->
   <Transition v-if="permitted" name="aql-page-turn" mode="out-in">
     <!-- Loading state while resolution is in progress -->
-    <div v-if="!ready" key="loading" class="flex flex-center q-pa-md">
+    <div v-if="!ready || !settled" key="loading" class="flex flex-center q-pa-md">
       <q-spinner-dots color="primary" size="32px" />
     </div>
 
@@ -41,7 +41,7 @@
 </template>
 
 <script setup>
-import { computed, useAttrs } from 'vue'
+import { computed, useAttrs, provide } from 'vue'
 import { useSectionResolver } from 'src/composables/resources/useSectionResolver'
 
 defineOptions({ name: 'AqlSection', inheritAttrs: false })
@@ -56,7 +56,13 @@ const attrs = useAttrs()
 // This single object is everything the resolver needs to perform its lookup.
 const preparedProps = computed(() => ({ ...attrs, section: props.section }))
 
-const { ready, permitted, resolvedComponent, finalProps } = useSectionResolver(preparedProps)
+const { ready, settled, permitted, resolvedComponent, finalProps } = useSectionResolver(preparedProps)
+
+provide('sectionResolution', {
+  settled,
+  resource: computed(() => preparedProps.value?.resource || ''),
+  scope: computed(() => preparedProps.value?.scope || '')
+})
 
 const sectionWrapperClass = computed(() => {
   const cfg = finalProps.value || {}

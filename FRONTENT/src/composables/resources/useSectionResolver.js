@@ -1,4 +1,4 @@
-import { ref, watch, computed, shallowRef, markRaw, inject } from 'vue'
+import { ref, watch, computed, shallowRef, markRaw, inject, onScopeDispose } from 'vue'
 import { toPascalCase } from 'src/utils/appHelpers'
 import { resolvePlaceholderProps } from 'src/utils/placeholderProps'
 import { evalPermissionRules } from 'src/composables/resources/useResourceConfig'
@@ -89,19 +89,25 @@ export function useSectionResolver(preparedProps, defaultComponent = null) {
   const resourceRecord = inject('resourceRecord', null)
   const pageState      = inject('pageState', null)
 
-  // Live computed, not a snapshot assigned inside the watch: the watch only re-runs when
-  // one of the five lookup keys changes, so a snapshot would freeze every prop.
+  const lookupKey = computed(() => {
+    const p = preparedProps.value || {}
+    return `${p.section ?? ''}|${p.page ?? ''}|${p.scope ?? ''}|${p.resource ?? ''}|${p.uiName ?? ''}`
+  })
+
+  const resolvedKey = ref(null)
+  const settled = computed(() => resolvedKey.value !== null && resolvedKey.value === lookupKey.value)
+
+  let isDisposed = false
+  onScopeDispose(() => {
+    isDisposed = true
+  })
+
   const finalProps = computed(() => {
     const current = preparedProps.value || {}
-    // Props addressed to THIS section by an ancestor — `PropsSection` (broadcast to
-    // every section) then `PropsPageHeader` (this one only) — spread flat, so the
-    // section reads `props.title`, not `props.PropsPageHeader.title`. The JS modifier
-    // still lands last: it is the closest, most specific layer and stays final.
-    // See src/utils/placeholderProps.js.
     const placeholder = resolvePlaceholderProps(current, current.section, 'Section')
-    const applied = typeof modifier.value === 'function'
+    const applied = settled.value && typeof modifier.value === 'function'
       ? modifier.value(current, { pageState, resourceRecord, resourceConfig })
-      : modifier.value
+      : (settled.value ? modifier.value : null)
     if (!placeholder && !applied) return current
     return { ...current, ...placeholder, ...applied }
   })
@@ -122,38 +128,21 @@ export function useSectionResolver(preparedProps, defaultComponent = null) {
   let resolveToken = 0
 
   watch(
-    // MUST return a primitive. A getter returning an array literal builds a new
-    // reference on every evaluation, and `watch` compares sources with Object.is
-    // (it does not deep-compare a getter's array result) — so the callback would
-    // re-fire on every reactive read of `preparedProps`, which wraps useAttrs().
-    // That re-render feeds the next attrs change: an unbounded resolve loop that
-    // thrashes memory and pins the tab. A joined string only changes when one of
-    // the five lookup segments genuinely changes.
-    () => {
-      const p = preparedProps.value || {}
-      return `${p.section ?? ''}|${p.page ?? ''}|${p.scope ?? ''}|${p.resource ?? ''}|${p.uiName ?? ''}`
-    },
-    async () => {
+    lookupKey,
+    async (key) => {
       const token = ++resolveToken
-      // Read the live object rather than destructuring the watch source: the
-      // source is now a string, and watch callbacks are not reactivity-tracked.
       const { section, page, scope, resource, uiName } = preparedProps.value || {}
 
-      // Resolution writes into these locals and commits ONCE at the end. Nothing is
-      // nulled up front: clearing `resolvedComponent` mid-scan unmounts the live
-      // component and rebuilds any portal it renders. Committing once means an
-      // unchanged component is re-assigned to the same object, `shallowRef` sees no
-      // change, and the existing DOM (and its portals) survives untouched.
       let nextComponent = null
       let nextModifier  = null
 
-      // Spinner only on the very first resolve; later key changes keep the previous
-      // section on screen until its replacement is ready.
       if (!resolvedComponent.value) ready.value = false
 
       function commit () {
+        if (isDisposed || token !== resolveToken) return
         modifier.value          = nextModifier
         resolvedComponent.value = nextComponent
+        resolvedKey.value       = key
         ready.value             = true
       }
 
@@ -309,5 +298,5 @@ export function useSectionResolver(preparedProps, defaultComponent = null) {
     { immediate: true }
   )
 
-  return { ready, permitted, resolvedComponent, finalProps }
+  return { ready, settled, permitted, resolvedComponent, finalProps }
 }

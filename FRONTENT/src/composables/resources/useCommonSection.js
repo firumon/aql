@@ -26,9 +26,11 @@ export function useCommonSection({ sectionName, page, preparedProps = {}, evalua
     }
   })
 
-  const { ready, resolvedComponent, finalProps: resolvedFinalProps } = useSectionResolver(resolverProps)
+  const { ready, settled, resolvedComponent, finalProps: resolvedFinalProps } = useSectionResolver(resolverProps)
 
-  // Helper function to evaluate dynamic config/modifier values
+  const safeResolvedComponent = computed(() => (settled.value ? resolvedComponent.value : null))
+  const sectionsReady = computed(() => Boolean(ready.value && settled.value))
+
   function evaluate(val) {
     if (typeof val === 'function') {
       return val(resourceRecord, resourceConfig)
@@ -36,7 +38,6 @@ export function useCommonSection({ sectionName, page, preparedProps = {}, evalua
     return val
   }
 
-  // Post-process the resolved final props to handle function evaluations (e.g. evaluateKeys)
   const finalProps = computed(() => {
     const rawProps = resolvedFinalProps.value || {}
     const evaluated = {}
@@ -54,8 +55,8 @@ export function useCommonSection({ sectionName, page, preparedProps = {}, evalua
   })
 
   return {
-    resolvedComponent,
-    sectionsReady: ready,
+    resolvedComponent: safeResolvedComponent,
+    sectionsReady,
     resourceConfig,
     resourceRecord,
     evaluate,
