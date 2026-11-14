@@ -1017,7 +1017,7 @@
       const item = isObject(state.draft.item) ? state.draft.item : {};
       const editorItem = { ...item, layout: item.layout ?? 'caption,label' };
       const layout = layoutField(editorItem, 'layout', 'caption,label', 'Main layout uses caption and label slots.');
-      const metaLayout = layoutField(item, 'metaLayout', 'chip,caption,label', 'Meta layout uses chip, badge, label, and caption slots.');
+      const metaLayout = layoutField(item, 'metaLayout', 'label,caption', 'Default: label,caption. Chip and badge slots are added when supplied.');
       const labels = templateField(
         'labels',
         'Labels',
@@ -1062,22 +1062,6 @@
         item.metaCaption,
         '{Code} - {Name}'
       );
-      const hasEmptyText = Object.prototype.hasOwnProperty.call(item, 'emptyText');
-      const hideEmptyText = hasEmptyText && item.emptyText === '';
-      const emptyText = fieldControl(
-        'Empty text',
-        'Leave blank to use AppList default. Turn on Hide empty message to show no text.',
-        '<input type="text" data-bind-path="item.emptyText" data-kind="optional-text" value="' +
-          esc(item.emptyText || '') + '" placeholder="Leave blank for default"' + (hideEmptyText ? ' disabled' : '') + '>' +
-          '<div class="check-field"><input type="checkbox" data-action="empty-text-mode"' + checked(hideEmptyText) +
-          '><label>Hide empty message</label></div>'
-      );
-      const emptySearchText = fieldControl(
-        'Search empty text',
-        'Use {$term} to show the typed search text. This message is used only when a search has no rows.',
-        '<input type="text" data-bind-path="item.emptySearchText" data-kind="optional-text" value="' +
-          esc(item.emptySearchText || '') + '" placeholder="Leave blank to use Empty text">'
-      );
       const chipOutline = fieldControl(
         'Chip outline',
         'Choose the chip outline style. Default leaves AppList in control.',
@@ -1089,16 +1073,14 @@
       return '<div class="notice">These templates fill AppList slots. Use {Field} syntax, or pick a field from the menu to add it at the cursor.</div>' +
         '<div class="form-grid" style="margin-top:13px">' +
         layout + metaLayout +
-        labels + captions + metaChip + metaBadge + metaLabel + metaCaption + emptyText + emptySearchText + chipOutline + '</div>' +
+        labels + captions + metaChip + metaBadge + metaLabel + metaCaption + chipOutline + '</div>' +
         styleEditor('icon', 'Row icon', 'Icon name shown on the row.') +
         styleEditor('iconColor', 'Icon color', 'Quasar color name used for the row icon.') +
         styleEditor('color', 'Row color', 'Quasar color name such as primary, positive, or red-6.') +
         styleEditor('highlight', 'Highlight color', 'A non-empty value turns highlighting on.') +
         styleEditor('metaColor', 'Meta color', 'Quasar color name used by the meta area.') +
         styleEditor('chipColor', 'Chip color', 'Quasar color name used by chips.') +
-        styleEditor('badgeColor', 'Badge color', 'Quasar color name used by badges.') +
-        styleEditor('emptyIcon', 'Empty icon', 'Icon name shown when the list has no rows.') +
-        styleEditor('emptyIconColor', 'Empty icon color', 'Quasar color name used by the empty icon.');
+        styleEditor('badgeColor', 'Badge color', 'Quasar color name used by badges.');
     }
 
     function layoutField(item, key, placeholder, hint) {
@@ -1155,12 +1137,12 @@
     function styleEditor(key, title, hint) {
       const item = isObject(state.draft.item) ? state.draft.item : {};
       const value = item[key];
-      const isMap = isObject(value);
-      const mode = state.styleModes[key] || (isMap ? 'map' : 'static');
+      const style = isObject(value) ? value : {};
+      const savedMode = !isObject(value) ? 'static' : (Object.hasOwn(style, 'map') ? 'map' : 'field');
+      const mode = state.styleModes[key] || savedMode;
       const staticValue = typeof value === 'string' ? value : '';
-      const mapValue = isMap ? value : {};
       const modeControl = '<select data-action="style-mode" data-key="' + key + '">' +
-        options(['static', 'map'], mode, ['One value', 'Map by field']) + '</select>';
+        options(['static', 'field', 'map'], mode, ['One value', 'Use field value', 'Map by field']) + '</select>';
       let editor = '';
       if (mode === 'static') {
         const input = '<input type="text" data-bind-path="item.' + key +
@@ -1169,34 +1151,35 @@
       } else {
         const source = fieldControl(
           'Source field',
-          'Field path whose value selects a map result.',
-          columnControl('item.' + key + '.column', mapValue.column)
+          mode === 'map' ? 'Field whose value selects a map result.' : 'Field whose text is used as the result.',
+          columnControl('item.' + key + '.column', style.column)
         );
         const defaultResult = fieldControl(
           'Default result',
           hint,
-          textControl('item.' + key + '.default', mapValue.default, 'No match gives blank')
+          textControl('item.' + key + '.default', style.default, 'Optional fallback', 'optional-text')
         );
-        editor = '<div class="style-config">' + source +
-          defaultResult + '</div><div class="map-head"><strong>Value map</strong>' +
-          '<button type="button" class="hint" title="Match a row value to a text result.">i</button>' +
-          '<button type="button" class="button secondary small" data-action="add-map" data-key="' + key + '">' +
-          '＋ Add value</button></div>' +
-          mapRows(key, mapValue.map);
+        editor = '<div class="style-config">' + source + defaultResult + '</div>';
+        if (mode === 'map') {
+          editor += '<div class="map-head"><strong>Value map</strong>' +
+            '<button type="button" class="hint" title="Match a row value to a text result.">i</button>' +
+            '<button type="button" class="button secondary small" data-action="add-map" data-key="' + key + '">' +
+            '＋ Add value</button></div>' + mapRows(key, style.map);
+        }
       }
       return '<div class="style-box"><h4>' + esc(title) +
         '</h4><div class="style-config"><div class="field">' +
         '<div class="field-head"><label>Value type</label>' +
-        '<button type="button" class="hint" title="Use one fixed result or a row field map.">i</button></div>' +
+        '<button type="button" class="hint" title="Use one value, read a field, or map a field to a result.">i</button></div>' +
         modeControl + '</div><div>' + editor + '</div></div></div>';
     }
 
     function mapRows(key, map) {
       const entries = isObject(map) ? Object.keys(map) : [];
       const resultLabels = {
-        icon: 'Icon name', emptyIcon: 'Icon name',
+        icon: 'Icon name',
         color: 'Color name', iconColor: 'Color name', metaColor: 'Color name',
-        chipColor: 'Color name', badgeColor: 'Color name', emptyIconColor: 'Color name',
+        chipColor: 'Color name', badgeColor: 'Color name',
         highlight: 'Highlight color'
       };
       const resultLabel = resultLabels[key] || 'Map result';
@@ -1617,20 +1600,21 @@
           return value !== null && value !== false && typeof value !== 'string';
         })) return key + ' needs text, false, or null values.';
       }
-      for (const key of ['icon', 'iconColor', 'color', 'highlight', 'metaColor', 'chipColor', 'badgeColor', 'emptyIcon', 'emptyIconColor']) {
-        if (isObject(item[key])) {
-          if (!String(item[key].column || '').trim()) return 'The ' + key + ' map needs a source field.';
-          if (!isObject(item[key].map)) return 'The ' + key + ' map needs a value map object.';
-          if (Object.keys(item[key].map).some(function (mapKey) { return typeof item[key].map[mapKey] !== 'string'; })) {
+      for (const key of ['icon', 'iconColor', 'color', 'highlight', 'metaColor', 'chipColor', 'badgeColor']) {
+        const style = item[key];
+        if (style == null || typeof style === 'string') continue;
+        if (!isObject(style)) return 'The ' + key + ' style needs text or a field setting.';
+        if (typeof style.column !== 'string' || !style.column.trim()) return 'The ' + key + ' style needs a source field.';
+        if (style.column.trim().split('.').some(function (part) {
+          return !part || ['__proto__', 'prototype', 'constructor'].includes(part);
+        })) return 'The ' + key + ' source field path is invalid.';
+        if (style.default != null && typeof style.default !== 'string') return 'The ' + key + ' default must be text.';
+        if (Object.hasOwn(style, 'map')) {
+          if (!isObject(style.map)) return 'The ' + key + ' map needs a value map object.';
+          if (Object.values(style.map).some(function (result) { return typeof result !== 'string'; })) {
             return 'Every ' + key + ' map result must be text.';
           }
-          if (item[key].default != null && typeof item[key].default !== 'string') {
-            return 'The ' + key + ' map default must be text.';
-          }
         }
-      }
-      for (const key of ['emptyText', 'emptySearchText']) {
-        if (item[key] != null && typeof item[key] !== 'string') return key + ' must be text.';
       }
       if (item.chipOutline != null && typeof item.chipOutline !== 'boolean') {
         return 'chipOutline must be true or false.';
@@ -1836,7 +1820,30 @@
           item[key] = item[key].join(',');
         }
       });
-      ['icon', 'iconColor', 'color', 'highlight', 'metaColor', 'chipColor', 'badgeColor', 'emptyIcon', 'emptyIconColor'].forEach(function (key) {
+      if (typeof item.metaLayout === 'string' && item.metaLayout) {
+        const templates = {};
+        for (const [kind, key] of [['label', 'metaLabel'], ['caption', 'metaCaption'], ['chip', 'metaChip'], ['badge', 'metaBadge']]) {
+          const value = item[key];
+          templates[kind] = Array.isArray(value) ? value : typeof value === 'string' ? value.split(',') : [];
+        }
+        const fallback = ['label', 'caption'];
+        if (item.metaChip != null) fallback.push('chip');
+        if (item.metaBadge != null) fallback.push('badge');
+        const layout = item.metaLayout.split(',');
+        if (layout.every(function (kind) { return Object.hasOwn(templates, kind); })) {
+          const visible = [layout, fallback].map(function (slots) {
+            const indexes = {};
+            return slots.flatMap(function (kind) {
+              const index = indexes[kind] || 0;
+              indexes[kind] = index + 1;
+              const value = templates[kind][index];
+              return value == null || value === false || value === '' ? [] : [kind + ':' + index];
+            });
+          });
+          if (JSON.stringify(visible[0]) === JSON.stringify(visible[1])) delete item.metaLayout;
+        }
+      }
+      ['icon', 'iconColor', 'color', 'highlight', 'metaColor', 'chipColor', 'badgeColor'].forEach(function (key) {
         if (item[key] === '') delete item[key];
         if (isObject(item[key])) {
           const style = item[key];
@@ -1845,11 +1852,10 @@
               if (!String(mapKey).trim()) delete style.map[mapKey];
             });
           }
-          if (!style.default) delete style.default;
+          if (style.default == null || style.default === '') delete style.default;
         }
       });
-      if (item.emptyText == null) delete item.emptyText;
-      if (item.emptySearchText == null || item.emptySearchText === '') delete item.emptySearchText;
+      ['emptyText', 'emptySearchText', 'emptyIcon', 'emptyIconColor'].forEach(key => delete item[key]);
     }
 
     function save() {
@@ -2172,8 +2178,14 @@
         state.styleModes[button.dataset.key] = button.value;
         const path = 'item.' + button.dataset.key;
         const current = getPath(state.draft, path);
-        if (button.value === 'map' && !isObject(current)) setPath(state.draft, path, { column: '', map: {} }, false);
-        if (button.value === 'static' && isObject(current)) setPath(state.draft, path, '', false);
+        if (button.value === 'static') {
+          if (typeof current !== 'string') setPath(state.draft, path, '', false);
+        } else {
+          const style = isObject(current) ? current : { column: '' };
+          if (button.value === 'field') delete style.map;
+          if (button.value === 'map' && !isObject(style.map)) style.map = {};
+          setPath(state.draft, path, style, false);
+        }
         renderEditor();
         updatePreviewOnly();
       } else if (action === 'add-map') {
@@ -2288,11 +2300,6 @@
         const path = 'item.' + control.dataset.key;
         if (control.checked) setPath(state.draft, path, [], false);
         else setPath(state.draft, path, null, true);
-        renderEditor();
-        updatePreviewOnly();
-      } else if (control.matches('[data-action="empty-text-mode"]')) {
-        if (control.checked) setPath(state.draft, 'item.emptyText', '', false);
-        else setPath(state.draft, 'item.emptyText', null, true);
         renderEditor();
         updatePreviewOnly();
       } else if (control.matches('[data-action="chip-outline"]')) {
