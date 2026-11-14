@@ -1,6 +1,7 @@
 import { inject, computed } from 'vue'
 import { useAQLConfig } from 'src/_ui/AQL/composables/useAQLConfig'
 import { useAuth } from 'src/composables/core/useAuth'
+import { useRouteConfig } from 'src/composables/resources/useRouteConfig'
 import { useOutletResource } from 'src/_resource/Master/Outlets/composables/useOutletResource'
 import { useOutletPaymentIndex } from 'src/_resource/Operation/OutletPayments/composables/useOutletPaymentIndex'
 import { paymentModes } from 'src/_resource/Operation/OutletPayments/composables/useOutletPaymentProgress'
@@ -13,11 +14,13 @@ export function useOutletPaymentAddContext () {
   const pageState = inject('pageState', null)
   const ui = useAQLConfig()
   const { user } = useAuth()
+  const { query } = useRouteConfig()
   const { outletOptions } = useOutletResource()
   const index = useOutletPaymentIndex()
   const modes = computed(() => paymentModes())
 
   const outletCode = computed(() => String(pageState?.getRecord('OutletCode', 'OutletPayments') || '').trim())
+  const preferredInvoiceCode = computed(() => String(query.value?.invoiceCode || '').trim())
 
   const outletInvoices = computed(() => {
     if (!outletCode.value) return []
@@ -49,6 +52,7 @@ export function useOutletPaymentAddContext () {
     const nodes = buildOutletPaymentAllocationNodes(allocations, record, {
       actorName: user.value?.name,
       invoices,
+      selectedInvoiceCodes: pageState.getControls('SelectedInvoices', [], 'OutletPayments'),
       autoApprove
     })
 
@@ -76,6 +80,7 @@ export function useOutletPaymentAddContext () {
     getSuggestedOutlets,
     modes,
     outletInvoices,
+    preferredInvoiceCode,
     syncAllocations
   }
 }

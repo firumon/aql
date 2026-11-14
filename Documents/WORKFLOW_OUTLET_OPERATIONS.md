@@ -62,6 +62,7 @@ activity colors, and recent-stream lists keep their existing activity window.
 ### 3.2 Sales Visits & Shelf Audits (`OutletVisits`)
 
 The Today list shows active visits dated today or earlier. The oldest visit dates appear first.
+
 1. **Check-in**: Field representative checks in at the retail outlet via the PWA.
 2. **Visual Stock Audit**: Checks physical display quantity for each active SKU.
 3. **Refill Recommendation**: If stock is low or nearing stock-out, the visit automatically drafts an `OutletRestocks` request with suggested quantities.
@@ -70,6 +71,7 @@ The Today list shows active visits dated today or earlier. The oldest visit date
 ### 3.3 Refill Requests & Warehouse Allocation (`OutletRestocks`)
 
 Pending Completion shows approved and partly delivered requests in one list, with the oldest last status change first.
+
 1. **Creation**: Drafted from an outlet visit or created manually by sales operations.
 2. **Approval**: Operations manager reviews requested quantities against outlet sales velocity and credit status.
 3. **Stock Allocation**: Operations assigns specific warehouse storage bins (`WarehouseCode`, `StorageName`) for each SKU in `OutletRestockItems`.
@@ -87,6 +89,7 @@ Pending Completion shows approved and partly delivered requests in one list, wit
 ### 3.5 Sales Consumptions & Invoicing (`OutletConsumptionInvoices`)
 
 Due In 7 Days shows open invoices due from today through seven days from today, with the soonest due first.
+
 1. **Consumption Tracking**: Recorded during regular audit cycles by comparing opening balance + deliveries vs. ending shelf stock. The counted shelf quantity cannot be negative.
 2. **Invoice Generation**: Consumed items generate an `OutletConsumptionInvoices` record calculating wholesale price, discounts, and applicable UAE VAT (5%). In the wizard (ITEMS TO BILL step), lines are seeded via `seedInvoiceLines` grouping consumption items per SKU, preserving any manual additions (`_manualQty`) when ticking/unticking consumptions.
 3. **Invoice Issuance**: Invoice PDF is generated via the Reports system and dispatched to the outlet's accounting department.
@@ -99,8 +102,8 @@ Due In 7 Days shows open invoices due from today through seven days from today, 
 
 ### 3.7 Payment Collections & Settlement (`OutletPayments`)
 1. **Collection**: Representative collects payment (cheque, bank transfer, or cash) on due date.
-2. **Receipting**: An `OutletPayments` record is created linking to the unpaid `OutletConsumptionInvoices`.
-3. **Settlement**: The invoice balance is settled (`Status = Paid`), restoring the outlet's credit limit.
+2. **Receipting**: An `OutletPayments` record is created for the outlet. When opened from an invoice, that invoice starts selected. Invoice choices made during entry stay on a submitted payment while it waits for approval. The approver can change the allocation before approving it.
+3. **Settlement**: An approved payment changes the linked invoice balances. A fully paid invoice is marked paid, restoring the outlet's credit limit.
 
 ---
 
@@ -114,4 +117,4 @@ Due In 7 Days shows open invoices due from today through seven days from today, 
 ---
 
 ## Maintenance Rule
-Update this document whenever retail outlet operations, delivery handoff states, payment cycles, or commercial data models change.
+Update this document whenever outlet visits, restocks, deliveries, returns, invoicing, payment flows, or commercial data models change.

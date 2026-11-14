@@ -246,7 +246,7 @@ export function buildOutletPaymentAllocationNodes (allocations = {}, existingRec
     ? allocations.map(a => [text(a.code || a.OutletConsumptionInvoiceCode), num(a.amount || a.Amount)])
     : Object.entries(allocations || {}).map(([c, a]) => [text(c), num(a)])
   const active = entries.filter(([code, val]) => code && val > 0)
-  const activeCodes = active.map(([code]) => code)
+  const activeCodes = autoApprove ? active.map(([code]) => code) : (Array.isArray(options.selectedInvoiceCodes) ? options.selectedInvoiceCodes : []).map(text).filter(Boolean)
   const allocatedSum = active.reduce((sum, [_, val]) => sum + val, 0)
 
   const isFullyAllocated = autoApprove && amount > 0 && Math.abs(amount - allocatedSum) < 0.01
@@ -275,7 +275,7 @@ export function buildOutletPaymentAllocationNodes (allocations = {}, existingRec
       Username: row.Username || actor,
       Status: row.Status || 'Active',
       Amount: amount,
-      OutletConsumptionInvoiceCode: autoApprove ? activeCodes.join(',') : '',
+      OutletConsumptionInvoiceCode: activeCodes.join(','),
       Allocation: autoApprove && activeCodes.length > 1 ? JSON.stringify(Object.fromEntries(active)) : '',
       Progress: nextProgress,
       ...stamps

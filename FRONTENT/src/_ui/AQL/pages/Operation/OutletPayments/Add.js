@@ -29,9 +29,12 @@ export default {
     reload: false
   },
 
-  ready ({ pageState }) {
+  ready ({ pageState, routeInfo }) {
+    const query = routeInfo.value.query || {}
     pageState.resetForResource('OutletPayments')
-    pageState.applyNodes(buildOutletPaymentInitNodes())
+    pageState.applyNodes(buildOutletPaymentInitNodes({
+      outletCode: String(query.outletCode || '').trim()
+    }))
     pageState.setControls('AutoApprove', canCollectInvoicePayment())
   }
 }

@@ -50,11 +50,16 @@ const attrs = useAttrs()
 const gutterClass = computed(() => 'q-gutter-y-' + (attrs.gutter || 'sm'))
 
 const node = 'OutletPayments'
-const { pageState, ui, outletInvoices } = useOutletPaymentAddContext()
+const { pageState, ui, outletInvoices, preferredInvoiceCode } = useOutletPaymentAddContext()
 const { _C, roundToDecimals } = useCurrencyResource()
 
 const outletCode = pageState.useRecord('OutletCode', node)
 const selectedCodes = pageState.useControls('SelectedInvoices', [], node)
+const defaultSelectedCodes = computed(() => {
+  const codes = outletInvoices.value.map(inv => String(inv.code))
+  const preferredCode = preferredInvoiceCode.value
+  return codes.includes(preferredCode) ? [preferredCode] : codes
+})
 
 function formatDueText (row) {
   const days = row?.dueInDays
@@ -88,7 +93,7 @@ watch(outletCode, (value) => {
     selectedCodes.value = []
     return
   }
-  selectedCodes.value = outletInvoices.value.map(inv => String(inv.code))
+  selectedCodes.value = defaultSelectedCodes.value
 }, { immediate: true })
 
 watch(outletInvoices, (rows) => {
@@ -97,7 +102,7 @@ watch(outletInvoices, (rows) => {
     return
   }
   if (!selectedCodes.value || selectedCodes.value.length === 0) {
-    selectedCodes.value = rows.map(inv => String(inv.code))
+    selectedCodes.value = defaultSelectedCodes.value
     return
   }
   const present = new Set(rows.map(inv => String(inv.code)))

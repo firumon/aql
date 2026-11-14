@@ -98,8 +98,17 @@ export function useOutletPaymentApproveContext () {
 
   function autoAllocate () {
     const target = paymentAmount.value
-    const invoices = outletInvoices.value || []
-    const next = {}
+    const allInvoices = outletInvoices.value || []
+    const selectedCodes = new Set(text(selectedPayment.value?.OutletConsumptionInvoiceCode)
+      .split(',')
+      .map(text)
+      .filter(Boolean))
+    const invoices = selectedCodes.size
+      ? allInvoices.filter((invoice) => selectedCodes.has(text(invoice.code || invoice.Code)))
+      : allInvoices
+    const next = Object.fromEntries(allInvoices
+      .map((invoice) => [text(invoice.code || invoice.Code), 0])
+      .filter(([code]) => code))
 
     // 1. Exact match check: if any invoice balance matches the payment amount exactly, allocate all to it.
     const exactMatch = invoices.find(inv => Math.abs((Number(inv.balance) || 0) - target) < 0.01)
