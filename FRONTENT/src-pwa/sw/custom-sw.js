@@ -122,10 +122,19 @@ self.addEventListener('message', (event) => {
   }
 })
 
-registerRoute(
-  ({ request }) => request.mode === 'navigate',
-  createHandlerBoundToURL('index.html')
-)
+if (import.meta.env.QUASAR_PROD) {
+  registerRoute(
+    new NavigationRoute(
+      createHandlerBoundToURL(import.meta.env.QUASAR_PWA_FALLBACK_HTML),
+      {
+        denylist: [
+          new RegExp(import.meta.env.QUASAR_PWA_SERVICE_WORKER_REGEX),
+          /workbox-(.)*\.js$/
+        ]
+      }
+    )
+  )
+}
 
 registerRoute(
   ({ url }) =>
