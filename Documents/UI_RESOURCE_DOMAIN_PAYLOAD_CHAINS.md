@@ -31,13 +31,13 @@ Layer 3 (UI Presentation)
    │  Hands the nodes straight to pageState.applyNodes()
    │  applyNodes gates on each node's own permissions, then mounts everything
    │  Returns { successMsg: applied.successMsg }
-   │  pageState.build() assembles the batch for atomic GAS execution
+   │  pageState.build() assembles the batch for GAS execution
 ```
 
 **Why this rule is absolute:**
 - **Zero UI Schema Invention**: Presentation components (`_ui/`, `PageAction.js`, `.vue`) must NEVER handcraft backend table rows, default column values, or business calculation formulas for secondary resources.
 - **Single Source of Truth**: The domain logic for creating or updating Resource B lives exclusively in Resource B's own Layer 2 files, reused identically whether triggered by the Resource B standalone UI or an automated chain from Resource A.
-- **Atomicity via GAS Batching**: All operations across the entire chain are bundled into a single batch array and committed atomically in one server round trip.
+- **Atomicity via GAS Batching**: The whole chain is prepared and checked before record writes. GAS sends all changed tabs in each spreadsheet file in one `spreadsheets.batchUpdate` call. One file is the atomic unit. Files commit separately; a later file failure cannot roll back a file already saved. See [GAS_PATTERNS.md](GAS_PATTERNS.md) for the save and retry rules.
 - **One return contract, no exceptions**: EVERY Layer 2 function that is exported and consumed across a layer boundary returns the Unified Node Transport Structure (§9.2, specified in `UI_PAGE_STATE.md` §5) — a Node Object or an array of them. The multi-resource chain builders AND the single-node builders (`restockNode`, `consumptionNode`, `returnsNode`, `invoiceNode`). Row helpers (`restockItemRow`, `returnRow`, `invoiceItemRow`) are the one exception: they are ROWS, not nodes, and Layer 3 hands them to `pageState.addChild()` / `addRecord()` directly.
 
 ---

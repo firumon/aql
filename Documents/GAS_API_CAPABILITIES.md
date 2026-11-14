@@ -301,8 +301,8 @@ Rules:
   }
 }
 ```
-- Requests execute **sequentially** in order. Later requests see writes made by earlier ones.
-- Each request can be any valid protected action (`get`, `create`, `update`, `bulk`, `compositeSave`, `executeAction`, etc.).
+- Requests prepare **in order**. Later requests see earlier prepared row values. After all checks pass, changed tabs commit together once per spreadsheet file. Files are separate save units.
+- Batch actions are limited to `get`, `create`, `update`, `bulk`, `compositeSave`, `executeAction` and `record`. Other actions are rejected before record writes.
 - Each sub-request includes its own `action` field; the outer `token` covers all.
 - After every successful sub-request, GAS automatically stores returned resources in the current batch context by resource name. Frontend requests do not send custom reference names.
 - Later sub-requests may use explicit value references with `{ "$ref": "ResourceName.path" }`. Supported paths include `ResourceName.latest.code`, `ResourceName.latest.record.Code`, `ResourceName.byCode.CODE.Field`, and `ResourceName.records.0.Field`.
@@ -340,69 +340,29 @@ Rules:
 
 **Primary use case:** combine a write with an immediate read in one call so the frontend can update IDB without a second round-trip. Example: `compositeSave` + two `get` calls returns the created record and all affected children in one response.
 
-#### `payload.formTicket` — Form Ticket idempotency key
+#### `payload.formTicket` — Form Ticket retry guard
 
-> **Status:** Backend GAS engine is fully implemented and active. Frontend client integration in `usePageState` / `ResourceIoService` is **pending**; batches sent without `formTicket` continue to execute directly without change.
+The local batch engine uses a prepared write plan. See [GAS_PATTERNS.md](GAS_PATTERNS.md#batch-write-plan-and-retry-rules) for file commits, hooks, cursors and limits. The running GAS version must be checked separately. Frontend `formTicket` wiring is still pending.
 
-`batch` accepts one optional payload field, `formTicket`. It makes a batch safe to retry.
+A ticket is optional and must be at most 100 characters from `[A-Za-z0-9_-]`. Invalid or missing tickets take the untracked path. Both paths use the same per-file write plan.
 
-```json
-{
-  "requestId": "uuid",
-  "action": "batch",
-  "payload": {
-    "formTicket": "FT-c8f9b9f7-062e-4cb8-8c10-8dc4dbfbeeb8",
-    "requests": [ ... ]
-  }
-}
-```
+State uses `CacheService` key `FT_<formTicket>` with a 1800 second TTL. It holds `initiated`, `lastUpdatedAt`, `finished`, `resources`, `queue`, `processing`, `completed`, `refs`, `requestHash`, `phase` and `committedFiles`. The hash binds the user ID and request array. Rows and full responses are not cached.
 
-- Generated once per form lifecycle on the frontend as `FT-<uuid>`. It stays the same across every retry of that submission and is regenerated only after a successful submit.
-- Normalized by `normalizeFormTicket` in `GAS/apiDispatcher.gs`. A ticket longer than 100 characters or holding anything outside `[A-Za-z0-9_-]` is rejected and the batch runs as an untracked batch.
-- Engine state is stored in `CacheService.getScriptCache()` under the key `FT_<formTicket>` with a **1800 second TTL**.
-- **No global script locks.** Isolation is strictly per `formTicket`. Two different forms, or two different users, never wait on each other. `LockService` is not used anywhere in this path.
-- Batches **without** a `formTicket` execute directly with no cache read or write, exactly as before.
+During preparation, all pending step indices remain in `processing`. `completed` and `refs` are updated only after every file commit succeeds. A failed check discards the prepared rows and returns failed step responses without unsaved row deltas.
 
-**FT state object (`FT_<formTicket>`)**
+- `finished`: return a replay response and read fresh deltas, with no write.
+- `ready`: a failed preparation may restart with the unchanged submission.
+- `preparing`: a fresh heartbeat can return `inProgress`; a stale preparation may restart.
+- `committing` or `review`: do not auto-resume. Return `retryUnsafe` and the confirmed file IDs. A lost response can mean that the file was saved.
+- A changed hash is rejected. Older unfinished tickets with completed steps also require review.
 
-| Field | Meaning |
-|---|---|
-| `initiated` | Epoch ms when the batch was first registered |
-| `lastUpdatedAt` | Heartbeat, restamped after every step state change |
-| `finished` | `true` only when the whole queue completed |
-| `resources` | Deduplicated resource names touched by the batch |
-| `queue` | Step **indices** not yet processed, in original order (FIFO) |
-| `processing` | The step index currently claimed |
-| `completed` | Per-step metadata: `index`, `action`, `resource`, `code`, `codeKey`, `message`, `success` |
-| `refs` | Map of every scanned `$ref` path expression to its resolved string code (`null` until produced) |
-
-**Lightweight cache contract (strict).** The state object never stores complete response envelopes, full sheet rows, or delta datasets. `queue` and `processing` hold step **indices**, not step bodies, because a retry always resends the identical `requests` array under the same ticket. This keeps the cached object small enough to survive the `CacheService` value cap.
-
-**Phase 1 — pre-scan and state check.** On the first arrival for a ticket, GAS deep-scans the `requests` array for every `$ref` expression and pre-populates `refs[path] = null`, collects the unique resource names into `resources`, clones the step order into `queue`, stamps `initiated` and `lastUpdatedAt`, and writes the state before running any step.
-
-**Phase 2 — branching on existing state.**
-
-- **Case 1: already finished (`finished === true`).** GAS does **not** touch Google Sheets for writing. The response envelope is rebuilt at runtime: `data.result.responses` comes from `completed` and `refs`, and `data.resources` is generated dynamically by `collectWriteDeltaResources(auth, payload, state.resources)` against the caller's own cursors. The result carries `replayed: true`.
-- **Case 2: in-flight (`finished === false`, heartbeat under 45,000 ms).** The first run is alive and making progress. The arriving request enters a poll loop: `Utilities.sleep(2500)` then re-read the cache, up to a ceiling of 20,000 ms. If the state turns `finished` during the wait, the replayed envelope is returned immediately. If the wait expires, GAS returns a clean in-progress status (`success: false`, `inProgress: true`) so the client knows the work is still running and keeps its draft.
-- **Case 3: stale / dead run takeover (heartbeat over 45,000 ms).** The previous execution timed out or crashed. Any lingering index in `processing` is moved back to the **front** of `queue`, and the arriving request takes over and processes the remaining steps.
-
-**Phase 3 — sequential step execution.** Steps are processed FIFO with `queue.shift()`:
-1. Move the index out of `queue` into `processing`, restamp `lastUpdatedAt`, and write the state.
-2. Deep-resolve any `{ "$ref": path }` in the step through `resolveBatchReferencesDeep` against the batch context. On a takeover the context is first seeded from the cached `refs` map by `seedBatchContextFromRefs`, so `$ref` resolution uses the same path walker as a first run.
-3. Execute the step through `dispatchProtectedAction`.
-4. On success: clear `processing`, push the step metadata into `completed`, re-resolve every still-unresolved `refs` path against the live batch context, restamp `lastUpdatedAt`, and write the state.
-5. On failure: push the index back to the front of `queue`, restamp, halt the queue, and return the failure. A later retry under the same ticket resumes from exactly that step.
-6. When `queue` empties: set `finished = true`, restamp, write, and return the batch envelope. Steps that ran live in this call return their own rows; when any step in the response was replayed from cache, `data.resources` is collected at runtime instead.
-
-**Limits to know.**
-- `refs` holds resolved **string codes** only. A `$ref` path that points at a non-string value cannot survive a crash and takeover; it resolves normally within a single live run.
-- Steps recorded in `completed` are never re-executed. If the user edits an already-written step and resubmits under the same ticket, the earlier write stands as it was.
+The failure envelope preserves `retryUnsafe`, `committedFiles` and `unconfirmedFile` in `data.result`. These fields describe per-file outcomes. They do not promise rollback across files or durable replay protection. Cache loss, expiry, first-arrival races and clients without tickets remain limits.
 
 ---
 
 ## PostAction Dispatch Contract
 
-Resources can set `PostAction` in `APP.Resources` to trigger non-blocking side effects after supported write actions.
+Resources can set `PostAction` in `APP.Resources`. Standalone writes keep non-blocking hooks. In staged batches, the checked hooks prepare their row changes in the same plan, and hook errors stop the batch. Unsupported batch hooks are rejected before commit.
 
 Supported trigger actions:
 - `create`

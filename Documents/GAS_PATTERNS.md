@@ -25,7 +25,7 @@ Read this file when you are changing GAS implementation, not for every task.
 | 4 | **Additional actions** (`executeAction`) | Workflow transitions (Approve, Reject, Submit, etc.) |
 | 5 | **Composite save** (`compositeSave`) | Atomic parent + children write with all-or-nothing validation |
 | 6 | **Record fetch** (`record`) | Exact multi-resource, multi-code record lookup with canonical resource hydration |
-| 7 | **Batch envelope** (`batch`) | Multiple sequential actions in one HTTP call, including explicit `$ref` dependencies |
+| 7 | **Batch envelope** (`batch`) | Ordered preparation, then one atomic write per spreadsheet file, including explicit `$ref` dependencies |
 | 8 | **Propose a new generic pattern** | Only if none of the above fit |
 
 ---
@@ -73,25 +73,32 @@ Use `batch` when you need to write data and immediately get fresh rows back, or 
 
 **Do NOT use** two separate `callGasApi` calls + `forceSync: true` as a workaround. That is two round-trips and risks a race condition where the view page loads before the second call resolves.
 
-### Form Ticket (FT) Idempotency & Retry Safety
+### Batch write plan and retry rules
 
-A network drop, a timeout, or an impatient double-click can send the same batch twice. `formTicket` makes that safe: a retried batch never writes an already-written row again.
+The local GAS source prepares batch records in memory. Later steps read those prepared rows, so generated codes, uniqueness checks and `$ref` values use the same draft. No record rows are written if preparation fails.
 
-> **Status:** Backend support is in place and active in `GAS/apiDispatcher.gs`. Frontend `formTicket` wiring is **pending** an upcoming frontend rollout. Today no frontend caller sends a ticket, so every batch takes the untracked path described under **Backward compatible** below. Do not document or rely on client-side ticket behavior until that rollout lands.
+After all steps pass, `commitBatchWritePlan` sends all changed tabs in each file in one `spreadsheets.batchUpdate` call. Grid growth, row values and hooks join that call. Google documents this call as atomic within one file: [Sheets batchUpdate](https://developers.google.com/workspace/sheets/api/reference/rest/v4/spreadsheets/batchUpdate).
 
-**Who will send it.** Once the frontend phase lands, the ticket is meant to be supplied for you, not hand-written:
-- `usePageState.submit()` will hold one ticket per form lifecycle (`state.formTicket`) and regenerate it only after a successful submit, so a failure keeps the same ticket and the retry resumes instead of restarting.
-- `ResourceIoService.runBatchRequests(requests, { formTicket })` will place it into the batch payload.
-- Neither is implemented yet. Add a ticket by hand only for a batch you build yourself that writes rows and could be retried.
+- Each file is a separate save unit. There is no cross-file rollback.
+- The file holding `APP.Resources` commits last. When business rows share that file, they join the same call as its sync dates.
+- Cursor cache changes from prepared rows are held until all file commits succeed. On failure, they are dropped. Earlier files can have saved rows without new APP cursor values; the error lists the confirmed file IDs. Review those files and reload source records before retry.
+- Allowed batch actions are `get`, `create`, `update`, `bulk`, `compositeSave`, `executeAction` and `record`. Nested batches, profile changes, reports and archive actions are rejected before record writes.
+- Staged PostActions are limited to the checked stock, outlet, warehouse transfer and procurement hooks named in `dispatchPostActionHook`. A caught hook error stops the batch. An unsupported hook is rejected before commit. Standalone writes keep their existing hook behavior.
+- Prepared formula values are not recalculated in memory. A read in the batch does not prove that sheet formulas reflect its pending writes.
+- No script lock is added. Atomic file writes do not isolate the earlier reads from other users' writes.
 
-**How the engine runs.** `GAS/apiDispatcher.gs` keeps a small state object in `CacheService` under `FT_<formTicket>` (1800s TTL): a FIFO `queue` of step indices, the claimed `processing` index, `completed` step metadata, a `refs` map, and a `lastUpdatedAt` heartbeat. Steps run one at a time, and the heartbeat is restamped after every step.
-- **Finished ticket** → the response is rebuilt from `completed` + `refs` and the delta rows are read fresh at runtime. No sheet write happens.
-- **Still running** (heartbeat under 45s) → the second request polls every 2,500 ms up to 20,000 ms, then answers `inProgress` if the first run is still going.
-- **Dead run** (heartbeat over 45s) → the claimed step goes back to the front of the queue and the arriving request finishes the remaining steps.
+`formTicket` is optional. Frontend ticket wiring is still pending. Without a ticket, the server cannot identify a later HTTP request as the same save.
 
-**`$ref` under retry and recovery.** Step order is preserved exactly, so `$ref` dependencies still resolve strictly in sequence. Every `$ref` path in the batch is pre-scanned into `refs`, and each code a step produces is written back into that map. On a takeover the map is replayed into the batch context first, so the same `$ref` path walker resolves the codes an earlier, dead run had already created. Note that `refs` stores resolved **string codes** only — a `$ref` pointing at a non-string value works inside one live run but cannot survive a crash.
+When a ticket is supplied, GAS keeps its state in `CacheService` for 1800 seconds. The state holds indices, references, a hash of the user ID and requests, and small result records. It does not hold sheet rows.
 
-**Backward compatible.** A batch sent without a `formTicket` runs straight through with no cache read, no cache write, and no polling. There is no global `LockService` lock in either path, so one form never blocks another.
+- A completed ticket returns read deltas without writing again.
+- A ticket with a changed request hash is rejected.
+- Steps are marked completed only after all file commits succeed.
+- A stale preparation can restart because its rows were not written. A failed validation can also restart with the same unchanged request.
+- A ticket in `committing` or `review` cannot auto-resume. The write may have reached Sheets. The response carries `retryUnsafe`, `committedFiles` and `unconfirmedFile` in `data.result`.
+- Cache eviction, expiry, simultaneous first arrivals and clients without tickets remain limits. This is not durable, exactly-once storage.
+
+These changes are local source work. Live proof requires an explicitly requested GAS update and checks on the approved dummy-data target. No deployment is implied by these docs.
 
 ---
 
@@ -134,6 +141,8 @@ Use when a parent record and its children must be written or rejected together.
 ---
 
 ## Pattern: PostAction hooks
+
+For a standalone write, hooks keep their existing non-blocking behavior. Inside a staged batch, hook errors stop the batch as described above.
 
 If a resource has `PostAction` set in its config, GAS resolves hooks in this order for supported actions:
 1. `{postAction}_after<Action>`
