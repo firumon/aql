@@ -24,7 +24,7 @@
               :record="item"
               :config="priceConfig"
               header="Price"
-              @update:model-value="(value) => setLinePrice(item.index, value)"
+              @update:model-value="(value) => setLinePrice(item, value)"
             />
           </div>
         </template>
@@ -256,9 +256,14 @@ const lines = computed(() => soldItems.value.map((item) => {
   }
 }))
 
-const setLinePrice = (index, value) => {
-  if (index < 0) return
-  pageState.setChildren(NODE.INVOICE_ITEMS, index, 'Price', num(value), NODE.INVOICES)
+const setLinePrice = (line, value) => {
+  if (!line?.sku) return
+  const price = num(value)
+  if (line.index >= 0) {
+    pageState.setChildren(NODE.INVOICE_ITEMS, line.index, 'Price', price, NODE.INVOICES)
+    return
+  }
+  pageState.addChild(NODE.INVOICE_ITEMS, { SKU: line.sku, Qty: line.qty, Price: price }, NODE.INVOICES)
 }
 
 const lineCaption = (line) => {
@@ -295,7 +300,7 @@ const RepricedNote = defineComponent({
         disable: disabled.value,
         class: 'q-ml-xs q-px-xs',
         'aria-label': `Restore the price list price for ${row.name}`,
-        onClick: () => setLinePrice(row.index, row.basePrice)
+        onClick: () => setLinePrice(row, row.basePrice)
       })
     ])
   }

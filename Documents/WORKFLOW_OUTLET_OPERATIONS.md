@@ -86,7 +86,7 @@ Pending Completion shows approved and partly delivered requests in one list, wit
 ### 3.5 Sales Consumptions & Invoicing (`OutletConsumptionInvoices`)
 
 Due In 7 Days shows open invoices due from today through seven days from today, with the soonest due first.
-1. **Consumption Tracking**: Recorded during regular audit cycles by comparing opening balance + deliveries vs. ending shelf stock.
+1. **Consumption Tracking**: Recorded during regular audit cycles by comparing opening balance + deliveries vs. ending shelf stock. The counted shelf quantity cannot be negative.
 2. **Invoice Generation**: Consumed items generate an `OutletConsumptionInvoices` record calculating wholesale price, discounts, and applicable UAE VAT (5%). In the wizard (ITEMS TO BILL step), lines are seeded via `seedInvoiceLines` grouping consumption items per SKU, preserving any manual additions (`_manualQty`) when ticking/unticking consumptions.
 3. **Invoice Issuance**: Invoice PDF is generated via the Reports system and dispatched to the outlet's accounting department.
 

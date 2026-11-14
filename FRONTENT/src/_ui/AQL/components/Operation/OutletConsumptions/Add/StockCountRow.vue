@@ -37,7 +37,7 @@
               :is="NumberField"
               v-model="fields.counted.value"
               :record="{ SKU: sku }"
-              :config="{ dense: true, inputClass: 'text-center text-weight-bold text-h6' }"
+              :config="{ min: 0, dense: true, inputClass: 'text-center text-weight-bold text-h6' }"
               header="Qty"
             />
           </div>

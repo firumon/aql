@@ -79,6 +79,7 @@ export function useConsumptionCountFields (pageState, options = {}) {
     const counted = computed({
       get: () => system.value - sold.value + returned.value,
       set: (value) => {
+        if (Number(value) < 0) return
         const found = positive(value)
         setSoldQty(code, soldQty(system.value, found))
         setReturnQty(code, returnQty(system.value, found))
