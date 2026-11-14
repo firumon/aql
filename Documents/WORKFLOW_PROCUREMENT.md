@@ -78,7 +78,7 @@ is expected and must not be reported as a display bug or missing browser proof.
 - **Composite Add/Edit UX**: Creating or editing a product dynamically generates variant input tables based on `VariantTypes`.
 
 ### 3.2 RFQ Supplier Dispatch & Quotations
-1. **Requisition**: Purchasing need is identified based on inventory stock-out risk. Requisitions use [AqlSkuPicker.vue](file:///f:/AQL/FRONTENT/src/components/shared/AqlSkuPicker.vue) for click-and-go SKU selection without typing.
+1. **Requisition**: Purchasing need is identified based on inventory stock-out risk. Requisitions use [AqlInlineSkuPicker.vue](file:///f:/AQL/FRONTENT/src/components/shared/AqlInlineSkuPicker.vue) for click-and-go SKU selection without typing.
 2. **RFQ Dispatch**: RFQ is created and dispatched to eligible suppliers for competitive bidding.
 3. **Quotation Capture**: Received quotes are entered into `SupplierQuotations` for comparison (unit cost, lead time, payment terms).
 

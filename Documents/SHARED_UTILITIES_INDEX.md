@@ -282,6 +282,17 @@ The app asks for notification permission and subscribes only when the signed-in 
 
 ---
 
+### 7g. Inline SKU Selection
+**File**: `FRONTENT/src/composables/useInlineSkuPicker.js`
+
+`useInlineSkuPicker(props, emit, options)` filters caller-provided records by the `searchBy` field or function and sends each checkbox or input change to the parent's `{ [skuCode]: value }` model. The `value` prop is the row input's default. It exposes `searchQuery`, `filteredOptions`, `selectedCodes`, `valueFor`, `setSelected`, and `setValue`.
+
+Reuse it with `components/shared/AqlInlineMasterPicker.vue`; the SKU wrapper supplies the SKU records. SKU options still come from the shared `useSkuResource().skuOptions`; the picker does not join or rebuild resource rows.
+
+The component uses AppList's native checkbox and input props. `inputProps.modelValue` reads the parent's value so unticking and parent resets clear the input too. The default is passed through an `inputValue` function; it must not be the field name `value`, which holds the SKU code in each option. The list has no pages and scrolls within three 56 px rows.
+
+---
+
 ## Extension Cheat-Sheet (where a new helper belongs)
 
 | New capability | File to extend |
