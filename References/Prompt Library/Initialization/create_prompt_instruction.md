@@ -1,8 +1,17 @@
 # Initialization: Prompt & Instruction Creation
 
-> **Scope boundary**: This document covers creating new initialization prompts only. Its discovery steps require exhaustive codebase reading — read source files directly by path. Do NOT load other init prompts for context; you are creating one.
+> **Scope boundary**: Use this guide only to create or edit a reusable initialization prompt in this folder. Do not use it for one-off prompts for another agent, chat handoffs, or chat-switch prompts. Read source files directly by path during discovery. Do not load other initialization prompts for context.
+>
+> Initialization prompts are for AI agents. Each prompt must help an agent understand its topic well enough to investigate it, fix bugs, add new features, and update existing behavior. Link the needed AQL knowledge docs and give the agent clear work steps and checks.
 
-Use this instruction when the user asks to create an initialization prompt, workflow instruction, or checklist for a specific task or feature area in AQL.
+Use this guide only when the user asks to create or edit an initialization prompt in this folder.
+
+## Knowledge and work-step split
+
+- `Documents/` holds current AQL knowledge for people and agents: behavior, data shapes, rules, use, effects, limits, and known gaps.
+- Initialization prompts hold agent-only work steps: what to read, how to inspect or change code, guardrails, and how to check the result.
+- Prompts must link to the matching knowledge docs. Do not copy a full schema or feature guide into a prompt. Add only short facts that an agent needs to follow a step, and point to their source.
+- When code or research finds a knowledge gap, update the canonical `Documents/` guide. Update a prompt only if its work steps or required reads also change.
 
 ---
 
@@ -46,11 +55,10 @@ List every file the agent must read before writing code.
 - Format: `[filename](file:///absolute/path/to/file#LStart-LEnd)`
 - Example: Read the `compositeSave` handler in [resourceApi.gs](file:///f:/AQL/GAS/resourceApi.gs#L450-L520).
 
-### C. Data Flow & Schema Matrix
-Identify exactly how data is structured and how it moves:
-- **Sheet name and key columns**: List source columns, required headers, and validation requirements.
-- **API Action & Transport**: Specify if it uses `get`, `create`, `update`, `bulk`, `compositeSave`, `executeAction`, or `batch`.
-- **Frontend Storage & State**: Note where the data is stored (Pinia `useDataStore`, IndexedDB table) and how it hydrates.
+### C. Current Scope & Knowledge Links
+Link the canonical `Documents/` pages that explain the feature, schema, and data flow.
+Do not copy their full system description into the prompt. Add only short, task-specific facts
+that an agent needs to carry out a work step, and keep the source link beside each fact.
 
 ### D. Step-by-Step Implementation Checklist
 A sequential, itemized list of steps the agent must follow. Group them logically:

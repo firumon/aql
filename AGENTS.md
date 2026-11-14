@@ -5,8 +5,13 @@
 - Keep this file lean. Use canonical docs for detailed policy.
 
 ### System Knowledge (`Documents/`) vs. Agent Execution Prompts (`References/Prompt Library/`)
-- **`Documents/` (Humans & AI Agents)**: Canonical architecture specifications, data schemas, domain workflows, and system rules. Both humans and AI agents read these files to understand how the system works.
-- **`References/Prompt Library/Initialization/` (AI Agents Only)**: Machine-optimized, task-specific procedural prompts and checklists. These instruct the AI agent on how to completely execute a specific task or workflow.
+- **`Documents/` (Humans & AI Agents)**: The home for current AQL knowledge. Explain what the system does, how people use it, its data shapes, rules, effects, limits, and known gaps.
+- Keep code-change steps out of `Documents/`. Human steps for using an AQL feature belong here.
+- **`References/Prompt Library/Initialization/` (AI Agents Only)**: The home for agent work steps. Explain how to inspect, build, change, fix, review, and check a task.
+- Prompts must link to the owning `Documents/` files. Do not copy a full system guide into a prompt or make a prompt the only place for a system fact.
+- When behavior changes, update its `Documents/` guide. Update a prompt when its work steps, required reads, or checks change.
+- Initialization prompts are for AI agents. Each prompt must help an agent understand its topic well enough to investigate it, fix bugs, add new features, and update existing behavior.
+- Read `create_prompt_instruction.md` only when creating or editing an initialization prompt in that folder. Do not use it for one-off prompts for another agent, chat handoffs, or chat-switch prompts.
 
 ## Language and Communication Rule (STRICT)
 - Always speak and write in very simple, easy English.
@@ -103,7 +108,7 @@ Load the matching initialization document from [References/Prompt Library/Initia
 * **Tax / Currency System Changes**: Read [tax_currency_system.md](file:///f:/AQL/References/Prompt%20Library/Initialization/tax_currency_system.md). Backed by [FEATURE_TAX_SYSTEM.md](file:///f:/AQL/Documents/FEATURE_TAX_SYSTEM.md).
 * **Resource Archive System**: Read [resource_archive_system.md](file:///f:/AQL/References/Prompt%20Library/Initialization/resource_archive_system.md). Backed by [FEATURE_ARCHIVE_SYSTEM.md](file:///f:/AQL/Documents/FEATURE_ARCHIVE_SYSTEM.md).
 * **Sheet Views / Reports Formulation**: Read [sheet_views_formulation.md](file:///f:/AQL/References/Prompt%20Library/Initialization/sheet_views_formulation.md) or [report_formula_generation.md](file:///f:/AQL/References/Prompt%20Library/Initialization/report_formula_generation.md).
-* **Prompt & Instruction Creation**: Read [create_prompt_instruction.md](file:///f:/AQL/References/Prompt%20Library/Initialization/create_prompt_instruction.md).
+* **Initialization Prompt Creation**: Read [create_prompt_instruction.md](file:///f:/AQL/References/Prompt%20Library/Initialization/create_prompt_instruction.md) only when creating or editing an initialization prompt in that folder. Do not use it for one-off prompts for another agent, chat handoffs, or chat-switch prompts.
 * **API Related Query**: Read [api_related_query.md](file:///f:/AQL/References/Prompt%20Library/Initialization/api_related_query.md). Backed by [GAS_API_CAPABILITIES.md](file:///f:/AQL/Documents/GAS_API_CAPABILITIES.md).
 * **Multi-Tenant System, Routing & New Client Setup**: Read [multi_tenant_system.md](file:///f:/AQL/References/Prompt%20Library/Initialization/multi_tenant_system.md). Backed by [TENANT_SYSTEM.md](file:///f:/AQL/Documents/TENANT_SYSTEM.md).
 * **AQL Sheet Menu Actions & Setup Scripts**: Read [sheet_menu_actions.md](file:///f:/AQL/References/Prompt%20Library/Initialization/sheet_menu_actions.md). Backed by [SHEET_TOOLBAR_MENU_GUIDE.md](file:///f:/AQL/Documents/SHEET_TOOLBAR_MENU_GUIDE.md).
