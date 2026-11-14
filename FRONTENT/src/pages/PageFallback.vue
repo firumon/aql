@@ -82,7 +82,7 @@
 </template>
 
 <script setup>
-import { usePageResolver } from 'src/composables/resources/usePageResolver'
+import { usePageResolver } from '@/composables/resources/usePageResolver.js'
 
 const { checkedPaths, routeInfo } = usePageResolver()
 </script>

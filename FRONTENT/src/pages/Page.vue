@@ -58,7 +58,7 @@
 import { provide, onUnmounted, watch, effectScope } from 'vue'
 import Breadcrumb from 'components/app/Breadcrumb.vue'
 import AqlContentWrapper from 'components/shared/AqlContentWrapper.vue'
-import PageFallback from 'pages/_common/PageFallback.vue'
+import PageFallback from 'pages/PageFallback.vue'
 import Section from 'components/Section.vue'
 import Content from 'components/Content.vue'
 import Action from 'components/Action.vue'
