@@ -1,10 +1,3 @@
-/**
- * Generic GAS resource request builders and response helpers.
- *
- * Pure Layer 1 utilities (store-free) for building canonical GAS request
- * envelopes and inspecting batch responses.
- */
-
 import { batchRef, batchRefList, isBatchRef, textOrRef, normalizeCodeOrRef } from 'src/utils/appHelpers'
 export { batchRef, batchRefList, isBatchRef, textOrRef, normalizeCodeOrRef }
 
@@ -14,6 +7,11 @@ export function responseFailed (response) {
 
 export function failureMessage (response, fallback = 'Request failed.') {
   const failed = Array.isArray(response?.data) ? response.data.find(entry => entry?.success === false) : null
+  const errors = failed?.data?.result?.errors || response?.data?.result?.errors || []
+  const details = Array.isArray(errors)
+    ? errors.map((entry) => entry?.message || entry?.error || '').filter(Boolean)
+    : []
+  if (details.length) return details.slice(0, 3).join(' ')
   return failed?.error || failed?.message || response?.error || response?.message || fallback
 }
 
