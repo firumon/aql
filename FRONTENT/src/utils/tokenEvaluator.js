@@ -44,6 +44,7 @@ import {
   daysFromToday,
   hoursFromNow
 } from 'src/utils/dateHelpers'
+import { readField } from 'src/utils/sortHelpers'
 
 /**
  * Named coercion primitives. Composable — a pipeline applies them left to right.
@@ -407,6 +408,19 @@ export function isToken(value) {
   return parseToken(value) !== null
 }
 
+/**
+ * Applies one token's column-side coercion to a single value — the GROUP token contract.
+ * Column-side because a group key derives from the column the same way filter conditions
+ * coerce their column before comparing. Returns null when `token` is not a registered token
+ * so the caller can fall back to a custom UI token module.
+ */
+export function tokenizeValue(value, token) {
+  const raw = String(token || '').trim()
+  const parsed = parseToken(raw.startsWith('$') ? raw : `$${raw}`)
+  if (!parsed) return null
+  return applyCoerces(value, parsed.spec.coerce || [])
+}
+
 const isBlank = (v) => v === undefined || v === null || v === ''
 
 /**
@@ -527,7 +541,7 @@ function evaluatePreparedCondition(node, row) {
   if (!column) return false
   if (node.strictColumn !== false && !(column in row)) return false
 
-  const rowValue = row[column]
+  const rowValue = readField(row, column)
 
   if (operator === 'empty') return isBlank(rowValue)
   if (operator === 'notEmpty') return !isBlank(rowValue)

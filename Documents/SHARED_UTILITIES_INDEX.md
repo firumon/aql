@@ -70,6 +70,7 @@ Generic, resource-agnostic string/object shaping. Imported widely by `_ui/` page
 | `textOrRef(value)` | Pass `$ref` through untouched, else trim to string. Pure. |
 | `normalizeCodeOrRef(value)` | Alias of `textOrRef`. Pure. |
 | `binColumnClass(count)` | Quasar grid class for `count` side-by-side inputs (`col-12`/`col-6`/`col-4`). Pure. |
+| `decorateRow(sourceRow, rowFacts)` | Wraps a row object in a proxy exposing added domain facts while preserving enumerable source fields, `in` operator checks, and non-enumerable live relation access. Pure proxy wrapper. |
 
 **When to reuse**: any string shaping, plural/singular, header filtering, row↔object mapping, or batch `$ref` building.
 **When to extend**: add a new string/object transform or a new displayable-header rule here. Do not create a sibling `stringHelpers.js`.
@@ -126,6 +127,9 @@ Resolves loosely-typed color keywords to CSS values. Pure (with a palette cache;
 | Function | Purpose |
 |----------|---------|
 | `sortByDate(items, column, direction)` | Sort rows by a date-ish column **without copying row objects** (preserves non-enumerable relation getters). `column` may be a key string or a reader function. Unparseable dates sink to the end. Pure. |
+| `readField(row, path)` | Read a direct field or safe dot path through parent/child getters. Array paths can yield many values. |
+| `valueType(values)` / `sortValue(value, type)` / `compareValues(a, b)` | Shared type inference, conversion, and comparison for Order and Group aggregates. |
+| `sortRecords(records, rules)` | Sort with types, conditions, child aggregates, and the cross-rule pair comparisons (see the ListViews sheet guide). Makes a new array; keeps row objects. Used by the Order feature. |
 
 **When to reuse**: any list ordering by a date column.
 **When to extend**: add resource-agnostic sorters here. Feature-specific sort logic that needs resource knowledge belongs in the resource's `_resource/` layer, not here.
@@ -137,13 +141,14 @@ Generic token registry + condition evaluator. Shared by `APP.Resources.ListViews
 
 | Export | Purpose |
 |--------|---------|
-| `COERCES` | Named coercion primitives (`text`, `trim`, `lowercase`, `slug`, `number`, `epoch`, `dateTime24`, `dateOnly`, `dayOfYear`, `month2`, `year`, `week`, `dayNum`). Composable left-to-right. |
-| `TOKENS` | Token registry: date/time (`$now`, `$dateTime`, `$date:N`, `$day`, `$month:N`, `$year`, `$week`, `$startOfDay:N`, `$endOfDay:N`, `$startOfMonth:N`, `$endOfMonth:N`), relative days (`$daysAgo:N`, `$daysIn:N`), and current-user (`$userCode`, `$userEmail`, `$userName`, `$userDesignation`, `$userRole`, `$userRoles`, `$userRegion`, `$userRegions`). |
+| `COERCES` | Named coercion primitives (`text`, `trim`, `lowercase`, `slug`, `number`, `epoch`, `dateTime24`, `dateOnly`, `dayOfYear`, `month2`, `year`, `week`, `dayNum`, `hourNum`). Composable left-to-right. |
+| `TOKENS` | Token registry: date/time (`$now`, `$dateTime`, `$date:N`, `$day`, `$month:N`, `$year`, `$week`, `$startOfDay:N`, `$endOfDay:N`, `$startOfMonth:N`, `$endOfMonth:N`), relative days/hours (`$daysAgo:N`, `$daysIn:N`, `$hoursAgo:N`, `$hoursIn:N`), and current-user (`$userCode`, `$userEmail`, `$userName`, `$userDesignation`, `$userRole`, `$userRoles`, `$userRegion`, `$userRegions`). |
 | `OPERATOR_ALIASES` | Legacy `ne`/`nin`/`notin`/`not_empty` folded onto canonical set. |
 | `OPERATORS` | Canonical operator set (`eq`, `neq`, `in`, `not_in`, `gt`, `gte`, `lt`, `lte`, `contains`, `empty`, `notEmpty`). |
 | `normalizeOperator(op)` | Canonicalise/alias an operator. Pure. |
 | `applyCoerces(value, pipeline)` | Run a `COERCES` pipeline. Pure. |
 | `parseToken(value)` | `$name` / `$name:p1:p2` → `{ spec, params }`, or `null`. Pure. |
+| `tokenizeValue(value, token)` | Apply a built-in token column conversion for Group; null for unknown tokens. No offset/user/time resolution. |
 | `isToken(value)` | True when `value` is a registered token. Pure. |
 | `prepareCondition(condition, ctx, options)` | Compile one condition (token parse + coercion) once. `options.strictColumn` flips column-missing behaviour (list views strict, `visibleWhen` lenient). |
 | `prepareFilter(filter, ctx, options)` | Compile a whole condition/group tree once. |

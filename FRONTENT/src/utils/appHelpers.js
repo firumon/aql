@@ -553,3 +553,35 @@ export function binColumnClass (count) {
   if (n === 2 || n === 4) return 'col-6'
   return 'col-4'
 }
+
+export function decorateRow (sourceRow, rowFacts = {}) {
+  if (!sourceRow || typeof sourceRow !== 'object') return sourceRow
+  const facts = (rowFacts && typeof rowFacts === 'object') ? rowFacts : {}
+
+  return new Proxy(sourceRow, {
+    get (target, prop, receiver) {
+      if (typeof prop !== 'string') return Reflect.get(target, prop, receiver)
+      if (prop in facts) return facts[prop]
+      return target[prop]
+    },
+    has (target, prop) {
+      return (prop in facts) || (prop in target)
+    },
+    ownKeys (target) {
+      const sourceKeys = Reflect.ownKeys(target)
+      const extraKeys = Object.keys(facts)
+      return Array.from(new Set([...sourceKeys, ...extraKeys]))
+    },
+    getOwnPropertyDescriptor (target, prop) {
+      if (typeof prop === 'string' && prop in facts) {
+        return {
+          value: facts[prop],
+          writable: true,
+          enumerable: true,
+          configurable: true
+        }
+      }
+      return Object.getOwnPropertyDescriptor(target, prop)
+    }
+  })
+}
