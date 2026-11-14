@@ -37,7 +37,7 @@ import { restockEditableProgress } from 'src/_resource/Operation/OutletRestocks/
  * `Add/PageAction.js` applies: leaving them empty is what lets a later real
  * submit record when it actually happened.
  */
-export default (props, { pageState, resourceConfig }) => {
+export default (props, { pageState, resourceConfig, resourceRecord }) => {
   const parent = pageState.useNode('OutletRestocks')
   const itemEntries = parent.children('OutletRestockItems')
   // Safe outside setup: `useAuth` only reaches Pinia stores and statically
@@ -45,7 +45,11 @@ export default (props, { pageState, resourceConfig }) => {
   // so reading it at submit time gives the live session user.
   const { user } = useAuth()
 
-  const isDraft = () => pageState.getControls('isDraft', null, 'OutletRestocks') === true
+  const currentProgress = () => String(
+    resourceRecord?.record?.value?.Progress ?? parent.record.value.Progress ?? ''
+  ).trim()
+  const isDraft = () => currentProgress() === 'DRAFT' &&
+    pageState.getControls('isDraft', null, 'OutletRestocks') === true
   const items = () => itemEntries.value.filter((entry) => entry._action !== 'deactivate')
 
   /**
@@ -62,7 +66,7 @@ export default (props, { pageState, resourceConfig }) => {
   let entryProgress = null
   const enteredAsDraft = () => {
     if (entryProgress === null) {
-      const current = String(parent.record.value.Progress ?? '').trim()
+      const current = currentProgress()
       if (!current) return false
       entryProgress = current
     }
