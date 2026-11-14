@@ -131,7 +131,7 @@ Use the matching contract; do not apply one callback signature to all kinds.
 | Data | Array, or `baseRows => array/ref` |
 | Map | `(row, ctx) => facts object`; ctx includes listName, view, user, term, masterResources, readField |
 | Group, Filter, Order, Search, Limit | `(afterCoreRows, beforeCoreRows, viewConfig) => array/ref` |
-| Props | Non-null, non-array AppList props object, merged over supplied sheet pagination props |
+| Props | Non-null, non-array object merged over root paging and sheet `props`; keep function values where AppList supports them |
 | Target | Approved sheet target value, or `(row) => target`; evaluated at click |
 | Layout, Labels, Captions, Content, MetaLayout, MetaChip, MetaLabel, MetaCaption, Meta | Supported display value; see the item guide |
 | Icon, Color, Highlight | String or synchronous row function |

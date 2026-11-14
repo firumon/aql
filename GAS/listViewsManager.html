@@ -485,7 +485,7 @@
     const KNOWN_KEYS = [
       'name', 'label', 'icon', 'color', 'default', 'count', 'permission', 'filter',
       'group', 'order', 'search', 'limit', 'paginate', 'perPage', 'threshold',
-      'item', 'actions', 'target'
+      'props', 'item', 'actions', 'target'
     ];
     const VALUE_OPERATORS = [
       'eq', 'neq', 'ne', 'in', 'not_in', 'nin', 'notin', 'gt', 'gte', 'lt', 'lte',
@@ -1015,6 +1015,10 @@
 
     function renderItemPanel() {
       const item = isObject(state.draft.item) ? state.draft.item : {};
+      const props = state.draft.props;
+      const propsText = typeof props === 'string' ? props : JSON.stringify(props ?? {}, null, 2);
+      const propsControl = '<textarea data-bind-path="props" data-kind="props-json" spellcheck="false" ' +
+        'placeholder="{&quot;bordered&quot;:true,&quot;separator&quot;:true}">' + esc(propsText) + '</textarea>';
       const editorItem = { ...item, layout: item.layout ?? 'caption,label' };
       const layout = layoutField(editorItem, 'layout', 'caption,label', 'Main layout uses caption and label slots.');
       const metaLayout = layoutField(item, 'metaLayout', 'label,caption', 'Default: label,caption. Chip and badge slots are added when supplied.');
@@ -1080,7 +1084,12 @@
         styleEditor('highlight', 'Highlight color', 'A non-empty value turns highlighting on.') +
         styleEditor('metaColor', 'Meta color', 'Quasar color name used by the meta area.') +
         styleEditor('chipColor', 'Chip color', 'Quasar color name used by chips.') +
-        styleEditor('badgeColor', 'Badge color', 'Quasar color name used by badges.');
+        styleEditor('badgeColor', 'Badge color', 'Quasar color name used by badges.') +
+        '<div class="form-grid" style="margin-top:13px">' +
+        fieldControl('AppList props',
+          'JSON object saved as root props. Use true, false, numbers, text, arrays, or objects. Blank keeps defaults. ' +
+          'These values replace root paging values. Item settings and code overrides can replace them.', propsControl, 'wide') +
+        '</div>';
     }
 
     function layoutField(item, key, placeholder, hint) {
@@ -1521,6 +1530,12 @@
           }
         }
       }
+      if (view.props != null && !isObject(view.props)) {
+        showError('AppList props must be a JSON object.');
+        state.activeTab = 'item';
+        renderEditor();
+        return null;
+      }
       const numericKeys = [
         { key: 'limit', minimum: 0 },
         { key: 'perPage', minimum: 1 },
@@ -1763,6 +1778,7 @@
       if (view.paginate !== false) delete view.paginate;
       if (view.perPage == null || Number(view.perPage) === 25) delete view.perPage;
       if (view.threshold == null || Number(view.threshold) === 35) delete view.threshold;
+      if (view.props == null || (isObject(view.props) && !Object.keys(view.props).length)) delete view.props;
       if (isObject(view.item)) {
         cleanItem(view.item);
         if (!Object.keys(view.item).length) delete view.item;
@@ -2015,6 +2031,12 @@
       } else if (kind === 'count') {
         if (value === 'auto') setPath(state.draft, path, null, true);
         else setPath(state.draft, path, value === 'true', false);
+      } else if (kind === 'props-json') {
+        if (!value.trim()) setPath(state.draft, path, null, true);
+        else {
+          try { setPath(state.draft, path, JSON.parse(value), false); }
+          catch (error) { setPath(state.draft, path, value, false); }
+        }
       } else if (kind === 'permission') {
         const trimmed = value.trim();
         if (!trimmed) setPath(state.draft, path, null, true);

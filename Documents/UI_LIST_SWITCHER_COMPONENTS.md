@@ -220,7 +220,7 @@ and loader; see [Group tokens](UI_LIST_VIEWS_TOKENS.md#group-token-values-and-cu
 | Data | Function or array | Function gets `baseRows`; return array or ref/computed of array |
 | Map | Function | `(row, ctx) => facts object` |
 | Group, Filter, Order, Search, Limit | Function | `(afterCoreRows, beforeCoreRows, viewConfig) => array` or ref/computed of array |
-| Props | Object | AppList props merged over sheet pagination settings |
+| Props | Object only | AppList props merged over root pagination and sheet `props`; values may be functions where AppList supports them |
 | Target | Target value or function | Function gets clicked row; returns a supported Target value |
 | Layout, MetaLayout | CSV text or array | Slot names |
 | Labels, Captions, MetaChip, MetaBadge, MetaLabel, MetaCaption | CSV text, array, or row function | Display templates |
@@ -267,8 +267,11 @@ as the first argument. Search calls its override only with explicit search field
 See [Group, Search, and Limit](UI_LIST_VIEWS_GROUP_SEARCH_LIMIT.md).
 
 Props reads root `paginate` (boolean), `perPage` (integer at least 1), and
-`threshold` (integer at least 0). A ready Props object merges over those keys and
-can supply other AppList props. The [item guide](UI_LIST_VIEWS_ITEMS.md) covers
+`threshold` (integer at least 0), then merges the root `props` object over those keys.
+A ready Props object merges over that result. The merge is shallow. Missing or null
+sheet `props` adds nothing; another non-object or an array fails the view. The override
+export must be an object, not a function. Its values may be functions where AppList
+supports them. Later display stages keep their normal order. The [item guide](UI_LIST_VIEWS_ITEMS.md) covers
 Target, display values, action props, examples, and their validation.
 
 ### Config overrides: use only when required
@@ -300,7 +303,7 @@ The saved object is unchanged. Callers must not write to the effective view eith
 
 Config may change all supported settings except `name` and `permission`: tab label, icon,
 color, default selection, count mode, item display, actions, order, search, limit, pagination,
-and Target. Existing feature checks still apply. Unknown keys do not add engine behavior.
+native AppList `props`, and Target. Existing feature checks still apply. Unknown keys do not add engine behavior.
 Keep domain row membership in `Data/useList.js`. Action and Target permission checks still run.
 Later focused overrides keep their normal precedence over the effective base settings.
 Map keeps its existing row contract. Tab settings work even when no rows reach Map.

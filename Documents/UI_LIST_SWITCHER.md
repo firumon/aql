@@ -63,6 +63,7 @@ The frontend reads the list from the authorized resource config at `ui.listViews
 | Empty state | An empty view shows “No items found.” A search with no matches shows “No results match your search.” |
 | Limit | Limit the final matching rows. |
 | Pagination | `paginate`, `perPage`, and `threshold` control AppList paging. |
+| AppList props | Root `props` passes native AppList settings, such as `bordered`, `separator`, and `dense`. |
 | Content and meta | `item` controls labels, captions, meta chips, and their order. |
 | Style | `item` controls icons, colors, and highlights. |
 | Actions | Root `actions` can hide inline actions with `false`, or select and style existing Additional Actions with an object. |

@@ -17,6 +17,12 @@ export default function propsFeature (records, config = {}) {
   }
   if (view.perPage != null) props.perPage = parseCount(view.perPage, `${label}: view.perPage`, 1)
   if (view.threshold != null) props.threshold = parseCount(view.threshold, `${label}: view.threshold`, 0)
+  if (view.props != null) {
+    if (typeof view.props !== 'object' || Array.isArray(view.props)) {
+      throw new TypeError(`${label}: view.props must be a props object.`)
+    }
+    Object.assign(props, view.props)
+  }
   const state = config.overrideFor?.(name, 'Props')
   const file = `list${name}Props.js`
   if (state?.status === 'error') {

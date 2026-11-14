@@ -167,7 +167,7 @@ Full contract: [ListViews core](../../../Documents/UI_LIST_SWITCHER_COMPONENTS.m
 | features/04Order.js | Typed, conditional Order with cross-rule pair comparisons |
 | features/05Search.js | Explicit/default text fields, Master parent fields, Search override gate |
 | features/06Limit.js | Core row cap before display; final count includes all overrides |
-| features/21Props.js | Sheet paginate/perPage/threshold and list{Name}Props.js override into itemProps |
+| features/21Props.js | Root paging, then sheet props, then the list{Name}Props.js object into itemProps; keeps native function values |
 | features/31Target.js | Sheet target or list{Name}Target.js into per-view targetState |
 | features/91Content.js | item layout/labels/captions to AppList content; per-piece value overrides |
 | features/92Meta.js | item meta layout/chip/label/caption to aligned AppList meta; value overrides |

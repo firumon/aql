@@ -17,6 +17,7 @@ The existing Labels, Icon, and Color overrides still change rows.
 
 The frontend reads only the item keys listed below.
 AppList has more props, but this does not make every AppList prop an item setting.
+Use root `props` for native AppList settings. See [AppList props](#10-applist-props-overrides).
 The manager's **Item view** tab edits these keys and checks their known shapes before save.
 It shows one input for each `meta*` key. The frontend also accepts arrays when a layout
 repeats a meta slot. Existing multi-entry values stay saved until that field is edited;
@@ -169,7 +170,7 @@ The first parent is chosen by `_Parents` order, not by resource type.
 ListViews defaults to `caption,label` for main content and `label,caption` for meta.
 These defaults belong to the ListViews display stages. AppList's own defaults are unchanged.
 A sheet layout or a ready Layout/MetaLayout override wins. Otherwise a native layout
-from a Props override is kept before the ListViews default is used.
+from root `props` or a Props override is kept before the ListViews default is used.
 
 With no explicit meta layout, ListViews adds `chip` after the text slots when `metaChip`
 is supplied, then `badge` when `metaBadge` is supplied. Native chip/badge props also add
@@ -356,10 +357,9 @@ Common item props are:
 ```js
 { paginate, perPage, threshold, layout, content, metaLayout, meta, icon, color, highlight, highlightColor }
 ```
-21Props adds the three pagination keys only when the sheet sets them or the Props
-override supplies them; missing keys keep AppList's own defaults (paginate true,
-perPage 25, threshold 35).
-An explicit Props layout remains when the sheet has no item layout. Props content,
+21Props reads root pagination keys, then root `props`, then the Props override.
+Missing keys keep AppList's own defaults: paginate true, perPage 25, threshold 35.
+An explicit native props layout remains when the sheet has no item layout. Props content,
 label, or caption also remain when the sheet has no matching item display setting.
 Otherwise, the Content stage uses the sheet layout and templates, or its automatic
 layout and row values when those settings are absent.
@@ -521,19 +521,56 @@ A target can be `false`, but the row can look clickable before the click.
 
 ## 10. AppList Props overrides
 
-The sheet accepts `paginate`, `perPage`, and `threshold` at the view root.
+Each view can have a root `props` object, beside `name`, `item`, and `actions`.
+It passes native AppList values without the item template or style-map parser:
+
+```json
+[
+  {
+    "name": "All",
+    "props": { "bordered": true, "separator": true, "chipOutline": true },
+    "item": { "labels": "{Name}", "metaChip": "{Progress}" }
+  }
+]
+```
+
+The same view JSON works in the ListViews cell and in a `ListViews: JSON.stringify(...)`
+seed in `GAS/syncAppResources.gs`. Code sync keeps filled ListViews cells; see the
+[sheet guide](UI_LIST_SWITCHER_SHEET.md#52-set-up-a-view-with-manage-lists).
+In Manage Lists, use **Item view > AppList props** and enter just the inner props object.
+
+The merge order is shallow, with later values winning:
+
+1. Root `paginate`, `perPage`, and `threshold`.
+2. Root `props`.
+3. The ready `list{Name}Props.js` object.
+4. Supplied display values from Content, Meta, and Style.
+
+Missing or null sheet `props` adds nothing. An empty object is valid. Other values,
+including arrays and functions, fail that view even with no rows. Bad sheet settings
+fail before a ready override can replace them. Nested values replace whole values;
+there is no deep merge. The Props stage checks the bag shape. Native prop types and
+supported values belong to AppList. Unknown keys do not add new renderer behavior.
+Use `item` for field templates and style maps; `props` uses native AppList values.
+
 A JavaScript Props override can supply native AppList props for one view:
 
 ```js
 export default {
-  paginate: true,
-  perPage: 10,
-  threshold: 20
+  bordered: true,
+  separator: true,
+  avatar: row => row.PhotoURL || false
 }
 ```
 
 Use `list{Name}Props.js` in the normal [override paths](UI_LIST_SWITCHER_COMPONENTS.md#45-override-lookup).
-It exports a non-null object, not an array. Its keys merge over sheet pagination keys. Display stages then set their own supplied keys.
+It exports a non-null object, not an array or a function that returns an object.
+Individual values may be functions where AppList supports them. Props keeps these
+functions unchanged; it does not call them. For example, `avatar` accepts a row
+function, while `bordered`, `separator`, and `chipOutline` need booleans. Sheet JSON
+cannot hold functions, and text that looks like code is never run.
+Missing or loading Props overrides use the sheet values. An import error or bad
+export fails only that view. Display stages then set their own supplied keys.
 The current AppList accepts these prop groups:
 
 | Use | Native prop names |
@@ -549,8 +586,11 @@ The current AppList accepts these prop groups:
 
 The List supplies the rows, loading state, row-click handler, and inline action slot.
 It also supplies the remembered page and turns on `keepPage` so row changes do not
-reset it. A Props override can supply its own `page` or `keepPage`.
-A Props override is trusted code: check how its props interact with those bindings.
+reset it.
+Root `props` and a Props override can supply their own `page` or `keepPage`.
+The List binds loading after native props. Its action slot and click handler still
+apply. The shared empty text and icons are set after native props. Check how native
+props interact with these bindings.
 The renderer defines prop types and defaults in [abstract/List.vue](../FRONTENT/src/components/abstract/List.vue#L205).
 ListViews supplies the [shared empty state](#8-how-rows-reach-applist) after merging view props.
 

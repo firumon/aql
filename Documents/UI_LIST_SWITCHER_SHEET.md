@@ -109,7 +109,20 @@ In **Item view**, a field menu adds `{Field}` at the cursor. Labels and captions
 more than one input. Missing labels and captions use the automatic values in the
 [item guide](UI_LIST_VIEWS_ITEMS.md#automatic-labels-and-captions). An empty input that
 was saved stays blank. Each `meta*` key shows one input.
-The Item view also edits row colors and chip outline.
+The Item view also edits row colors and chip outline. Its **AppList props** box saves
+a JSON object at root `props`, beside `item`. For example:
+
+```json
+{ "bordered": true, "separator": true, "chipOutline": true }
+```
+
+Paste only the props object in this box. Blank, `null`, or `{}` leaves out `props`.
+Other JSON values and broken JSON block the view save. The preview and save keep
+nested objects, arrays, `false`, zero, and empty text. They do not strip defaults
+inside `props`. Sheet values are JSON only; function text is not run.
+Root paging values apply first, then `props`, then the JavaScript Props object.
+Later item display settings can replace matching display props. See
+[AppList props](UI_LIST_VIEWS_ITEMS.md#10-applist-props-overrides) for the full rules.
 Each icon or color style has three choices:
 
 - **One value** saves text. A row key with that name takes priority when there is a row.
@@ -177,6 +190,7 @@ Source: [manager UI](../GAS/listViewsManager.html#L585),
 | `paginate` | JSON `true` or `false`. | AppList default: `true`. |
 | `perPage` | Whole number `1` or greater. | AppList default: `25`. |
 | `threshold` | Whole number `0` or greater. | AppList default: `35`. Zero paginates any non-empty list. |
+| `props` | Object of native AppList props. See [AppList props](UI_LIST_VIEWS_ITEMS.md#10-applist-props-overrides). | Missing or `null` adds no props. `{}` is valid. |
 | `item` | Object. See [item keys](UI_LIST_VIEWS_ITEMS.md#3-item-keys). | Layout is `caption,label`; missing labels and captions use automatic row values. |
 | `actions` | `false`, or an object with `only`, `exclude`, `dense`, `size`, and `max`. See [inline actions](UI_LIST_VIEWS_ITEMS.md#9-inline-actions-and-row-navigation). | Missing or `null`: eligible actions, no exclusions, dense buttons, size `md`, max 3. `false`: no action buttons. |
 | `target` | `true`, `false`, an action-name string, or an object. See [Target](UI_LIST_VIEWS_ITEMS.md#row-click-target). | Missing key: infer from the final action buttons. No buttons opens View; buttons stop the row click. |
@@ -240,8 +254,9 @@ Use the sheet to set up features. An override is a JavaScript file written by a 
 See [override paths and exports](UI_LIST_SWITCHER_COMPONENTS.md#45-override-lookup).
 For row display, read [item keys and usage](UI_LIST_VIEWS_ITEMS.md).
 Keep tab icon/color at the view root; put row icon/color inside item.
-A developer-only `list{Name}Props.js` override can also change pagination and add any
-AppList prop; see [override export shapes](UI_LIST_SWITCHER_COMPONENTS.md#46-override-export-shapes).
+Root `props` can supply native AppList props from the sheet. A developer-only
+`list{Name}Props.js` object merges over those props and can keep function values
+where AppList supports them; see [override export shapes](UI_LIST_SWITCHER_COMPONENTS.md#46-override-export-shapes).
 Use the **Item view** tab for `item` settings. The Custom developer keys panel
 only accepts root keys that do not have a tab field.
 
