@@ -190,7 +190,11 @@ export function repriceInvoiceInPageState (pageState) {
 
   // `Total` is derived by readers and the deduction is not this screen's to move.
   const { Total, ReturnDeductionTotal, ...totals } = priced.header
-  pageState.setRecord(null, totals, INVOICES)
+  const movedTotals = Object.keys(totals).filter((key) => record[key] !== totals[key])
+  if (movedTotals.length) {
+    pageState.setRecord(null,
+      Object.fromEntries(movedTotals.map((key) => [key, totals[key]])), INVOICES)
+  }
 }
 
 // What the composed invoice depends on: its own lines, its price list, its discount terms.
