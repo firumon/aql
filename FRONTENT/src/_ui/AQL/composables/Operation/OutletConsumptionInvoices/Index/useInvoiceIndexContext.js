@@ -1,6 +1,6 @@
 import { computed, inject } from 'vue'
 import { useResourceNav } from 'src/composables/resources/useResourceNav'
-import { usePageRecord } from 'src/composables/resources/usePageRecord'
+import { useResourceReload } from 'src/composables/resources/useResourceReload'
 import { useAQLConfig } from 'src/_ui/AQL/composables/useAQLConfig'
 import { useCurrencyResource } from 'src/_resource/Master/Currencies/composables/useCurrencyResource'
 import { useInvoiceIndex } from 'src/_resource/Operation/OutletConsumptionInvoices/composables/useInvoiceIndex'
@@ -32,6 +32,7 @@ let pending = null
 
 export function useInvoiceIndexContext () {
   const nav = useResourceNav()
+  const { reloadDependencies } = useResourceReload()
   const ui = useAQLConfig()
   const { _C } = useCurrencyResource()
 
@@ -57,10 +58,9 @@ export function useInvoiceIndexContext () {
    * by the route.
    */
   const sources = ['OutletConsumptions', 'OutletConsumptionItems', 'OutletPayments', 'Outlets']
-    .map((name) => usePageRecord(name))
 
   /** Renders from cache and syncs the delta in the background — never blocks first paint. */
-  const loadSources = () => Promise.all(sources.map((resource) => resource.reload()))
+  const loadSources = () => reloadDependencies({ resources: sources, showError: false })
 
   /**
    * Kick the load ONCE per page visit, however many components call this relay.

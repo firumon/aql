@@ -1,7 +1,7 @@
 import { ref, computed, inject } from 'vue'
 import { useAQLConfig } from 'src/_ui/AQL/composables/useAQLConfig'
 import { useResourceNav } from 'src/composables/resources/useResourceNav'
-import { usePageRecord } from 'src/composables/resources/usePageRecord'
+import { useResourceReload } from 'src/composables/resources/useResourceReload'
 import { useOutletIndex } from 'src/_resource/Master/Outlets/composables/useOutletIndex'
 import {
   ACTIVITY_WINDOW_DAYS,
@@ -72,6 +72,7 @@ let streamsLoaded = false
 export function useOutletOverviewContext () {
   const ui = useAQLConfig()
   const nav = useResourceNav()
+  const { reloadDependencies } = useResourceReload()
 
   const resourceConfig = inject('resourceConfig', null)
   const resourceRecord = inject('resourceRecord', null)
@@ -81,8 +82,7 @@ export function useOutletOverviewContext () {
   const loaded = ref(streamsLoaded)
   if (!streamsLoaded) {
     if (!pendingLoad) {
-      const sources = SOURCE_RESOURCES.map((name) => usePageRecord(name))
-      pendingLoad = Promise.all(sources.map((resource) => resource.reload()))
+      pendingLoad = reloadDependencies({ resources: SOURCE_RESOURCES, showError: false })
         .finally(() => { streamsLoaded = true; pendingLoad = null })
     }
     pendingLoad.finally(() => { loaded.value = true })

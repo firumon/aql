@@ -11,7 +11,7 @@ Three things in the app share the word "record". Each one has a different job, l
 | Name | File | What it is for | Who may call it |
 |---|---|---|---|
 | `useRecord()` | `FRONTENT/src/composables/resources/useRecord.js` | Core record singleton. Reads raw rows from the data store, enriches them, and builds indexes. | Logic layer (`_resource/`), `usePageRecord`. |
-| `usePageRecord()` | `FRONTENT/src/composables/resources/usePageRecord.js` | Page record composable. Reads route parameters to manage page records, lists, views, paging, and reloads. | Page setup in `usePageResolver.js` (provided to UI as `resourceRecord`). |
+| `usePageRecord()` | `FRONTENT/src/composables/resources/usePageRecord.js` | Page record composable. Reads route parameters for the page record, unfiltered records, relations, and reload. ListViews state belongs to useListView. | Page setup in `usePageResolver.js` (provided to UI as `resourceRecord`). |
 | `pageState.useRecord()` | `FRONTENT/src/composables/resources/usePageStateMutations.js` | Method on `pageState`. Binds a single form field node to a resource code. | Form components and page actions using `pageState`. |
 
 > [!NOTE]
@@ -72,7 +72,7 @@ The returned object provides:
 When a column holds more than one code separated by commas (such as `OutletConsumptionCode: "OC-0001,OC-0002"` or `OutletReturnCodes: "OR-0001,OR-0002"`), the system handles them automatically:
 - **Forward relations**: Asking for `$parent` or the link property (such as `record.$outletconsumption` or `record.$outletreturns`) returns an array of enriched records (`[ record1, record2, ... ]`) when the field contains commas, or a single enriched record when it has a single code.
 - **Auto-detection**: Headers ending in `Codes` (such as `OutletReturnCodes`) are automatically recognized as relations to the target resource.
-- **Backward indexing**: The data store indexes each code separately. When a parent or child searches with `recordsBy(...)`, it finds the record under every code it contains in `O(1)` time.
+- **Backward relation indexing**: The data store relation index splits comma-separated codes. Relation getters use that index. `useRecord().recordsBy(...)` uses its own index and matches the complete field value.
 
 ### 3.2 Loading on first read
 
@@ -90,18 +90,12 @@ The read returns at once with what the store holds. When the rows arrive, every 
 
 ## 4. The `usePageRecord()` Composable
 
-`usePageRecord(resourceNameOverride?, codeOverride?)` runs inside Vue `setup()`. It reads active route parameters using `useRouteConfig()`.
-
-It wraps `useRecord()` and adds page-level features:
-- `record`: The active single record matching the route code.
-- `records` / `items`: The reactive list of records for the active resource.
-- `filteredRecords` / `filteredItems`: The list after applying the search filter.
-- `filterTerm`: Reactive search string bound to the page search bar.
-- `currentPage`: Current page number for list pagination.
-- `effectiveViews`, `activeViewName`, `activeView`, `setActiveView`: View tabs and filters.
-- `reload()`: Refreshes records and sync status for the page.
-
-`usePageResolver.js` calls `usePageRecord()` once per page and provides it under the name `resourceRecord`. UI components inject `resourceRecord` rather than calling `usePageRecord()` themselves.
+`usePageRecord(resourceNameOverride, codeOverride)` resolves the page resource and record code.
+It returns `resourceName`, `code`, `record`, `records`, `items`, `loading`, `reload`, `relations`,
+`childResources`, `childRecordsByResource`, and `filterTerm`. Overrides can be values, refs,
+or functions. `records` contains enriched resource rows before ListViews processing.
+`items` is an alias for `records`. Both names point to the same computed ref.
+FilterInput binds to `filterTerm`; useListView applies it in Search.
 
 ---
 
@@ -159,3 +153,25 @@ Key points:
 - **DO NOT** build a custom `find()` or `filter()` loop over rows when `recordSource.recordsBy` or `recordSource.recordBy` already indexes them in `O(1)`.
 - **DO NOT** build option lists inside UI composables. Build them in the owning resource's Layer 2 module with `remember()`.
 - **DO NOT** mix up `useRecord()` with `pageState.useRecord()`. One is a record source; the other is a form field binding method.
+
+### Page spine and ListViews
+
+usePageRecord returns resourceName, code, record, records, items, loading, reload, relations,
+childResources, childRecordsByResource, and filterTerm.
+Its `items` and `records` names point to the same enriched rows. They have no view filter, search, or order.
+filterTerm is text state. The pipeline passes it to 05Search; the spine does not apply it.
+
+Components use [useListView](UI_LIST_SWITCHER_COMPONENTS.md#41-public-entry-point)
+for named list results. The page record keeps its resource rows independent of view processing.
+The view's `permission` only controls whether that list is shown. An action array uses `all` by
+default; one `any` marker makes one listed action enough. Resource-map entries still all have to pass.
+This gate does not filter rows or replace record and server access checks. See [view permissions](UI_LIST_SWITCHER_SHEET.md#view-permission).
+
+### List source reloads
+
+useResourceReload no longer creates a page record to find related resources.
+It reads resource config and relation metadata. Its existing reloadDependencies(options) also accepts
+options.resources: an array of resource names. Names are trimmed, de-duplicated, and checked against authorized
+resource metadata. Resources with canRead set to false are skipped. URLs and unknown names are skipped.
+The default route-based dependency reload is unchanged when this option is absent.
+The Outlets, payment, and invoice list relays use this command and keep the page's injected resourceRecord.

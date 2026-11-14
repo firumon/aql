@@ -4,7 +4,6 @@ import { useResourceIoStore } from 'src/stores/resourceIo'
 import { useResourceStatusStore } from 'src/stores/resourceStatus'
 import { useDataStore } from 'src/stores/data'
 import { useResourceConfig } from './useResourceConfig.js'
-import { usePageRecord } from './usePageRecord.js'
 
 function normalizeName(value) {
   return (value || '').toString().trim()
@@ -15,8 +14,7 @@ export function useResourceReload() {
   const resourceIo = useResourceIoStore()
   const resourceStatus = useResourceStatusStore()
   const dataStore = useDataStore()
-  const { resourceName, scope } = useResourceConfig()
-  const { parentResource, childResources } = usePageRecord(resourceName)
+  const { resourceName, scope, config } = useResourceConfig()
 
   const authorizedResources = computed(() => Array.isArray(auth.resources) ? auth.resources : [])
 
@@ -43,11 +41,12 @@ export function useResourceReload() {
     const current = addAllowed(resourceName.value)
     if (!current) return []
 
-    addAllowed(parentResource.value?.name)
+    addAllowed(config.value?.parentResource)
 
     const directChildren = new Set()
-    childResources.value.forEach((child) => {
-      const childName = addAllowed(child?.name)
+    authorizedResources.value.forEach(child => {
+      if (child?.parentResource !== resourceName.value) return
+      const childName = addAllowed(child.name)
       if (childName) directChildren.add(childName)
     })
 
@@ -160,7 +159,11 @@ export function useResourceReload() {
   }
 
   async function reloadDependencies(options = {}) {
-    const resources = dependencyResourceNames.value
+    const readable = new Set(authorizedResources.value
+      .filter(resource => resource.permissions?.canRead !== false).map(resource => resource.name))
+    const resources = Array.isArray(options.resources)
+      ? Array.from(new Set(options.resources.map(normalizeName).filter(name => readable.has(name))))
+      : dependencyResourceNames.value
     if (!resources.length) return { success: true, data: {}, error: null }
 
     const detectedMissing = detectMissingLinkedResources(resources)

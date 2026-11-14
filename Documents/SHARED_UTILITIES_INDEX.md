@@ -179,7 +179,7 @@ The resource's schema, permissions, default values, and data store access.
 |----------|---------|
 | `useResourceConfig(resourceNameOverride?)` | The active (or named) resource's config: headers, fields, required headers, `defaultValues`, `additionalActions`, `allowed`, `exists`, `missing`. |
 | `resourceRow(resource, ...sources)` | Merge sources over the backend defaults into one row for `resource`, dropping every key the sheet does not have. `_action` survives. |
-| `findResourceConfig(auth, nameOrSlug)` | Look up a resource config by name or slug, tolerant of plural/singular. |
+| `findResourceConfig(nameOrSlug)` | Look up an authorized resource config by name, tolerant of singular and plural forms. |
 | `useRecord()` | Core singleton composable for data store record access. Exposes `rows`, `enrich`, `enriched`, `recordsBy`, `recordBy`, `indexOf`, `relations`, `isLoading`, `remember`. |
 | `indexOf(resource, header)` | Exposes the raw `Map` of value → rows from `getIndex`. Read inside a `computed`, it tracks the index. Rows are raw store rows (read-only); blank values are skipped. |
 
