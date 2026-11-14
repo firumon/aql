@@ -9,7 +9,7 @@ import { useAuthLogic } from 'src/composables/core/useAuthLogic'
 import { requestNotificationPermission, subscribeToPush } from 'src/utils/notifications'
 import { initPwaWatcher } from 'src/composables/core/usePwaUpdate'
 
-const VAPID_PUBLIC_KEY = 'BI-L6k-1_rY9m5_nL0E3X7pA_your_vapid_key_here'
+const VAPID_PUBLIC_KEY = import.meta.env.VITE_VAPID_PUBLIC_KEY || ''
 
 onMounted(async () => {
   const authStore = useAuthStore()
@@ -25,11 +25,10 @@ onMounted(async () => {
     await useAuthLogic().restoreSession()
   }
 
-  const granted = await requestNotificationPermission()
-  if (granted && authStore.token) {
+  if (VAPID_PUBLIC_KEY && authStore.token) {
     try {
-      const subscription = await subscribeToPush(VAPID_PUBLIC_KEY)
-      console.log('[App] Push Subscription:', subscription)
+      const granted = await requestNotificationPermission()
+      if (granted) await subscribeToPush(VAPID_PUBLIC_KEY)
     } catch (error) {
       console.error('[App] Push subscription failed:', error)
     }

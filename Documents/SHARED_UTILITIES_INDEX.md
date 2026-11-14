@@ -208,6 +208,7 @@ values elsewhere — that bypasses sanitization.
 
 **When to reuse**: any push-subscription flow.
 **When to extend**: keep push logic here; do not duplicate VAPID handling.
+The app asks for notification permission and subscribes only when the signed-in user has a token and `VITE_VAPID_PUBLIC_KEY` is set.
 
 ### 7b. Placeholder Props
 **File**: `FRONTENT/src/utils/placeholderProps.js`
