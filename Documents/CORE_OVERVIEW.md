@@ -111,6 +111,7 @@ graph TD
 ### 5.3 Cache & Sync Conventions
 - Cache-first flows read from IndexedDB first.
 - Incremental background syncing uses stored timestamp cursors without blocking the UI.
+- Small IndexedDB writes use the normal 1.2 second wait. Large batch writes extend that wait by row count, up to 30 seconds, so a slow cache write does not report a saved server batch as failed.
 
 ---
 

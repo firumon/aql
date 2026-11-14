@@ -39,13 +39,13 @@ let queuedSyncHandler = null
 
 const TIMEOUT_TOKEN = Symbol('timeout')
 
-export async function withTimeoutDetailed(promise, fallbackValue, label = '') {
+export async function withTimeoutDetailed(promise, fallbackValue, label = '', timeoutMs = DB_TIMEOUT_MS) {
   let timerId = null
   try {
     const result = await Promise.race([
       promise,
       new Promise((resolve) => {
-        timerId = setTimeout(() => resolve(TIMEOUT_TOKEN), DB_TIMEOUT_MS)
+        timerId = setTimeout(() => resolve(TIMEOUT_TOKEN), timeoutMs)
       })
     ])
     if (result === TIMEOUT_TOKEN) {
@@ -252,7 +252,10 @@ async function persistBatchResourcePayload(resourceName, resourceData = {}) {
 
   const rows = resourceData.rows
   if (rows.length > 0) {
-    const writeResult = await withTimeoutDetailed(rowsUpsert(resourceName, headers, rows), 0, `rowsUpsert:${resourceName}`)
+    const timeoutMs = rows.length > 1000
+      ? Math.min(30000, DB_TIMEOUT_MS + Math.ceil((rows.length - 1000) / 1000) * 3000)
+      : DB_TIMEOUT_MS
+    const writeResult = await withTimeoutDetailed(rowsUpsert(resourceName, headers, rows), 0, `rowsUpsert:${resourceName}`, timeoutMs)
     if (writeResult.status !== 'success' || !writeResult.data || writeResult.data.success !== true || writeResult.data.data?.affected !== rows.length) {
       logger.error('Failed to store batch rows', { resource: resourceName, writeResult })
       return false
