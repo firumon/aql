@@ -49,6 +49,15 @@ graph TD
 - Stores are registered with credit limits, payment terms (e.g. 7 days, 15 days, 30 days), and assigned visit days (e.g. `Monday, Thursday`).
 - The system groups outlets into route territories to optimize sales representative and driver travel.
 
+The Outlets `NoUpdates` list uses the configured default `VisitFrequencyDays` from
+`OutletOperatingRules`. It includes active outlets whose last activity is older than
+that number of days, and outlets with no recorded activity. Never-touched outlets come
+first, then the oldest activity. An age equal to the limit is not included.
+The approved AQL Config override shows `No Updates for {x} Days` from the same setting.
+A missing or non-positive default gives no rows and the plain label `No Updates`.
+This list uses the default, not each outlet's own visit rule. Other activity metrics,
+activity colors, and recent-stream lists keep their existing activity window.
+
 ### 3.2 Sales Visits & Shelf Audits (`OutletVisits`)
 
 The Today list shows active visits dated today or earlier. The oldest visit dates appear first.

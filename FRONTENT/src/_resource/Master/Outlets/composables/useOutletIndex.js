@@ -1,6 +1,7 @@
 import { computed } from 'vue'
 import { useRecord } from 'src/composables/resources/useRecord'
 import { useOutletResource } from './useOutletResource'
+import { operatingRuleDefaults } from 'src/_resource/Master/OutletOperatingRules/composables/useOutletOperatingRulesResource'
 import { useOutletStorageResource } from 'src/_resource/Operation/OutletStorages/composables/useOutletStorageResource'
 import { toDateOnly } from 'src/utils/dateHelpers'
 import { sortByDate } from 'src/utils/sortHelpers'
@@ -66,6 +67,7 @@ function distinctOutlets (rows) {
 
 const build = (recordSource) => {
   const { outlets, activeOutlets, outletMap } = useOutletResource()
+  const noUpdatesDays = computed(() => operatingRuleDefaults().visitFrequencyDays)
 
   const rows = (name) => (recordSource.rows(name) || []).map(asRow).filter(isActiveRow)
 
@@ -270,7 +272,8 @@ const build = (recordSource) => {
     AllOutlets: [...activeSummaries.value].sort(byName),
 
     NoUpdates: activeSummaries.value
-      .filter((summary) => !summary.isActive)
+      .filter((summary) => noUpdatesDays.value > 0 &&
+        (summary.lastActivityDays === null || summary.lastActivityDays > noUpdatesDays.value))
       .sort((a, b) => {
         const left = a.lastActivityDays
         const right = b.lastActivityDays
