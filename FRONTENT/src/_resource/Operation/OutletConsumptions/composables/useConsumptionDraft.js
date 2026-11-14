@@ -390,7 +390,8 @@ export function settleConsumptionCount (pageState) {
 
   if (restocks.length) {
     pageState.setResource(RESTOCKS, null,
-      restockNode({ ...(pageState.getRecord(null, RESTOCKS) || {}) }, restocks, restockControlsOf(pageState)))
+      restockNode({ ...(pageState.getRecord(null, RESTOCKS) || {}) }, restocks,
+        restockControlsOf(pageState), { withDerive: false }))
   } else {
     pageState.removeNode(RESTOCKS)
   }

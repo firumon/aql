@@ -98,7 +98,7 @@ export function splitByWarehouseStock (rows = [], warehouseCode = '', warehouseS
     const sku = text(row.SKU)
     const wanted = num(row.Quantity)
     if (!sku || wanted <= 0) return
-    const onHand = stock.get(sku) || 0
+    const onHand = Math.max(0, stock.get(sku) || 0)
     const covered = Math.min(wanted, onHand)
     if (covered > 0) {
       allocated.push({ SKU: sku, Quantity: covered })

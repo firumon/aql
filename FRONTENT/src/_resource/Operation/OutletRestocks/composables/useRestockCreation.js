@@ -205,7 +205,7 @@ export function restockNodeForConsumption (consumption = {}, soldRows = [], { wa
     [RESTOCK_CONTROL.DIRECT]: direct,
     [RESTOCK_CONTROL.DELIVER]: direct,
     [RESTOCK_CONTROL.WAREHOUSE]: direct ? (text(warehouseCode) || houses[0]) : ''
-  })
+  }, { withDerive: false })
 }
 
 // The routing answers as they stand on the node. Every screen that rebuilds the node has

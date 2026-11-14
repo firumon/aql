@@ -57,7 +57,8 @@ export function useConsumptionCountFields (pageState, options = {}) {
     if (index !== undefined) return pageState.setChildren(NODE.RESTOCK_ITEMS, index, 'Quantity', qty, NODE.RESTOCKS)
     if (qty <= 0) return
     const routing = restockRoutingOf(pageState)
-    pageState.updateResource(NODE.RESTOCKS, null, restockNode({ OutletCode: outletCode.value }, [], routing))
+    pageState.updateResource(NODE.RESTOCKS, null,
+      restockNode({ OutletCode: outletCode.value }, [], routing, { withDerive: false }))
     pageState.addChild(NODE.RESTOCK_ITEMS, restockItemRow({ SKU: code, Quantity: qty }, routing), NODE.RESTOCKS)
   }
 
