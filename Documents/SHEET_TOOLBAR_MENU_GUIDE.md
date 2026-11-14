@@ -9,11 +9,7 @@ This is the **single admin-facing guide** for all actions available in the Googl
 - `AQL 🚀 > 📚 Resources`
 - `AQL 🚀 > ⚙️ Setup & Refactor`
 
-Use this document when an admin asks:
-- where to go in menu
-- what each action does
-- what inputs are required
-- what happens after clicking submit
+Use this document when an admin asks: where to go in menu; what each action does; what inputs are required; what happens after clicking submit
 
 ## 1. Before You Start
 
@@ -42,7 +38,7 @@ Use this document when an admin asks:
 | `📚 Resources > Manage Actions` | Configure `AdditionalActions` definitions per resource. |
 | `📚 Resources > Manage Access Policy` | Configure 5-digit ROPDU access policy octal bits per resource (`AccessPolicy`). |
 | `📚 Resources > Manage Access Region Source` | Configure JSON inheritance rules for region mapping per resource (`AccessRegionSource`). |
-| `📚 Resources > Manage Lists` | Configure list view filters per resource (`ListViews`). |
+| `📚 Resources > Manage Lists` | Set up named lists, filters, and extra feature settings (ListViews). |
 | `📚 Resources > Manage Relations` | Configure explicit cross-resource relations per resource (`Relations`). |
 | `📚 Resources > Manage Archive Policy` | Configure automated archive frequencies, file patterns, batch limits, and condition rules (`Archive`). |
 | `📚 Resources > Sync APP.Resources from Code` | Reconcile sheet schema/default rows with `syncAppResources.gs` source config. |
@@ -54,27 +50,16 @@ Use this document when an admin asks:
 | `⚙️ Setup & Refactor > Setup All operation` | Create/refactor operation sheets. |
 | `⚙️ Setup & Refactor > Setup Base Accounts` | Create/refactor base account sheets. |
 
-Procurement sidebar order after PO receiving implementation:
-- `Purchase Orders` (`/operation/purchase-orders`, order `6`)
-- `PO Receiving` (`/operation/po-receivings`, order `7`)
-- `Goods Receipts` (`/operation/goods-receipts`, order `8`)
+Procurement sidebar order after PO receiving implementation: `Purchase Orders` (`/operation/purchase-orders`, order `6`); `PO Receiving` (`/operation/po-receivings`, order `7`); `Goods Receipts` (`/operation/goods-receipts`, order `8`)
 
 ## 3. Users (`AQL 🚀 > 👥 Users`)
 
 ### 3.1 Create User
-Required inputs:
-- `Name`
-- `Email`
-- `Password`
+Required inputs: `Name`; `Email`; `Password`
 
-Optional but recommended:
-- `Designation`
-- `Roles` (one or more)
-- `Access Region` (leave empty for universe access)
+Optional but recommended: `Designation`; `Roles` (one or more); `Access Region` (leave empty for universe access)
 
-Result:
-- Adds a new row to `APP.Users` with `Status = Active`.
-- Password is stored as hash.
+Result: Adds a new row to `APP.Users` with `Status = Active`.; Password is stored as hash.
 
 ### 3.2 Update User
 Flow:
@@ -82,23 +67,19 @@ Flow:
 2. Form auto-fills current values.
 3. Update fields and submit.
 
-Notes:
-- `Name` and `Email` remain required.
-- `New Password` is optional.
+Notes: `Name` and `Email` remain required.; `New Password` is optional.
 
 ### 3.3 Toggle User Status
 Flow:
 1. Select user.
 2. Click toggle.
 
-Result:
-- Flips `Status` between `Active` and `Inactive`.
+Result: Flips `Status` between `Active` and `Inactive`.
 
 ## 4. Designations (`AQL 🚀 > 💼 Manage Designations`)
 
 ### 4.1 Create Designation
-Required:
-- `Name`
+Required: `Name`
 
 Optional:
 - `Parent Designation` — pick parent designation from dropdown, or none for top-level
@@ -128,18 +109,14 @@ Opens the Access Regions management dialog (`adminDialog.html`).
 - **Cache**: Automatically invalidates memory cache and increments session auth version.
 - **Canonical Specification**: For hierarchy rules, tree expansion, and universe access, see [ACCESS_REGION_AND_POLICY_SYSTEM.md](file:///f:/AQL/Documents/ACCESS_REGION_AND_POLICY_SYSTEM.md#2-core-concepts).
 
-
 ## 6. Roles (`AQL 🚀 > 🛡️ Roles`)
 
 ### 6.1 Create Role
-Required:
-- `Name`
+Required: `Name`
 
-Optional:
-- `Description`
+Optional: `Description`
 
-Critical step:
-- Select actions for each resource in matrix (`Read/Write/Update/Delete` + additional actions).
+Critical step: Select actions for each resource in matrix (`Read/Write/Update/Delete` + additional actions).
 
 ### 6.2 Update Role
 Flow:
@@ -148,22 +125,16 @@ Flow:
 3. Update fields and permissions.
 
 ### 6.3 Inject Default Roles
-Purpose:
-- Seeds standard baseline roles.
+Purpose: Seeds standard baseline roles.
 
-When to use:
-- New setup / missing default role baseline.
+When to use: New setup / missing default role baseline.
 
 ## 7. Resources (`AQL 🚀 > 📚 Resources`)
 
 ### 7.1 Add Resource / Edit Resource
-Purpose:
-- Manage rows in `APP.Resources`, which drives routing, authorization payload, and master runtime behavior.
+Purpose: Manage rows in `APP.Resources`, which drives routing, authorization payload, and master runtime behavior.
 
-Minimum critical fields:
-- `Name`
-- `Scope`
-- `SheetName` (for non-functional resources)
+Minimum critical fields: `Name`; `Scope`; `SheetName` (for non-functional resources)
 
 Important references:
 - `Documents/SCHEMA_RESOURCE_COLUMNS.md` (column-by-column meaning)
@@ -173,32 +144,21 @@ Important references:
 - **Menu Path (CSV)**: Enter the sidebar hierarchy as comma-separated labels (e.g. `master,Product` or `operation,Warehouse`). This is stored as `group` (string array path) in the `Menu` JSON.
 
 ### 7.2 Manage Reports
-Purpose:
-- Configure per-resource report definitions stored in `Resources.Reports` JSON.
+Purpose: Configure per-resource report definitions stored in `Resources.Reports` JSON.
 
-Admin input needed:
-- Report label/name
-- Template sheet
-- Input mappings
-- PDF options (if needed)
+Admin input needed: Report label/name; Template sheet; Input mappings; PDF options (if needed)
 
-Reference:
-- [FEATURE_REPORTS_SYSTEM.md](file:///f:/AQL/Documents/FEATURE_REPORTS_SYSTEM.md)
+Reference: [FEATURE_REPORTS_SYSTEM.md](file:///f:/AQL/Documents/FEATURE_REPORTS_SYSTEM.md)
 
 ### 7.3 Manage Actions
-Purpose:
-- Configure per-resource `AdditionalActions` definitions.
+Purpose: Configure per-resource `AdditionalActions` definitions.
 
-Admin input needed:
-- Action label / key
-- Target fields and behavior parameters per action
+Admin input needed: Action label / key; Target fields and behavior parameters per action
 
-Reference:
-- `Documents/SCHEMA_RESOURCE_COLUMNS.md` (`AdditionalActions`)
+Reference: `Documents/SCHEMA_RESOURCE_COLUMNS.md` (`AdditionalActions`)
 
 ### 7.4 Manage Access Policy
-Purpose:
-- Configure per-resource `AccessPolicy` 5-digit octal string (`ROPDU`).
+Purpose: Configure per-resource `AccessPolicy` 5-digit octal string (`ROPDU`).
 
 Behavior:
 - Checkboxes in dialog dynamically calculate and format the 5-digit octal string.
@@ -207,34 +167,24 @@ Behavior:
 - Canonical specification for `ROPDU` digit definitions, bit weights, and row filtering: see [ACCESS_REGION_AND_POLICY_SYSTEM.md](file:///f:/AQL/Documents/ACCESS_REGION_AND_POLICY_SYSTEM.md#3-access-policy-ropdu).
 
 ### 7.5 Manage Access Region Source
-Purpose:
-- Configures a resource's own region column (`self`) and fallback inheritance rules (`subject`) for `AccessRegionSource`.
+Purpose: Configures a resource's own region column (`self`) and fallback inheritance rules (`subject`) for `AccessRegionSource`.
 
 Behavior:
 - The dialog is sectioned (Self Region, Subject Resources, Subject Failures) with dropdowns, radios, and a live JSON preview.
 - Saving an empty configuration writes a blank cell.
 - Canonical specification for the JSON grammar, place-name resolution, and write-time fallback walk: see [ACCESS_REGION_AND_POLICY_SYSTEM.md](file:///f:/AQL/Documents/ACCESS_REGION_AND_POLICY_SYSTEM.md#4-accessregionsource).
 
-
 ### 7.6 Manage Lists
-Purpose:
-- Configure per-resource `ListViews` filters.
 
-Behavior:
-- If custom views exist: dialog shows view list for add/edit/delete.
-- If no custom views: dialog shows select + `Update`:
-  - `Fallback to default Active/Inactive` -> writes blank `ListViews` cell
-  - `Switch off ListViews for <Resource>` -> writes `[]`
-- Adding any view writes non-empty JSON array (custom mode).
-- Deleting last custom view writes `[]` (off mode).
-
-Reference:
-- `Documents/SCHEMA_RESOURCE_COLUMNS.md` (`ListViews` JSON schema + operators)
-- `Documents/WORKFLOW_OUTLET_OPERATIONS.md / WORKFLOW_PROCUREMENT.md` section 2 (List View runtime flow)
+Set up the resource's ListViews cell with Add, Edit, Delete, and Save View.
+The form builds filters; More list settings accepts extra JSON keys.
+The manager validates the shapes described in [ListViews sheet setup](UI_LIST_SWITCHER_SHEET.md).
+Save writes the cell and clears server config cache; refresh auth config in the app afterward.
+Blank writes auto mode, [] writes off, and a non-empty array writes custom mode.
+The frontend reads the configured array.
 
 ### 7.7 Manage Relations
-Purpose:
-- Configure per-resource `Relations` metadata (explicit cross-resource links).
+Purpose: Configure per-resource `Relations` metadata (explicit cross-resource links).
 
 Admin input needed:
 - Source Resource
@@ -248,18 +198,12 @@ Label Header is a **combo input**: the dropdown list offers the target resource'
 - Parent path — `$product.Name`
 - Template — `$product.Name - Variant1`
 
-Behavior:
-- Default simple configs (`targetHeader = Code`, no `labelHeader`) are compressed to string values.
-- Configs with a custom target header or a label header are written as objects.
-- Saving an empty set writes a blank `Relations` cell (heuristic-only derivation).
-- Save clears the resource config cache.
+Behavior: Default simple configs (`targetHeader = Code`, no `labelHeader`) are compressed to string values.; Configs with a custom target header or a label header are written as objects.; Saving an empty set writes a blank `Relations` cell (heuristic-only derivation).; Save clears the resource config cache.
 
-Reference:
-- `Documents/SCHEMA_RESOURCE_COLUMNS.md` (`Relations` JSON schema)
+Reference: `Documents/SCHEMA_RESOURCE_COLUMNS.md` (`Relations` JSON schema)
 
 ### 7.8 Manage Archive Policy
-Purpose:
-- Configure automated archive frequencies, file patterns, batch limits, and condition rules (`Archive`).
+Purpose: Configure automated archive frequencies, file patterns, batch limits, and condition rules (`Archive`).
 
 Inputs:
 - Frequency (`MONTHLY`, `BIMONTHLY`, `QUARTERLY`, `SEMIANNUAL`, `ANNUAL`).
@@ -269,73 +213,45 @@ Inputs:
 - Condition Rules: Target column, Operator (`eq`, `neq`, `gt`, `gte`, `lt`, `lte`, `contains`, `empty`, `notEmpty`, `in`, `not_in`), Value / Token (`$daysAgo:90`, `$today`, `$now`).
 - Relation Rules: Related resource and child/parent conditions.
 
-Behavior:
-- Dual-mode editor: switch seamlessly between Visual Builder and Raw JSON Editor.
-- Saves valid policy JSON directly to `APP.Resources.Archive` for the selected resource.
-- "Clear / Disable Policy" button empties the cell to turn off archiving for that resource.
-- Save clears the resource config cache.
+Behavior: Dual-mode editor: switch seamlessly between Visual Builder and Raw JSON Editor.; Saves valid policy JSON directly to `APP.Resources.Archive` for the selected resource.; "Clear / Disable Policy" button empties the cell to turn off archiving for that resource.; Save clears the resource config cache.
 
-Reference:
-- `Documents/FEATURE_ARCHIVE_SYSTEM.md`
-- `Documents/SCHEMA_RESOURCE_COLUMNS.md`
+Reference: `Documents/FEATURE_ARCHIVE_SYSTEM.md`; `Documents/SCHEMA_RESOURCE_COLUMNS.md`
 
 ### 7.9 Sync APP.Resources from Code
-Purpose:
-- Applies `GAS/syncAppResources.gs` code-level defaults/headers to sheet safely.
+Purpose: Applies `GAS/syncAppResources.gs` code-level defaults/headers to sheet safely.
 
-When to use:
-- After code changes touching `APP_RESOURCES_CODE_CONFIG`
-- During setup/refactor recovery
+When to use: After code changes touching `APP_RESOURCES_CODE_CONFIG`; During setup/refactor recovery
 
 ### 7.10 ⚡ Recalculate LastDataUpdatedAt
-Purpose:
-- Scans all active sheet-backed resources, finds the maximum `UpdatedAt` timestamp across all rows, and updates `APP.Resources.LastDataUpdatedAt` in a single batch write.
-- Also populates `CacheService` keys (`AQL_CURSOR_<SpreadsheetId>_<ResourceName>`) so client polling detects fresh data immediately.
+Purpose: Scans all active sheet-backed resources, finds the maximum `UpdatedAt` timestamp across all rows, and updates `APP.Resources.LastDataUpdatedAt` in a single batch write.; Also populates `CacheService` keys (`AQL_CURSOR_<SpreadsheetId>_<ResourceName>`) so client polling detects fresh data immediately.
 
-When to use:
-- When tenant or local sheet records were updated directly/manually without going through API dispatchers.
-- When `LastDataUpdatedAt` values are empty, zero, or out-of-sync with actual row data.
+When to use: When tenant or local sheet records were updated directly/manually without going through API dispatchers.; When `LastDataUpdatedAt` values are empty, zero, or out-of-sync with actual row data.
 
-Result:
-- Logs scan progress to `_LOGS_` sheet.
-- Shows completion alert with count of resources scanned, updated, and skipped.
+Result: Logs scan progress to `_LOGS_` sheet.; Shows completion alert with count of resources scanned, updated, and skipped.
 
 ### 7.11 Regenerate App Cache
-Purpose:
-- Clears all APP runtime caches and immediately rebuilds critical cache entries from the current sheets.
-- Includes resource config and metadata-backed APP caches.
+Purpose: Clears all APP runtime caches and immediately rebuilds critical cache entries from the current sheets.; Includes resource config and metadata-backed APP caches.
 
-When to use:
-- After manual changes to `APP.Resources`, roles, role permissions, designations, access regions, or APP config.
-- When frontend/login behavior appears to use stale menu, permission, or resource metadata.
+When to use: After manual changes to `APP.Resources`, roles, role permissions, designations, access regions, or APP config.; When frontend/login behavior appears to use stale menu, permission, or resource metadata.
 
-Result:
-- Clears `APP.Metadata` cache rows.
-- Rebuilds configured APP cache entries from sheet data.
-- Warms sheet header metadata for active sheet-backed resources, reducing first-login delay after cache regeneration.
-- Shows a completion alert listing rebuilt caches, header metadata count, skipped entries, and any header warm-up failures.
+Result: Clears `APP.Metadata` cache rows.; Rebuilds configured APP cache entries from sheet data.; Warms sheet header metadata for active sheet-backed resources, reducing first-login delay after cache regeneration.; Shows a completion alert listing rebuilt caches, header metadata count, skipped entries, and any header warm-up failures.
 
 ## 8. Setup & Refactor (`AQL 🚀 > ⚙️ Setup & Refactor`)
 
 ### 8.1 Refactor APP Sheets
-Use when:
-- APP schema tabs/headers drift from expected structure.
+Use when: APP schema tabs/headers drift from expected structure.
 
 ### 8.2 Store APP File ID in Properties
-Use when:
-- Web app runtime cannot resolve APP spreadsheet context.
+Use when: Web app runtime cannot resolve APP spreadsheet context.
 
 ### 8.3 Refactor MASTER Sheets
-Use when:
-- Master sheet structures need creation or alignment.
+Use when: Master sheet structures need creation or alignment.
 
 ### 8.4 Setup All operation
-Use when:
-- Operation sheets are missing or need schema alignment.
+Use when: Operation sheets are missing or need schema alignment.
 
 ### 8.5 Setup Base Accounts
-Use when:
-- Accounts baseline sheets are missing or need schema alignment.
+Use when: Accounts baseline sheets are missing or need schema alignment.
 
 ## 9. Sidebar Menu Taxonomy (Product / Warehouse / Procurement)
 
@@ -438,5 +354,4 @@ When any `AQL 🚀` menu item is **added, removed, renamed, or behavior-changed*
 4. Update `Documents/CONTEXT_HANDOFF.md` if runtime behavior changed.
 
 Do not close the task until these docs are aligned.
-
 

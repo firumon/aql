@@ -173,12 +173,15 @@ When a resource requires file uploading and download capabilities (e.g., licence
 - **Details/Views**: View details grids automatically render `AqlFilePreviewCard` for `"file"` fields. This component reads the local IndexedDB cache (`aql_uploaded_files`), fallback fetching the storage server metadata endpoint if needed, and renders an image preview (with lightbox support) or download button with appropriate file-type icons.
 
 ## ListViews Column Schema & Usage
-The `ListViews` column in the `APP.Resources` sheet defines custom data filter views for the resource.
-* **Purpose**: Configures tab/segment views to filter record datasets on the resource index pages.
-* **Format**: A JSON array of view configuration objects.
-* **Overriding Rule**: If populated with a JSON array (or `[]` to explicitly disable switcher), custom template/modifier overriding for the views switcher is disabled. If blank, overrides are allowed.
-* **Detailed JSON Schema & Operators**: For the complete specification of the filter group/condition JSON objects and supported comparison operators, refer to the canonical [AQL Frontend List Switcher Guide](file:///f:/AQL/Documents/UI_LIST_SWITCHER.md).
-* **Dynamic Tokens**: A condition `value` may be a date/time or current-user token (`$startOfMonth`, `$daysIn:7`, `$userRoles`, ...) instead of a literal, so views such as "Due This Week" or "Assigned To Me" stay correct without per-user sheets. See [Section 5.2 — Dynamic Tokens](file:///f:/AQL/Documents/UI_LIST_SWITCHER.md#52-dynamic-tokens-datetime--current-user).
+
+`APP.Resources.ListViews` stores a JSON array of named view definitions. The resource
+registry parses the cell and puts the array in `ui.listViews` in the authorized resource config.
+A blank or invalid cell yields backend mode `auto` and an empty array; `[]` yields `off`;
+a non-empty array yields `custom`. The frontend uses the array for its list views.
+
+Each view can set permission, source-dependent row features, presentation, actions, and a
+row-click target. See [ListViews](UI_LIST_SWITCHER.md), [sheet setup](UI_LIST_SWITCHER_SHEET.md),
+and [tokens](UI_LIST_VIEWS_TOKENS.md) for the supported settings.
 
 ## Relations Column Schema & Usage
 The `Relations` column declares explicit cross-resource links for a resource, overriding the frontend's name-based heuristics.
@@ -327,7 +330,7 @@ Every audited sheet across `master`, `operation`, and `accounts` scopes includes
   - **Missing Column Guard**: If a sheet does not define `Revision` in its header schema, the bump logic safely and silently skips it without error.
 * **`CreatedBy`**: User display name or ID of the creator.
 * **`UpdatedBy`**: User display name or ID of the user performing the latest update.
-* **Frontend Handling**: `Revision` is classified as an audit header alongside `CreatedAt`, `UpdatedAt`, `CreatedBy`, and `UpdatedBy`. It is excluded from generated form fields (`useFormFields.js`, `useCompositeForm.js`), automatic list views (`useListViews.js`), list view columns (`useListStrategy.js`), and bulk upload template/payload processing (`useBulkUpload.js`).
+* **Frontend Handling**: `Revision` is classified as an audit header alongside `CreatedAt`, `UpdatedAt`, `CreatedBy`, and `UpdatedBy`. It is excluded from generated form fields (`useFormFields.js`, `useCompositeForm.js`) and bulk upload template/payload processing (`useBulkUpload.js`).
 
 ## Sync Protection Rule
 When `syncAppResourcesFromCode` executes, it protects designated metadata columns in `APP.Resources` from being overwritten by code defaults if the sheet cell already contains data.

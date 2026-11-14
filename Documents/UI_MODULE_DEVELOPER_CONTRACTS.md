@@ -6,6 +6,10 @@
 
 ## 5. Page Contracts — `Props<Identity>` Targeted Props
 
+For ListViews, use the [ListViews guide](UI_LIST_SWITCHER.md) for row data, display, and overrides.
+The generic Props mechanism applies to props consumed by each mounted identity.
+
+
 `Page.vue` binds one flat `pageProps` to **every** placeholder, and each placeholder drills
 `$attrs` down to whatever it mounts. `Props<Identity>` carves targeted namespaces out of
 that same flat bag:
@@ -19,9 +23,8 @@ export default {
   PropsSection:    { dense: true },               // broadcast: every section
   PropsContent:    { flat: true },                // broadcast: every content
   PropsAction:     { dense: true },               // broadcast: every action
-  PropsPageHeader: { title: "Today's Work" },     // just PageHeader
-  PropsList:       { layout: ['label'] },         // just the List content
-  PropsListToday:  { perPage: 50 }                // just the per-view ListToday hop
+  PropsPageHeader:  { title: "Today's Work" },
+  PropsFilterInput: { label: 'Search work' }
 }
 ```
 
@@ -30,8 +33,8 @@ export default {
 > Omitting `'PageHeader'` drops the page title and back arrow. Always re-list everything
 > still wanted.
 >
-> **The `Props<Identity>` block is spread FLAT onto the target.** `ListToday` reads
-> `props.perPage` — never `props.PropsListToday.perPage`.
+> **The `Props<Identity>` block is spread FLAT onto the target.** `FilterInput` reads
+> `props.label` directly.
 
 ### 5.1 Precedence
 
@@ -43,8 +46,7 @@ JS modifier stays final, matching every other override in the system.
 - **Keys are never stripped once consumed** — every `Props*` key rides `$attrs` all the way
   down, so a component nested three levels deep can still claim its own block.
 - **Key matching is case-insensitive.**
-- **A block may be a function** — evaluated with the live props bag, so it can read the
-  active view's already-filtered `items` and re-sort them. A static object cannot see rows.
+- **A block may be a function** evaluated with the live props bag. Check which props the mounted component consumes.
 - **The whole BLOCK is the function, never one key inside it.** A function sitting on a
   single key is passed through untouched and reaches a `String` prop as a closure. This is
   the exact mechanism for forwarding container layout tokens down into nested section

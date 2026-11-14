@@ -35,7 +35,7 @@ contains the section you remember.
 | `UI_CREATE_AND_UPDATE_SYSTEM.md` | `UI_CREATE_AND_UPDATE_ANATOMY.md`, `UI_CREATE_AND_UPDATE_VISIBILITY.md`, `UI_CREATE_AND_UPDATE_CHILDREN.md`, `UI_FIELDS_REGISTRY_GUIDE.md` |
 | `UI_PAGE_AND_SECTION_SYSTEM.md` | `UI_PAGE_AND_SECTION_RESOLVERS.md`, `UI_SECTION_AUTHORING.md`, `UI_SECTION_WIDGETS.md`, `UI_PAGE_AND_SECTION_OVERRIDES.md` |
 | `UI_RESOURCE_DOMAIN_LOGIC.md` | `UI_RESOURCE_DOMAIN_BOUNDARIES.md`, `UI_RESOURCE_DOMAIN_PAYLOAD_CHAINS.md`, `UI_RESOURCE_DOMAIN_COMPOSITION.md` |
-| `UI_LIST_SWITCHER.md` | `UI_LIST_SWITCHER_COMPONENTS.md`, `UI_LIST_SWITCHER_SHEET.md` |
+| `UI_LIST_SWITCHER.md` | `UI_LIST_SWITCHER_COMPONENTS.md`, `UI_LIST_SWITCHER_SHEET.md`, `UI_LIST_VIEWS_TOKENS.md`, `UI_LIST_VIEWS_GROUP_SEARCH_LIMIT.md`, `UI_LIST_VIEWS_ITEMS.md` |
 | `UI_CONTENT_SYSTEM.md` | `UI_CONTENT_PAGE_SCHEMAS.md` |
 
 ## Non-Negotiable Frontend Pre-Read
@@ -155,10 +155,19 @@ Use when creating or restructuring a component under `FRONTENT/src/components/{a
   - `Documents/CORE_ARCHITECTURE_RULES.md`
 - Also read the domain doc for whatever subsystem the component belongs to (Content, Page & Section, Action).
 
-### List Switcher Customization
-Use when overriding or creating custom container or item layouts, template overrides, or dynamic modifiers for the list view switcher bar.
-- Read:
-  - `Documents/UI_LIST_SWITCHER.md` — hub: core architecture, overrides and responsive rules. `UI_LIST_SWITCHER_COMPONENTS.md` (§4) for the component catalog, `UI_LIST_SWITCHER_SHEET.md` (§5) for `App.Resources.ListViews` schema, filters and tokens
+### ListViews Development and Switcher UI
+
+[ListViews](UI_LIST_SWITCHER.md) is the guide for named resource lists.
+Its linked parts cover:
+
+- [Core and overrides](UI_LIST_SWITCHER_COMPONENTS.md): data flow, public state, source rules, stages, and override paths.
+- [Sheet setup](UI_LIST_SWITCHER_SHEET.md): manager, view keys, permissions, Filter, and Order.
+- [Group, Search, and Limit](UI_LIST_VIEWS_GROUP_SEARCH_LIMIT.md): row grouping, search, and row caps.
+- [Tokens](UI_LIST_VIEWS_TOKENS.md): filter and order operators, dynamic values, and Group token files.
+- [Item display](UI_LIST_VIEWS_ITEMS.md): layout, content, style, Actions, Target, AppList props, and the shared empty state.
+
+The List and switcher share `useListView`. `listItemProps.js` supplies display parsing,
+`readField` reads row paths, and `decorateRow` adds row facts while preserving getters.
 
 ### Action & FAB Customization
 Use when overriding or creating custom action components, floating action buttons (FABs), workflow buttons, cancel/submit/reset form actions, the sticky form actions bar, the submission lifecycle, or workflow dialogs.

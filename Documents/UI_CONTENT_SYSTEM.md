@@ -58,9 +58,9 @@ export default {
 ### Two-Step Resolution (mirrors the Section resolver, scoped to `contents/`)
 1. **Locate the base content component**, in priority order:
    a. Custom UI generic content: `_ui/[uiName]/components/contents/[content].vue`
-   b. Framework generic content: `components/contents/[content].vue` (e.g. `List.vue`)
+   b. Framework generic content: `components/contents/[content].vue` (when that base file exists)
    c. If neither exists, the first matching Vue override candidate from step 2 below is promoted to serve as the base.
-   d. If still nothing, fall back to the caller-supplied `defaultComponent` (e.g. `List.vue` passes `AppList` so a JS modifier can still adjust its props even with no dedicated content file).
+   d. If still nothing, fall back to the caller-supplied `defaultComponent` (when a caller supplies one).
 2. **Locate a page/resource/scope-level override or modifier** for that base — first match wins, most specific first:
    1. `_ui/[uiName]/components/[scope]/[resource]/[page]/[content].vue` (Vue override — resource + page specific)
    2. `_ui/[uiName]/components/[scope]/[resource]/[page]/[content].js` (JS modifier — resource + page specific)
@@ -84,110 +84,27 @@ Path segments are lowercased for lookup; `resource` (a slug, e.g. `stock-movemen
 
 ---
 
-## 2. `List` — The Built-In List Content Component
+## 2. List content
 
-[List.vue](file:///f:/AQL/FRONTENT/src/components/contents/List.vue) (registered content name `List`, component name `ContentsList`) is the framework's default Index-page content. It:
+A page contract names `List`; the content resolver mounts [List.vue](../FRONTENT/src/components/contents/List.vue).
+List and ListSwitcher share [useListView](UI_LIST_SWITCHER_COMPONENTS.md#41-public-entry-point).
+List passes active rows and view-level `itemProps` to AppList. It shows an active-view error banner
+and uses AppList's empty and loading display. A keyed transition follows resource and view name.
 
-1. Reads `resourceRecord.filteredRecords` (falling back to `resourceRecord.records`) and `resourceRecord.loading`, injected from the page.
-2. Derives label/caption/meta/highlight/chip resolvers from [useListStrategy.js](file:///f:/AQL/FRONTENT/src/composables/resources/useListStrategy.js) (see §3) as its baseline (`strategyProps`).
-3. Layers any explicitly-passed props on top (`explicitProps` — anything the caller set that isn't `undefined`), so a page contract or JS modifier can override any single strategy-derived value (`layout`, `label`, `chipColor`, etc.) without touching the rest.
-4. Builds `preparedResolverProps` — the content-resolver identity used to find a per-active-view override — merging, **in priority order**: explicit `page`/`scope`/`resource`/`uiName` **props**, then the same as forwarded **attributes**, then `resourceConfig` context (`resourceConfig.page`, `.scope`, `.resourceSlug`, `.customUIName`), with `page` defaulting to `'index'`. This lets a manual `<List page="..." resource="..." />` usage override the ambient page/resource context, e.g. embedding a different resource's list inside a custom section.
-5. Determines `content: 'List<ActiveViewName>'` (PascalCased) whenever a list view is active (see §4), otherwise plain `'List'`.
-6. Feeds `preparedResolverProps` into `useContentResolver`, with [AppList.vue](file:///f:/AQL/FRONTENT/src/components/app/AppList.vue) as the `defaultComponent` fallback.
-7. Renders either the resolved override component (when a view is active and a `List<ViewName>` match exists) or `AppList` directly with `finalProps` — gated on `activeViewName` specifically to avoid the resolver ever matching this file's own registered `List` content key and recursing into itself.
-8. Handles item clicks: caller-supplied `onItemClick`, else navigation to a `record` sub-route when `target` is set, else the default `view` page.
+## 3. AppList and item display
 
-> [!IMPORTANT]
-> **Continuous props during view switches.** `useContentResolver` runs an **async** watcher and transiently resets its `finalProps` to `{}` while it scans for a `List<ViewName>` override. To prevent the list from momentarily rendering empty on every view change, `sanitizedResolvedProps` merges the synchronous `finalProps` baseline (which always carries the freshly-filtered `items` + strategy props) **under** the resolver's output: `{ ...finalProps.value, ...resolvedContentProps.value }`. The baseline keeps the list populated during the async gap; once resolution settles, the resolver's props (including any per-view JS-modifier changes) still win on top, so override behaviour is unchanged. Because `filteredRecords` is a synchronous computed off `activeViewName`, `items` already reflects the newly-selected view the instant the chip changes.
+AppList wraps abstract/List and forwards its props and slots. `view.item` and named display
+overrides supply layout/content, metaLayout/meta, icon, color, and highlight. Sheet pagination
+keys and a Props override supply view-wide props. The List does not pass generic content
+modifier props through to AppList. See the [item guide](UI_LIST_VIEWS_ITEMS.md).
 
-### List Props
-Every prop defaults to `undefined` so `useListStrategy` stays authoritative unless explicitly overridden:
-- **Data/behaviour**: `items`, `onItemClick`, `target`
-- **Content-resolver identity** (override ambient context): `page`, `scope`, `resource`, `uiName`
-- **List container**: `itemKey`, `emptyText`, `bordered`, `itemBordered`, `separator`, `dense`, `color`, `highlight`, `highlightColor`, `clickable`, `itemClass`, `align`
-- **Leading icon/avatar**: `icon`, `iconColor`, `avatar`, `avatarLabel`, `avatarColor`, `avatarSize`
-- **Main content**: `layout`, `content` (Array — column list; forwarded only when it's a real Array, since the same prop name also carries the content-resolver's string identity), `label`, `labelClass`, `caption`, `captionClass`
-- **Meta side section**: `meta`, `metaLayout`, `metaColor`, `metaLabel`, `metaCaption`, `chip`, `chipColor`, `chipOutline`, `chipTextColor`, `badge`, `badgeColor`, `badgeTextColor`, `badgeOutline`
-- **Selection & Checkbox**: `selectable` (Boolean | `'left'` | `'right'`, default `false`), `checkbox` (Boolean | String | Function | Object, default `null`), `modelValue` (Array | Boolean | String | Number | Object), `val` (String | Function, value to track in Array; falls back to `itemKey`), `trueValue`, `falseValue`, `indeterminateValue`, `checkboxColor`. Uses `Renderable` with `QCheckbox` and supports `#checkbox` / `#select` slot overrides.
-- **Row Input**:
-  - `input`: Boolean | String | Object | Function. Activates row input when `true` or specified as a property name (e.g. `input="Qty"`). Can also pass an object of `QInput` props.
-  - `v-model`: Object (`{ [key]: value }`). When provided, **source items are never mutated** and `v-model` holds all values.
-  - `inputKey`: String | Function (defaults to `itemKey` $\rightarrow$ `'Code'`). Determines the key in `v-model` or internal state.
-  - `inputValue` / `val`: String | Function (defaults to string `input`, or `'value'` fallback). Determines the item field to read initial values from.
-  - `inputLabel`: String | Function. Input label evaluated via `resolveProp`. Takes precedence over `inputProps.label` and `input.label`.
-  - `inputProps`: Object | Function. Direct props forwarded to `QInput` (e.g. `{ type: 'number', outlined: true }`).
-  - Precedence: `inputLabel` > `inputProps.label` > `input.label`.
-  - Event: emits `@input-change` with `{ value, item, itemKey, itemKeyValue, field }`.
-- **Row action**: `btn`, `btnColor`. Can be used independently or simultaneously alongside `input` (`input` + `btn` side-by-side flex row). Button click emits `@btn-click`, `@action-click`, and `@click` with the item row.
-- **Pagination**: `paginate` (Boolean, defaults to `true` in `abstract/List.vue`), `perPage` (Number, default `25`), `threshold` (Number, default `35`), `page` (Number, controlled current page synced with `resourceRecord.currentPage`)
+## 4. Named view overrides and actions
 
-Function-valued props (`label`, `caption`, `chipColor`, ...) are per-item resolvers — `(item) => value` — consumed by `abstract/List.vue` and forwarded untouched.
-
-Pagination activates when `items.length > threshold` (35 by default). It renders Quasar `<q-pagination>` with `:max-pages="7"` and `boundary-numbers`, while keeping rows inside the existing `<TransitionGroup>` so pagination and filtering preserve row transitions. The active page is persisted per resource through `resourceRecord.currentPage`.
-
-### Centralized List Transitions
-List motion is defined once, centrally — no per-view/per-resource override touches it, and slot forwarding (`item`, `avatar`, `content`, `meta`, `btn`), the `click` emission, `itemKey` resolution, selection highlight, and loading/empty states are all untouched:
-- **Item entrance / reorder** — `abstract/List.vue` renders its items branch through a `<TransitionGroup name="aql-list-item">` with **no `tag`** (Vue 3 renders no wrapper element, so `q-item`s stay direct children of `q-list` and separators/gutter are preserved). Items fade + slide up on load/filter and glide via FLIP `-move` transitions; leaving items are taken out of flow (`position: absolute`, contained by `q-list`'s `relative-position`) so neighbours settle without a layout jump. **On a view switch, the filtered `items` array changes while the list node stays mounted, so this same TransitionGroup animates the diff between the old and new view's records — no whole-list cross-fade is used.**
-- All timing lives in `src/css/transitions.scss` (`.aql-list-item-*`), is kept in the 150–200ms range for snappiness, and is disabled under `prefers-reduced-motion`.
-
-> [!IMPORTANT]
-> **No outer `<Transition>` on `List.vue`.** An earlier `<Transition name="aql-list-fade" mode="out-in">` keyed by `activeViewName` was removed: `mode="out-in"` holds the incoming node until the outgoing one finishes leaving, which — combined with `useContentResolver`'s async view scan — could stall and unmount the list on a chip change, leaving it blank until reload. `contents/List.vue` now renders `<component :is>` **directly, unkeyed**, so the list node stays mounted across view switches and prop updates flow through continuously; item-level animation is delegated entirely to `abstract/List.vue`'s `<TransitionGroup>`.
-
-### Example JS Logic Modifier (overrides two strategy-derived columns)
-```javascript
-// src/_ui/AQL/components/master/products/index/listInactive.js
-export default function (props) {
-  return {
-    ...props,
-    layout: ['label', 'caption'],
-    content: ['Name', 'SkuCode']
-  }
-}
-```
-
----
-
-## 3. `useListStrategy` — Header-Driven Defaults
-
-Derives label/caption/meta/highlight resolvers purely from a resource's headers, parent relations, and active list-view state, so `contents/List.vue` never needs per-resource conditionals:
-- **Label**: own `Name` column → first parent relation with a `Name` column (borrowed, e.g. SKU → Product, with `Variant1..5` appended) → 2+ descriptive columns combined (`"h2 - h3"`) → single descriptive column → `Code`.
-- **Caption**: multiple parent relations → join every parent's name/code with `•`; else whatever the label didn't consume, or a `Date`/`TransactionDate`/`CreatedAt` + `CreatedBy`/`UpdatedBy`/`User`/`Agent` pair once available.
-- **Highlight / meta-chip**: tracks `Progress` → `Status` → `Type`. While a list view is active, that field is dropped from the chip (redundant with the selected view chip) in favor of a currency-formatted amount column, or — for resources with more than 7 headers — a quantity column; `highlight` still tracks the state column regardless.
-- **Meta-label / meta-caption**: data-dense resources (>7 headers) surface an amount/quantity column as `metaLabel` and one more unused descriptive column as `metaCaption`.
-
-See `FRONTENT/src/composables/resources/useListStrategy.js` for the exact header-priority tables.
-
----
-
-## 4. Per-Active-View Overrides (`List<ActiveViewName>`)
-
-When a list view is active (managed by `useListViews` — e.g. an "Approved" filter chip selected), `contents/List.vue` sets its content-resolver identity to `List${toPascalCase(activeViewName)}` (e.g. `ListApproved`) instead of plain `List`. This lets you fully swap or adjust the list rendering for one specific view without touching the default:
-
-- **Generic override for all resources under this view name**: `src/components/contents/ListApproved.vue`
-- **Tenant/resource-specific Vue override**: `src/_ui/[uiName]/components/[scope]/[resource]/[page]/ListApproved.vue`
-- **Tenant/resource-specific JS modifier**: `src/_ui/[uiName]/components/[scope]/[resource]/[page]/ListApproved.js`
-
-If no `List<ViewName>` match is found anywhere, resolution silently falls through — `contents/List.vue` still renders `AppList` with the default strategy-derived props, since the override lookup only affects the `content` identity string, not the fallback behaviour.
-
-### 4.1 Targeting a per-view list with `Props<Identity>`
-
-The per-view hop participates in the `Props<Identity>` system like any other placeholder, so a page can hand props to one view's list without a file at all:
-
-```javascript
-// _ui/AQL/pages/Operation/OutletVisits/Index.js
-export default {
-  contents: ['List'],
-  PropsList:      { layout: 'list' },     // the default List content
-  PropsListToday: { layout: 'grid' }      // only while the "Today" view is active
-}
-```
-
-The block is spread flat — `ListToday` reads `props.layout`. A `ListToday.js` modifier still wins over `PropsListToday`. See [UI_PAGE_AND_SECTION_SYSTEM.md](file:///f:/AQL/Documents/UI_PAGE_AND_SECTION_SYSTEM.md) §1.4.1 for the full contract.
-
-> [!NOTE]
-> `contents/List.vue` builds its per-view resolver bag from `$attrs` **first**, then its own strategy/explicit props. Without that, `finalProps` was assembled from *declared* props only (see `explicitProps`) and every key an ancestor drilled down without a matching `defineProps` entry — including `PropsListToday` — was dropped before the per-view resolver ever ran.
-
----
+Use the named ListViews override loader for Data, Group, Map, Filter, Order, Search, Limit,
+Props, Target, display values, and Actions. See [paths and exports](UI_LIST_SWITCHER_COMPONENTS.md#45-override-lookup).
+Inline AdditionalActionsButtons uses the active view's `actionProps`; its action system owns
+dispatch. A row click resolves the active Target and checks destination access. Action-slot
+clicks stop before reaching the row. View permission controls which lists are available.
 
 > [!IMPORTANT]
 > **Content overrides do not control field rendering.** Individual form controls and detail/table value cells are delegated to the base field subsystem at `src/_fields/<type>/{Add,Edit,View}.vue`, resolved through `resolveFieldComponent(type, mode)` — the content components hold no type branches. Changing how a *field type* looks means editing that type's SFC (which applies to every resource, in add/edit/view); changing how *one column of one resource* looks means a `FormField<Header>` / `ViewColumn<Col>` override. See [UI_CREATE_AND_UPDATE_SYSTEM.md](file:///f:/AQL/Documents/UI_CREATE_AND_UPDATE_SYSTEM.md) §15 and [UI_VIEW_SYSTEM.md](file:///f:/AQL/Documents/UI_VIEW_SYSTEM.md) §4.

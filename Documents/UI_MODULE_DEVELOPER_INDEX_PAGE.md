@@ -169,87 +169,21 @@ reads as two headings for one number. Put the name on the item's `label` and omi
 
 ### 9.3 The work-queue switcher
 
-A **work queue** is a `ListSwitcher` view rendered through `List<ViewName>` — `contents`,
-not a section. Name each view for the state it surfaces (`PendingApproval`, `NeedsRevision`,
-`Drafts`), not a generic bucket name.
+ListSwitcher renders the tabs from `useListView`. View permissions select which tabs are available.
+The selected view is shared with List. The switcher also exposes an in-memory config editor,
+search input, counts, errors, and a preview of the first allowed list.
+See [ListViews](UI_LIST_SWITCHER.md) and its [core guide](UI_LIST_SWITCHER_COMPONENTS.md).
 
-**Gate each pill on the permission for the action that view exists to start.** A switcher
-showing eight views to everyone is a wall of pills where seven are someone else's job:
+A personal view can filter a real owner field using `$userCode`. A list filter does not grant
+record access. View permission controls list availability, not record access.
 
-```javascript
-// A view absent from this map is ungated. `any` = one of the listed actions suffices.
-const VIEW_GATES = {
-  Drafts:            { any: ['create'] },
-  PendingApproval:   { any: ['approve'] },
-  PendingCompletion: { any: ['markDelivered', 'reallocate'] }
-}
-```
+### 9.4 List rows and display
 
-Read-only states of records the user can already see carry no gate beyond the resource's own
-read permission.
-
-**A view whose name claims a person needs a client-side ownership filter.** A sheet view
-filters on a column, so a view named for a *state* is fully expressed there — but a pill
-titled "My Drafts" is making a claim the sheet cannot check. Under an
-`OWNER_AND_UPLINE` access policy a manager legitimately receives their reports' drafts, and
-the view hands them all to a pill promising only their own. Pass the signed-in user into the
-view's preset and filter there:
-
-```javascript
-PropsListDrafts: (props) => draftsPreset(props.items, user.value?.id)
-```
-
-This is the case that justifies a preset taking an argument at all. Match on the user's
-code, and fail closed on a blank (§8.1).
-
-**Gating the switcher is menu hygiene, not access control.** A hidden view is still a filter
-the record store knows about and a deep link could still select it. That is fine when — and
-only when — every view filters on a state column over rows the user is already authorised to
-read. It is never a substitute for a record access policy.
-
-**Move the active view when the default has been gated away.** `default: true` lives in the
-sheet config, which knows nothing about permissions, so a user whose default pill is hidden
-still *lands* on it and reads an empty list with no pill highlighted — which looks like a
-data failure. Correct it to the first visible view, deferred to a microtask (the correction
-runs inside a render-time prop evaluation and writes reactive state the same render is
-reading) and guarded so it is idempotent.
-
-**Fall back rather than render an empty switcher.** If every gated view is hidden, show the
-ungated set instead of no pills over a list still filtered by a view the user cannot see.
-
-### 9.4 Dynamic lists — auto-inferring rows from schema
-
-The list-strategy composable derives a list row's presentation from the resource's
-**headers and relations alone** — no per-view manual config required. A new resource with
-zero `_ui/` files already renders a sensible list.
-
-**Label** — first match wins: own descriptive column (e.g. `Name`) → borrow a parent's
-descriptive column → join the first two non-audit, non-foreign-key columns → a single
-descriptive column → the record's own `Code`.
-
-**Caption** fills whatever the label pass didn't consume, upgraded to a multi-parent join
-or a date+user pairing when both are present.
-
-**Chip / highlight state** — state-column resolution order: `Progress` → `Status` → `Type`.
-Whichever exists drives both the row's colored chip and its highlight state.
-
-**Meta value** — resolved from an amount/quantity-header priority list once a resource
-crosses a column-count threshold, surfacing the most important number without being told to.
-
-> [!IMPORTANT]
-> **Check what the list strategy already infers before hand-writing `label`/`caption`/
-> `chip` resolvers for a new resource.** A `Props<Identity>` override (§5) is for the case
-> the inference gets wrong — not the default path for every new module. Most resources need
-> zero list customization; a resource with several state-specific queues (§7.2) is the case
-> that needs presets.
+The List content reads the active rows, item props, action props, and row-click handler from
+`useListView`. AppList renders the rows and inline Additional Actions. Configure the view's
+`item`, `actions`, and `target`, or use the matching named overrides.
+See the [item guide](UI_LIST_VIEWS_ITEMS.md) for the settings and examples.
 
 ---
 
-
----
-
-⬑ Back to **[3-Layer UI — Resource UI Module Developer Guide](UI_MODULE_DEVELOPER_GUIDE.md)**.
-
----
-
-⬑ Back to **[3-Layer UI — Resource UI Module Developer Guide](UI_MODULE_DEVELOPER_GUIDE.md)**.
+Back to [Resource UI Module Developer Guide](UI_MODULE_DEVELOPER_GUIDE.md).

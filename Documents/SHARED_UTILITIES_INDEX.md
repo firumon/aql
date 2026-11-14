@@ -150,15 +150,15 @@ Generic token registry + condition evaluator. Shared by `APP.Resources.ListViews
 | `parseToken(value)` | `$name` / `$name:p1:p2` → `{ spec, params }`, or `null`. Pure. |
 | `tokenizeValue(value, token)` | Apply a built-in token column conversion for Group; null for unknown tokens. No offset/user/time resolution. |
 | `isToken(value)` | True when `value` is a registered token. Pure. |
-| `prepareCondition(condition, ctx, options)` | Compile one condition (token parse + coercion) once. `options.strictColumn` flips column-missing behaviour (list views strict, `visibleWhen` lenient). |
+| `prepareCondition(condition, ctx, options)` | Compile one condition (token parse + coercion) once. `options.strictColumn` flips column-missing behaviour (default strict; fresh Filter, Order on, and visibleWhen pass false). |
 | `prepareFilter(filter, ctx, options)` | Compile a whole condition/group tree once. |
 | `evaluatePreparedFilter(prepared, row)` | Evaluate a compiled tree against a row (no token parsing). |
 | `evaluateFilter(filter, row, ctx, options)` | Convenience: prepare + evaluate for a single row. |
 | `resolveTokenContext()` | Build `{ user }` from the auth store (safe when store absent). |
 | `useTokenEvaluator()` | Composable: same API with the logged-in user pre-bound. |
 
-**When to reuse**: any filter/token evaluation. The client half MUST stay in sync with `GAS/listViewsManager.html` and `GAS/actionTargets.gs` (see `list_view_tokens.md`).
-**When to extend**: add a new token to `TOKENS` or a new coercion to `COERCES` here, and re-run the esbuild verification harness from `list_view_tokens.md`.
+**When to reuse**: any filter/token evaluation. Keep both admin token pickers in sync. Check GAS/actionTargets and the client action-seed parser only when the token also belongs to that smaller grammar (see `list_view_tokens.md`).
+**When to extend**: add a new token to `TOKENS` or a new coercion to `COERCES` here, and run focused checks against the real modules. See `list_view_tokens.md`.
 **Strict sync rule**: editing `TOKENS`/`COERCES` requires the matching GAS change and a verification pass.
 
 ---
@@ -296,3 +296,60 @@ The app asks for notification permission and subscribes only when the signed-in 
 | Push / PWA / placeholder props / IDB compat | the matching file in §7 |
 
 If a capability spans a genuinely new domain with no home above, create a new file ONLY after confirming none of these cover it, and record the new file in this index and in `CORE_DOC_ROUTING.md`.
+
+## ListViews and list source rules
+
+The public component API is resources/listViews/useListView.js.
+It shares views, lists, loading, tabs, activeName, activeList, setActiveView, resourceName, itemProps, actionProps, onRowClick, and optional debug helpers.
+[The core guide](UI_LIST_SWITCHER_COMPONENTS.md) owns exact signatures and lookup paths.
+`itemProps` merges the active view props with the shared [empty state](UI_LIST_VIEWS_ITEMS.md#8-how-rows-reach-applist).
+View permission reuses resourceConfig.allowed before the list pipeline; raw debug settings stay intact.
+
+Reuse `useListEngine` and `useListResolver` for Data source discovery and list rules.
+`Data/useData` prepares shared resource facts and calculations for list rows.
+`Data/useList` owns common and fixed-purpose row filters across UIs. It may also add display
+facts shared by named ListViews. Keep view field and layout choices in `item`; use a per-view
+Map override for a display fact that only one named view needs. Keep all resource list filters
+out of `APP.Resources.ListViews`.
+`useRecord` is the only fallback. Keep domain facts in the owning resource.
+
+A ready per-view `Data` override replaces source rules. Otherwise, the current resolver chooses
+one `useList` rule: the exact view name or `default`. It does not apply `default` first and then
+a named rule. The resolver must choose the source, apply the shared default, then apply the named
+rule, including when a `Data` override supplies the rows. It also needs a bypass for lists outside
+the common baseline. See `UI_LIST_SWITCHER_COMPONENTS.md` before relying on this behavior.
+useFeatureChain finds numbered features automatically.
+03Filter reuses tokenEvaluator; 04Order reuses sortHelpers and tokenEvaluator.
+01Group keeps first bucket rows in each pass, then adds facts with readField,
+sort value helpers, tokenizeValue, and decorateRow.
+05Search uses readField/decorateRow. 06Limit caps rows before 21Props and the display stages.
+31Target carries the view's target or Target override for onRowClick; it does not decorate rows.
+91Content, 92Meta, and 93Style fill view-level itemProps. 94Actions fills actionProps. These stages return input rows unchanged.
+useTokenOverride loads Group custom functions from resource-level or UI-wide token files.
+Do not duplicate those helpers or start a second pipeline in a component.
+The computed result is the row cache.
+
+Search is implemented by `features/05Search.js`.
+Reuse useResourceReload().reloadDependencies({ resources }) for checked named-resource reloads.
+The default reload still follows route relations. See UI_RECORD_ACCESS.md.
+
+### ListViews item display helpers
+
+File: `FRONTENT/src/composables/resources/listViews/listItemProps.js`.
+Use it for the generic display stages. Keep resource facts in their owning domain.
+The [item guide](UI_LIST_VIEWS_ITEMS.md) owns the full behavior and accepted shapes.
+
+| Export | Purpose |
+|---|---|
+| itemPiece | Validate item config and choose a sheet value or ready raw display export; uses the reactive override loader |
+| parseList | Parse CSV/array values; trim strings and keep cell positions |
+| parseLayout | Validate slot names for the given layout kind |
+| parseTemplate | Keep a bare string or compile brace fields using readField |
+| parseTemplates | Parse CSV/array templates or one row function; keep the function as one cell without calling it |
+| parseCells | Require and preserve a full native AppList array |
+| distributeCells | Align each kind's next template to its layout slots |
+| parseStyle | Keep a string or build an indexed field-map resolver |
+| parseStyleOverride | Require and preserve a string or row function |
+
+The parsers return values or resolver functions. They do not fetch data or mutate rows.
+Do not add a second parser in a feature or consumer.

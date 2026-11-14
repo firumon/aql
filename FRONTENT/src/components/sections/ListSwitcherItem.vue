@@ -13,6 +13,9 @@
     <span v-if="resolvedLabel" class="aql-list-switcher-item__label">
       {{ resolvedLabel }}
     </span>
+    <span v-if="showCount && count != null" class="aql-list-switcher-item__count">
+      {{ count }}
+    </span>
 
     <!-- Active glow indicator -->
     <span v-if="active" class="aql-list-switcher-item__dot" />
@@ -27,11 +30,13 @@ import { resolveCssColor } from 'src/utils/colorHelpers'
 defineOptions({ name: 'SectionsListSwitcherItem', inheritAttrs: false })
 
 const props = defineProps({
-  item:   { type: Object,           required: true },
-  active: { type: Boolean,          default: false },
-  label:  { type: [String, Function], default: '' },
-  icon:   { type: [String, Function], default: '' },
-  color:  { type: [String, Function], default: 'primary' },
+  item:      { type: Object,           default: null },
+  active:    { type: Boolean,          default: false },
+  label:     { type: [String, Function], default: '' },
+  icon:      { type: [String, Function], default: '' },
+  color:     { type: [String, Function], default: 'primary' },
+  count:     { type: Number,           default: null },
+  showCount: { type: Boolean,          default: false }
 })
 
 // ── Contexts ──

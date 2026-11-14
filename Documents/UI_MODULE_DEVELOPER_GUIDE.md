@@ -21,6 +21,7 @@ Plus the subsystem specs this guide summarizes inline and links out to for full 
 |---|---|
 | Resource domain logic, import boundaries & payload chains | [UI_RESOURCE_DOMAIN_LOGIC.md](file:///f:/AQL/Documents/UI_RESOURCE_DOMAIN_LOGIC.md) |
 | Pages & Sections | [UI_PAGE_AND_SECTION_SYSTEM.md](file:///f:/AQL/Documents/UI_PAGE_AND_SECTION_SYSTEM.md) |
+| ListViews | [ListViews API, features, and overrides](UI_LIST_SWITCHER.md) |
 | Contents | [UI_CONTENT_SYSTEM.md](file:///f:/AQL/Documents/UI_CONTENT_SYSTEM.md) |
 | Actions | [UI_ACTION_SYSTEM.md](file:///f:/AQL/Documents/UI_ACTION_SYSTEM.md) |
 | Create / Update forms | [UI_CREATE_AND_UPDATE_SYSTEM.md](file:///f:/AQL/Documents/UI_CREATE_AND_UPDATE_SYSTEM.md) |
@@ -141,10 +142,10 @@ Run this per new module. Each step cites the section that governs it.
    (§4.2, §4.4, §4.5). No Vue context.
 4. **Scaffold the injection-relay UI Composable per page** —
    `_ui/{Ui}/composables/{Scope}/{Resource}/{Page}/use{Resource}Context.js` (§6.2).
-5. **Build the Index page** — page header + whichever widgets the workflow's queues actually
-   call for, ordered by urgency (§9.2); switcher gating (§9.3); work queues as
-   `List<ViewName>` content (§7.1); no hand-written list resolvers before checking the list
-   strategy's defaults (§9.4); row action clusters capped and state-keyed (§7.3).
+5. **Build the Index page** with the needed live widgets (section 9.2).
+   For list work, read [ListViews](UI_LIST_SWITCHER.md) first.
+   Use the shared useListView API for the switcher and List.
+   Configure named views and their overrides in the ListViews contract.
 6. **Build Add/Edit** — pick the form shape (§13.0); for a generated form let `_fields`
    generate the set (§13.1) and narrow only via `fields`/`showFields`/`hideFields`/
    `fieldProps` (§13.3); share cards between Add and Edit at the resource tier (§13.4);
@@ -183,8 +184,8 @@ Run this per new module. Each step cites the section that governs it.
 | Cancel leaves the user two history entries back | The handler navigated but didn't `return false`, so the built-in `goBack()` also ran (§8.2). |
 | A relation reference is `undefined` in a list row | A record was spread somewhere upstream (§11 rule 1). |
 | A predicate throws on a freshly created child row | An enriched relation carried `null`; normalize before the guard (§11 rule 2). |
-| Per-view override never fires | The sheet's view `name` includes the `List` prefix. Use the bare bucket name (§7.1). |
-| A per-view `.vue` override renders an empty list | It read only `props.items` and the rows arrived on `attrs` (§7.1). |
+| Feature override never fires | Check the two paths, bare view name, kind, and Search field gate in [ListViews core](UI_LIST_SWITCHER_COMPONENTS.md). |
+| A named view display does not change | Check its `item` settings and named display override in the [item guide](UI_LIST_VIEWS_ITEMS.md). |
 | A `Props<Identity>` block's `items`/`chip` is `undefined` inside the block function | The block was written as a static object. Only a **function** block is called with the live props bag (§5.2). |
 | A `String` prop receives a closure | A function was put on one key instead of making the whole block a function (§5.2). |
 | Page title/back arrow vanished after adding a section | `sections` replaces the base contract's array. Re-list the page header (§5). |
@@ -194,7 +195,7 @@ Run this per new module. Each step cites the section that governs it.
 | Two View cards showing different numbers for the same data | Both re-derived the grouped tree independently instead of sharing one UI Composable (§7.4). |
 | A funnel segment and a row chip disagree about a state's colour | One of them picked its own colour instead of reading the resource's workflow vocabulary (§4.5). |
 | An Index metric changes when the user switches list view | It counted `filteredRecords` instead of `records` (§9.2). |
-| A user lands on an empty list with no pill highlighted | The default view was gated away and the active view was never corrected (§9.3). |
+| No clickable list pill | Check the view configuration, its permission, and the tabs from `useListView`. |
 | A widget shows a wall of zeroes on a fresh tenant | It zero-filled instead of returning `[]` (§9.2). |
 | A money widget shows a wall of `AED 0.00` on a fresh tenant | Its hide guard tested row `.length` instead of the amounts the cards print (§9.2 rule 2). |
 | Row buttons push the record name into a multi-line wrap | The cluster exceeded three buttons (§7.3). |

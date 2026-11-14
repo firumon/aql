@@ -1,150 +1,73 @@
-import { ref, computed, watch, unref } from 'vue'
-import { useQuasar } from 'quasar'
+import { ref, computed, unref } from 'vue'
 import { useAuthStore } from 'src/stores/auth'
-import { useDataStore } from 'src/stores/data'
 import { useResourceIoStore } from 'src/stores/resourceIo'
+import { useRecord } from './useRecord'
 import { useResourceConfig } from './useResourceConfig'
 import { useRouteConfig } from './useRouteConfig'
-import { useListViews, evaluateFilter } from 'src/composables/useListViews'
 import { singularize } from 'src/utils/appHelpers'
-import { useRecord } from './useRecord'
 
-const resourcePageMap = new Map()
-
-function _collectSearchValues(r, visited = new Set()) {
-  if (!r || visited.has(r)) return []
-  visited.add(r)
-  const values = Object.keys(r)
-    .filter(k => !k.startsWith('$') && !k.startsWith('_'))
-    .map(k => (r[k] ?? '').toString().toLowerCase())
-  const parentKeys = Array.isArray(r._Parents) ? r._Parents : []
-  for (const key of parentKeys) {
-    const parent = r._Parent?.[key]
-    if (parent) values.push(..._collectSearchValues(parent, visited))
-  }
-  return values
-}
+const resolveOverride = (override, fallback) =>
+  override == null
+    ? fallback
+    : (typeof override === 'function' ? override() : unref(override)) || fallback
 
 export function usePageRecord(resourceNameOverride, codeOverride) {
   const recordSource = useRecord()
-  const $q = useQuasar()
   const authStore = useAuthStore()
-  const dataStore = useDataStore()
-  const resourceIoStore = useResourceIoStore()
-  const {
-    resourceName: routeResourceName,
-    config, resourceHeaders: routeHeaders, scope
-  } = useResourceConfig()
+  const resourceIo = useResourceIoStore()
+  const { resourceName: routeResourceName } = useResourceConfig()
   const { code: routeCode } = useRouteConfig()
 
-  const resolvedResourceName = computed(() => {
-    if (resourceNameOverride) {
-      return typeof resourceNameOverride === 'function'
-        ? resourceNameOverride()
-        : unref(resourceNameOverride)
-    }
-    return routeResourceName.value
-  })
+  const resourceName = computed(() => resolveOverride(resourceNameOverride, routeResourceName.value))
 
-  const resolvedCode = computed(() => {
-    if (codeOverride !== undefined) {
-      return typeof codeOverride === 'function'
-        ? codeOverride()
-        : unref(codeOverride)
-    }
-    return routeCode.value
-  })
-
-  const loading = ref(false)
-  const backgroundSyncing = ref(false)
-  const filterTerm = ref('')
-  const currentPage = ref(1)
-  const showInactive = ref(false)
-  const loadRequestId = ref(0)
-
-  const restorePage = name => { currentPage.value = name ? (resourcePageMap.get(name) || 1) : 1 }
-  const resetPage = () => { currentPage.value = 1; if (resolvedResourceName.value) resourcePageMap.set(resolvedResourceName.value, 1) }
-  watch(resolvedResourceName, restorePage, { immediate: true })
-  watch([resolvedResourceName, currentPage], ([name, page]) => { if (name) resourcePageMap.set(name, page) })
+  const code = computed(() => resolveOverride(codeOverride, routeCode.value))
 
   const record = computed(() => {
-    const name = resolvedResourceName.value
-    const code = resolvedCode.value
-    if (!name || !code) return null
-    return recordSource.enrich(name, code)
+    const name = resourceName.value
+    const recordCode = code.value
+    if (!name || !recordCode) return null
+    return recordSource.enrich(name, recordCode)
   })
 
   const records = computed(() => {
-    const name = resolvedResourceName.value
+    const name = resourceName.value
     if (!name) return []
     return recordSource.enriched(name)
   })
 
-  const headers = computed(() => dataStore.headers[resolvedResourceName.value] || [])
+  const loading = ref(false)
+  const loadRequestId = ref(0)
 
-  const {
-    effectiveViews,
-    activeViewName,
-    activeView,
-    viewFilteredItems,
-    setActiveView
-  } = useListViews({
-    items: records,
-    resourceHeaders: headers,
-    configuredListViews: computed(() => config.value?.ui?.listViews),
-    configuredListViewsMode: computed(() => config.value?.ui?.listViewsMode),
-    scope,
-    resourceName: resolvedResourceName,
-    enableUrlSync: false
-  })
-
-  const defaultViewName = computed(() => {
-    const views = effectiveViews.value
-    if (!views.length) return ''
-    const def = views.find((v) => v.default)
-    return def ? def.name : views[0].name
-  })
-
-  const filteredRecords = computed(() => {
-    let list = viewFilteredItems.value
-
-    if (!activeView.value && !effectiveViews.value.length) {
-      if (!showInactive.value) {
-        list = list.filter(r => (r.Status || 'Active') === 'Active')
-      }
+  async function reload() {
+    const name = resourceName.value
+    if (!name) return
+    const requestId = ++loadRequestId.value
+    const hasData = records.value.length > 0
+    loading.value = !hasData
+    try {
+      await resourceIo.fetchResource(name)
+      if (requestId !== loadRequestId.value) return
+    } finally {
+      if (requestId === loadRequestId.value) loading.value = false
     }
+  }
 
-    const keyword = (filterTerm.value || '').toString().trim().toLowerCase()
-    if (!keyword) return list
-    return list.filter(r => {
-      const aggregate = _collectSearchValues(r).join(' ')
-      return aggregate.includes(keyword)
-    })
+  const relations = computed(() => {
+    const name = resourceName.value
+    if (!name) return null
+    return recordSource.relations(name)
   })
 
-  watch([filterTerm, activeViewName], resetPage)
-
-  const relations = computed(() => dataStore.getRelations(resolvedResourceName.value))
+  const allResources = computed(() =>
+    Array.isArray(authStore.resources) ? authStore.resources : [])
 
   const childResources = computed(() => {
-    const name = resolvedResourceName.value
+    const name = resourceName.value
     if (!name) return []
-    const allResources = Array.isArray(authStore.resources) ? authStore.resources : []
     const relChildren = (relations.value?.children || []).map(c => c.name)
-    return allResources.filter(r => r?.parentResource === name || relChildren.includes(r?.name))
+    return allResources.value.filter(r =>
+      r?.parentResource === name || relChildren.includes(r?.name))
   })
-
-  const parentResource = computed(() => {
-    const name = resolvedResourceName.value
-    if (!name) return null
-    const allResources = Array.isArray(authStore.resources) ? authStore.resources : []
-    const self = allResources.find(r => r?.name === name)
-    if (!self?.parentResource) return null
-    return allResources.find(r => r?.name === self.parentResource) || null
-  })
-
-  const hasChildren = computed(() => childResources.value.length > 0)
-  const hasParent = computed(() => !!parentResource.value)
 
   const childRecordsByResource = computed(() => {
     const rec = record.value
@@ -157,113 +80,32 @@ export function usePageRecord(resourceNameOverride, codeOverride) {
       }
     }
     for (const childRes of childResources.value) {
-      if (!map[childRes.name] || !map[childRes.name].length) {
-        const parentCodeKey = singularize(resolvedResourceName.value) + 'Code'
-        const records = dataStore.getRecords(childRes.name) || []
-        const matched = records.filter(r => r[parentCodeKey] === rec.Code || r.ParentCode === rec.Code)
-        if (matched.length) {
-          map[childRes.name] = matched
-        }
-      }
+      if (map[childRes.name]?.length) continue
+      const parentCodeKey = singularize(resourceName.value) + 'Code'
+      const matched = (recordSource.rows(childRes.name) || [])
+        .filter(r => r[parentCodeKey] === rec.Code || r.ParentCode === rec.Code)
+      if (matched.length) map[childRes.name] = matched
     }
     return map
   })
 
-  async function reload() {
-    const resourceName = resolvedResourceName.value
-    if (!resourceName) return
-
-    const requestId = ++loadRequestId.value
-    const hasData = records.value.length > 0
-    loading.value = !hasData
-    backgroundSyncing.value = hasData
-
-    try {
-      await resourceIoStore.fetchResource(resourceName)
-      if (requestId !== loadRequestId.value) return
-    } finally {
-      if (requestId === loadRequestId.value) {
-        loading.value = false
-        backgroundSyncing.value = false
-      }
-    }
-  }
-
-  function getRecordByCode(code) {
-    if (!code) return null
-    const name = resolvedResourceName.value
-    if (!name) return null
-    return recordSource.enrich(name, code)
-  }
-
-  async function updateLocalRecord(updatedRecord) {
-    if (!updatedRecord?.Code) return
-    const resourceName = resolvedResourceName.value
-    const hdrs = headers.value
-    if (!resourceName || !hdrs.length) return
-
-    const existing = dataStore.getRecord(resourceName, updatedRecord.Code) || {}
-    const merged = { ...existing, ...updatedRecord }
-    const row = hdrs.map(h => merged[h] ?? '')
-    dataStore.setRows(resourceName, [row])
-
-    try {
-      await dataStore.cacheResourceRows(resourceName, hdrs, [row])
-    } catch (_) { /* non-critical */ }
-  }
-
-  function notify(type, message) {
-    $q.notify({ type, message, timeout: 2200 })
-  }
-
-  function runReset() {
-    filterTerm.value = ''
-    resetPage()
-    showInactive.value = false
-    activeViewName.value = defaultViewName.value
-    loading.value = false
-    backgroundSyncing.value = false
-    loadRequestId.value++
-  }
-
-  watch(() => authStore.isGlobalSyncing, (syncing, wasSyncing) => {
-    if (wasSyncing && !syncing && records.value.length === 0) reload()
-  })
+  const filterTerm = ref('')
 
   return {
-    resourceName: resolvedResourceName,
-    code: resolvedCode,
+    resourceName,
+    code,
 
     record,
     records,
     items: records,
-    filteredRecords,
-    filteredItems: filteredRecords,
-    headers,
-    lastHeaders: headers,
+
+    loading,
+    reload,
 
     relations,
     childResources,
-    parentResource,
-    hasChildren,
-    hasParent,
     childRecordsByResource,
 
-    loading,
-    backgroundSyncing,
-    filterTerm,
-    currentPage,
-    showInactive,
-
-    effectiveViews,
-    activeViewName,
-    activeView,
-    setActiveView,
-
-    reload,
-    getRecordByCode,
-    updateLocalRecord,
-    notify,
-    reset: runReset
+    filterTerm
   }
 }

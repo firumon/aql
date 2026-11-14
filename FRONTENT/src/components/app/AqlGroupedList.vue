@@ -6,11 +6,6 @@
       </q-card-section>
     </q-card>
 
-    <!-- The empty state wears the caller's `cardClass` too. It is the same slot in the
-         same list — a group card that happens to have nothing in it — so leaving it on
-         Quasar's bare default made a page's one empty card the only flat white panel
-         among gradient neighbours. Appearance only; the gutter is irrelevant with no
-         siblings to space against. -->
     <slot v-else-if="!groupedItems.length" name="empty">
       <q-card flat bordered :class="cardClass">
         <q-card-section class="q-pa-none">
@@ -24,14 +19,6 @@
       </q-card>
     </slot>
 
-    <!-- The gutter class is APPENDED, never taken from `cardClass`. These cards are
-         siblings inside the `q-list`, so a page-level `q-gutter-y-*` reaches the
-         list root and never them — their entire vertical rhythm is this one class.
-         Carrying it in `cardClass` (as its default once did) meant any caller that
-         styled the card (`card-class="page-card aql-premium-gradient-card"`)
-         silently deleted the spacing and the group cards butted together.
-         Appending it keeps appearance and rhythm separately expressible, exactly
-         as `contents/FormChild.vue` does. -->
     <q-card v-for="(group, groupIndex) in groupedItems" :key="resolveGroupKey(group, groupIndex)" flat bordered :class="[cardClass, gutterClass]">
       <slot name="header" :group="group" :index="groupIndex">
         <q-item :class="headerClass">
@@ -43,13 +30,18 @@
 
           <q-item-section>
             <q-item-label :class="headerLabelClass">{{ group.label }}</q-item-label>
-            <q-item-label v-if="resolveProp(headerCaption, group)" caption :class="headerCaptionClass">{{ resolveProp(headerCaption, group) }}</q-item-label>
+            <q-item-label v-if="resolveProp(headerCaption, group)" caption :class="headerCaptionClass">
+              {{ resolveProp(headerCaption, group) }}
+            </q-item-label>
           </q-item-section>
 
           <q-item-section v-if="hasHeaderRight(group) || slots['header-right']" side>
             <slot name="header-right" :group="group" :index="groupIndex">
-              <q-chip v-if="useHeaderChip" size="sm" :color="resolveProp(headerChipColor, group)" :text-color="resolveProp(headerChipTextColor, group)" :outline="headerChipOutline" class="text-weight-bold" style="font-size: 0.75rem">{{ group.headerRight }}</q-chip>
-              <q-badge v-else :color="resolveProp(headerBadgeColor, group)" :text-color="resolveProp(headerBadgeTextColor, group)" :outline="headerBadgeOutline" :label="group.headerRight"/>
+              <q-chip v-if="useHeaderChip" size="sm" class="text-weight-bold" style="font-size: 0.75rem"
+                :color="resolveProp(headerChipColor, group)" :text-color="resolveProp(headerChipTextColor, group)"
+                :outline="headerChipOutline">{{ group.headerRight }}</q-chip>
+              <q-badge v-else :color="resolveProp(headerBadgeColor, group)" :text-color="resolveProp(headerBadgeTextColor, group)"
+                :outline="headerBadgeOutline" :label="group.headerRight" />
             </slot>
           </q-item-section>
         </q-item>
@@ -57,12 +49,7 @@
 
       <q-separator />
 
-      <!-- `aql-grouped-list-body` hands the row FILL and RADIUS back to this card
-           (custom.scss). A nested row is a body, not a standalone card: its own
-           opaque white would hide the card's gradient entirely, and its 4px
-           corners would overflow the card's $r-md corner and clip the bottom
-           border. -->
-      <q-card-section class="q-pa-none aql-grouped-list-body">
+        <q-card-section class="q-pa-none aql-grouped-list-body">
         <AppList v-bind="appListAttrs" :items="group.items">
           <template v-for="(_, slotName) in $slots" :key="slotName" #[slotName]="slotData">
             <slot :name="slotName" v-bind="slotData || {}" />
@@ -81,22 +68,17 @@ defineOptions({ name: 'AqlGroupedList', inheritAttrs: false })
 
 const props = defineProps({
   items: { type: Array, default: () => [], required: true },
+  groups: { type: Array, default: undefined },
   groupKey: { type: [String, Function], required: true },
   groupLabel: { type: [String, Function], default: null },
   loading: { type: Boolean, default: false },
   emptyText: { type: String, default: 'No records found.' },
   emptyIcon: { type: String, default: 'inventory_2' },
-  // Appearance only — the group card's bottom margin is appended in the template
-  // and is not overridable from here.
+
   cardClass: { type: [String, Array, Object], default: '' },
-  // Vertical rhythm BETWEEN group cards, as a Quasar spacing token
-  // (`none`/`xs`/`sm`/`md`/`lg`/`xl`). Declared as a prop so it is fed by
-  // `pageProps.gutter` like everything else on the page: one setting spaces
-  // Sections, Contents, group cards and the rows inside them identically.
+
   gutter: { type: [String, Boolean], default: 'sm' },
-  // The rows INSIDE a group. Defaults to `gutter`, so one knob is enough; set it
-  // only when the groups and their rows genuinely need different rhythms — a
-  // denser inner list is what keeps the grouping legible when a page runs tight.
+
   itemGutter: { type: [String, Boolean], default: null },
 
   headerClass: { type: [String, Array, Object], default: 'bg-grey-2 q-py-xs q-px-sm' },
@@ -128,9 +110,7 @@ const gutterClass = computed(() => {
   return `q-mb-${token}`
 })
 
-// `gutter` is a declared prop here, so it no longer arrives in `$attrs` — it has
-// to be forwarded explicitly or the inner rows would silently fall back to
-// `List.vue`'s own default and stop tracking the page.
+// Forward the page gutter to the rows.
 const appListAttrs = computed(() => ({
   itemBordered: false, dense: true, separator: true,
   ...attrs,
@@ -139,7 +119,7 @@ const appListAttrs = computed(() => ({
 
 const groupedItems = computed(() => {
   const groups = new Map()
-  props.items.forEach(item => {
+  if (props.groups === undefined) props.items.forEach(item => {
     const key = resolveProp(props.groupKey, item, 'Ungrouped')
     const normalizedKey = key || 'Ungrouped'
     if (!groups.has(normalizedKey)) {
@@ -152,7 +132,8 @@ const groupedItems = computed(() => {
     }
     groups.get(normalizedKey).items.push(item)
   })
-  return Array.from(groups.values()).map(group => ({
+  return (props.groups ?? Array.from(groups.values())).map(group => ({
+    icon: resolveProp(props.headerIcon, group.firstItem),
     ...group,
     label: resolveGroupLabel(group),
     headerRight: resolveProp(props.headerChip || props.headerBadge, group)
@@ -165,7 +146,7 @@ function resolveGroupLabel (group) {
   const prop = props.groupLabel || props.headerLabel
   if (typeof prop === 'function') return prop(group)
   if (prop) return resolveProp(prop, group.firstItem, group.key)
-  // `groupKey` is a key extractor, so it is always given a row.
+
   return resolveProp(props.groupKey, group.firstItem, group.key)
 }
 

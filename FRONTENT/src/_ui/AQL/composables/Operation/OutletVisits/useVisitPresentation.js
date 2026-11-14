@@ -12,8 +12,7 @@
  * UI a visit renders under reads the same answer. What stayed is what is genuinely about
  * how a visit LOOKS in this UI.
  *
- * Every export is PURE, because the page contract (`pages/Operation/OutletVisits/Index.js`)
- * and the JS modifiers that consume the presets are evaluated outside any component setup.
+ * Every export is PURE, so list overrides can call it outside any component setup.
  */
 import { sortByDate } from 'src/utils/sortHelpers'
 import {
@@ -83,16 +82,11 @@ export function countdownColor (days) {
 
 // ─── Row presets for the read-only list views ─────────────────────────────────
 //
-// Consumed from the page contract's `Props<Identity>` blocks (`PropsListTomorrow`,
-// `PropsListCompleted`, …) rather than from standalone `List<View>.js` modifier files —
-// a plain prop bag does not need its own file (UI_MODULE_DEVELOPER_GUIDE.md §8.4). None of
-// these views carries a `btn`, so no row action cluster mounts and `contents/List.vue`'s
-// default click handler opens the View page.
+// Kept with the OutletVisits reference list views; none of these views carries a `btn`,
+// so the default click handler opens the View page.
 //
 // Every meta slot each preset does NOT want is set to an explicit null / [] rather than
-// omitted: `useListStrategy` supplies chip / metaLabel / metaCaption defaults, and
-// `contents/List.vue` layers explicit props OVER that baseline — so an omitted key lets
-// the strategy default through instead of suppressing it.
+// omitted, so an omitted key cannot pick up a default downstream.
 
 /** "Tomorrow" — outlet name over its planned comment, and nothing else. */
 export function tomorrowPreset (items) {

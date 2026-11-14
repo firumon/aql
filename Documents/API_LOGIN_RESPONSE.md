@@ -147,7 +147,7 @@ Array of resource entries built by `buildAuthorizedResourceEntry()` at `GAS/reso
 | `ui.menus` | Sidebar menu configuration array including `menuAccess` rules. See [UI_SIDEBAR_MENU_SYSTEM.md](file:///f:/AQL/Documents/UI_SIDEBAR_MENU_SYSTEM.md) for full schema and evaluation logic. |
 | `ui.fields` | UIFields config for custom form rendering |
 | `ui.customUIName` | Drives per-tenant 3-tier component resolution in frontend |
-| `ui.listViews` / `ui.listViewsMode` | List view filter configurations |
+| `ui.listViews` / `ui.listViewsMode` | Named view feature config and backend cell mode. The frontend reads the array; see [ListViews](UI_LIST_SWITCHER.md). |
 | `additionalActions` | AdditionalActions JSON config for action pages |
 | `reports` | Report configs for PDF generation |
 

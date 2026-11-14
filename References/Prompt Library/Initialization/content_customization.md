@@ -1,6 +1,6 @@
 ---
 name: AQL Content & Page Customization Agent
-description: Specialized initialization prompt for creating, inspecting, or modifying content components (List and other `contents:` entries), per-active-view overrides, form layouts, details cards, and collapsible form sections under Content.
+description: Specialized initialization prompt for creating, inspecting, or modifying content components (List and other `contents:` entries), named-list display, form layouts, details cards, and collapsible form sections under Content.
 ---
 
 # Scope Boundary
@@ -9,7 +9,7 @@ This document defines initialization parameters for agents tasked with resource-
 
 ## Required Pre-Reads
 Before creating or modifying any local Content components:
-1. **System Specifications**: Read [UI_CONTENT_SYSTEM.md](file:///f:/AQL/Documents/UI_CONTENT_SYSTEM.md) to review the `contents:` page contract, the `Content.vue` / `useContentResolver.js` resolution chain, the built-in `List` content component, `useListStrategy.js` defaults, and per-active-view override rules.
+1. **System Specifications**: Read [UI_CONTENT_SYSTEM.md](file:///f:/AQL/Documents/UI_CONTENT_SYSTEM.md) to review the `contents:` page contract, the `Content.vue` / `useContentResolver.js` resolution chain, the current List consumer and the generic content resolver. For list work, also read [list_views_development.md](list_views_development.md).
 2. **Architecture Constraints**: Read [CORE_ARCHITECTURE_RULES.md](file:///f:/AQL/Documents/CORE_ARCHITECTURE_RULES.md) for strict formatting rules (e.g. no `<style>` blocks in local components).
 3. **If the task CREATES or restructures a content component** (rather than overriding one for a resource): also read [UI_RENDERABLE_CONTRACT.md](file:///f:/AQL/Documents/UI_RENDERABLE_CONTRACT.md) and load [renderable_contract.md](file:///f:/AQL/References/Prompt%20Library/Initialization/renderable_contract.md). Every overridable cell must route through `abstract/Renderable.js`, or the new component is closed to `_ui/` customization from day one.
 
@@ -43,34 +43,27 @@ To custom-tailor content layouts:
 2. **Confirm the page contract**: Check `src/pages/[scope]/[page].js` for `contents: [...]` (e.g. `contents: ['List']`) to know which content name(s) render on that page.
 3. **Find Target Override Paths**: Check if overrides already exist under `src/_ui/[UiName]/components/[scope]/[ResourceName]/[page]/`.
 4. **Analyze Overriding Strategy**:
-   - Cheapest first: a **`Props<Identity>` block on the page contract** needs no override file at all. `PropsList: { layout: 'grid' }` or `PropsListToday: { … }` in `_ui/.../[page].js` is spread flat onto that content. Use it for plain value adjustments that don't need record/config context. A `.js` modifier still overrides it. See [UI_PAGE_AND_SECTION_SYSTEM.md](file:///f:/AQL/Documents/UI_PAGE_AND_SECTION_SYSTEM.md) §1.4.1 and this doc's §4.1.
-   - Prefer **JS Logic Modifiers** (`[Content].js` under custom UI, e.g. `list.js`) for simple adjustments (column/layout overrides, chip/meta tweaks, custom labels).
+   - For generic content, start with a `Props<Identity>` block only when the base component consumes those props. A JS modifier can adjust resolver props. List gets display from ListViews item config and display overrides.
+   - For other content bases, prefer JS logic modifiers when their declared props cover the change. For List, follow the item guide and its per-kind display exports.
    - Use **Vue Template SFC Overrides** (`[Content].vue` under custom UI) ONLY if the page requires complex non-standard UI elements, custom slots, or specialized inputs.
-     > Before reaching for a `.vue` override, check whether a **component-valued prop** does the job from a `.js` modifier instead — `btn: VisitActionButtons`, `metaCaption: SomePill`. Any prop routed through `abstract/Renderable.js` accepts a component definition, which replaces that one cell without swapping component identity (a `.vue` override remounts the list and kills its row transitions). See [UI_RENDERABLE_CONTRACT.md](file:///f:/AQL/Documents/UI_RENDERABLE_CONTRACT.md) §1. A `.vue` override is correct only when the **structure** changes — row arrangement, extra sections, a different wrapper.
-   - Use a **per-active-view override** (`List<ViewName>.vue`/`.js`, e.g. `ListApproved.js`) ONLY when the customization should apply while one specific list view/filter chip is selected, not to the resource's default list rendering.
+     > Before reaching for a `.vue` override, check whether the component accepts a **component-valued prop** from a `.js` modifier — `btn: VisitActionButtons`, `metaCaption: SomePill`. Any prop routed through `abstract/Renderable.js` accepts a component definition, which replaces that one cell without swapping component identity (a `.vue` override remounts the list and kills its row transitions). See [UI_RENDERABLE_CONTRACT.md](file:///f:/AQL/Documents/UI_RENDERABLE_CONTRACT.md) §1. A `.vue` override is correct only when the **structure** changes — row arrangement, extra sections, a different wrapper.
+   - Use Data, Group, Map, Filter, Order, Search, or Limit overrides for rows. These are ListViews overrides, not content modifiers.
 
 ---
 
 ## 2. Implementation Rules
 
-### 2.1 Writing JS Logic Modifiers for `List`
-- Create the target component (e.g. `src/_ui/[UiName]/components/[scope]/[resource]/index/list.js`) exporting a default function.
-- The function receives the resolved `List` props object (post-`useListStrategy` baseline, post-explicit-prop merge) and returns the adjusted props. Any `AqlList`-surface prop (`layout`, `content`, `label`, `caption`, `metaLayout`, `chipColor`, etc.) can be overridden:
-  ```javascript
-  // src/_ui/AQL/components/master/products/index/listInactive.js
-  export default function (props) {
-    return {
-      ...props,
-      layout: ['label', 'caption'],
-      content: ['Name', 'SkuCode']
-    }
-  }
-  ```
-- **Row Inputs & Actions in `List` / `AppList`**:
-  - `input`: Activates row inputs (e.g. `:input="true"`, `input-value="Quantity"`, `input-props="{ type: 'number', min: 1 }"`). Emits `@input-change` with `{ value, item, itemKey, itemKeyValue, field }`.
-  - `btn`: Activates row action button (e.g. `btn="delete"`, `btn-color="negative"`).
-  - **Dual Input + Button**: `List.vue` supports simultaneous `input` and `btn` rendered side-by-side in a flex row. Button click emits `@btn-click`, `@action-click`, and `@click` with the item row.
-- For other content sections (Details, Form) the same pattern applies — the function receives `preparedProps` and returns the modified object.
+### 2.1 Content modifiers and List
+
+A content modifier receives the resolver props and returns adjusted props.
+Read the actual base component before choosing a prop.
+AppList and abstract/List still support caller-provided rows and their own render props.
+
+The components/contents/List.vue shares useListView with the switcher.
+Read [item display](../../../Documents/UI_LIST_VIEWS_ITEMS.md) for all accepted settings and exports.
+For List changes, follow [list_views_development.md](list_views_development.md).
+Use view.item or a matching display override; a PropsList/content modifier does not replace its bag.
+Use the named view and its feature or display override for per-view work.
 
 ### 2.2 Writing Vue Template Overrides
 - Vue overrides must contain a `<template>` block. Components without a template block are **never allowed**.
@@ -78,12 +71,17 @@ To custom-tailor content layouts:
 - Props flow through unmodified to a Vue override, so read values via `$attrs` / declared props rather than assuming a fixed shape.
 - **NEVER** use inline style blocks. Use Quasar utility classes (e.g. `q-pa-md`, `row`, `col`, `q-gutter-sm`) for spacing, grids, and alignments.
 
-### 2.3 Per-Active-View Overrides
-- To customize the list only while a named view (e.g. "Approved") is active, create `List<ViewName>.vue` or `.js` (PascalCased view name) at the same lookup paths as any other content override — see `UI_CONTENT_SYSTEM.md` §4 for the full candidate order.
-- Do not create a `List<ViewName>` file if the intent is to change the *default* rendering — that belongs in a plain `list.js`/`.vue` override instead.
+### 2.3 Named-list display
 
-### 2.4 Overriding Content-Resolver Identity from a Manual Usage
-- `List.vue` accepts optional `page`, `scope`, `resource`, `uiName` props that take priority over the ambient `resourceConfig` context. Use these only when embedding a `<List>` manually outside its normal page-contract slot (e.g. showing another resource's list inside a custom section) — do not set them when relying on the default page-driven resolution.
+- Use the view's item object for sheet-driven display.
+- Use list{Name}{Kind}.js for one display piece. Read the core paths and item export table first.
+- Select per-view behavior with the ListViews override loader.
+- Keep the current List consumer thin. Change a Vue base only when the user asks for a structural change.
+
+### 2.4 List context
+
+The current public useListView uses injected page contexts.
+Use the injected resource context and the named view source rules.
 
 ### 2.5 Verification & Safety
 - Run target checks or verify paths to confirm no compilation issues before ending your turn.

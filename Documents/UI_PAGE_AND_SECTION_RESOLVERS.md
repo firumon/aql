@@ -232,6 +232,10 @@ If neither exists, `Section.vue` renders the "Section Not Defined" card.
 
 ### 1.4.1 Targeted Props — `Props<Identity>` Blocks
 
+These examples show generic Props identity syntax. List content reads row display from
+ListViews settings and overrides; see the [item guide](UI_LIST_VIEWS_ITEMS.md).
+
+
 `Page.vue` binds one flat `pageProps` object to **every** placeholder, and each placeholder drills its `$attrs` down to whatever it mounts. That is a single global namespace: a `title` intended for `PageHeader` also lands on `FilterInput` and `List`.
 
 `Props<Identity>` carves targeted namespaces out of that same flat bag. Any layer that can contribute props — a base contract, a page's `Index.js`, a JS modifier — may declare them:
@@ -244,13 +248,12 @@ export default {
 
   PropsSection:    { dense: true },                  // broadcast: every section
   PropsContent:    { flat: true },                   // broadcast: every content
-  PropsPageHeader: { title: "Today's Visits" },      // just PageHeader
-  PropsList:       { layout: 'grid' },               // just the List content
-  PropsListToday:  { layout: 'compact' }             // just the ListToday per-view list
+  PropsPageHeader:  { title: "Today's Visits" },
+  PropsFilterInput: { label: 'Search visits' }
 }
 ```
 
-**The block is spread flat onto the target.** `ListToday` reads `props.layout` — never `props.PropsListToday.layout`.
+**The block is spread flat onto the target.** `FilterInput` reads `props.label` directly.
 
 **Precedence** (later wins), applied in each resolver's `finalProps`:
 
@@ -268,18 +271,18 @@ The JS modifier stays final, matching every other override in the system. A `Pag
 
 **Rules and mechanics:**
 
-- **Keys are never stripped once consumed.** Every `Props*` key keeps riding the drilled `$attrs` all the way down, so a component nested three levels deep can still claim its own block. `ListToday` legitimately receives `$attrs.PropsPageHeader` and ignores it. This is expected, and it makes the merge idempotent.
-- **Key matching is case-insensitive**, mirroring the resolvers' path lookup. `PropsListToday` and `propslisttoday` both hit.
-- **A block may be a function** — `PropsList: (props) => ({ perPage: props.dense ? 50 : 25 })` — evaluated with the live props bag.
+- **Keys are never stripped once consumed.** Every `Props*` key keeps riding the drilled `$attrs` all the way down, so a component nested three levels deep can still claim its own block. A nested component may receive `$attrs.PropsPageHeader` and ignore it. This is expected, and it makes the merge idempotent.
+- **Key matching is case-insensitive**, mirroring the resolvers' path lookup. `PropsFilterInput` and `propsfilterinput` both hit.
+- **A block may be a function** — `PropsFilterInput: (props) => ({ debounce: props.dense ? 300 : 500 })` — evaluated with the live props bag.
 - **Non-object blocks are ignored**, arrays included, so a stray string can never be spread onto a component.
-- **Nested identities work at any depth**, because each resolver only claims its own key. `PropsListToday` passes untouched through `Content` → `contents/List.vue` and is claimed by the per-view resolver hop inside it.
+- **Nested identities work at any depth** when a nested resolver claims the matching identity key.
 - Helper: [`src/utils/placeholderProps.js`](file:///f:/AQL/FRONTENT/src/utils/placeholderProps.js) (`resolvePlaceholderProps`). It returns `null` when no block matches, so resolvers hand back the original props object and preserve prop identity across unrelated re-renders.
 
 > [!IMPORTANT]
 > **Drilling makes `inheritAttrs: false` mandatory for any component with a DOM root that sits in a drill path.** `Props*` blocks are objects; with attribute fallthrough enabled Vue writes them onto the root element as `propspageheader="[object Object]"`. Every `sections/`, `contents/` and `actions/` component already declares it (§2.1). `components/abstract/List.vue` declares it too, and re-binds `$attrs.class` / `$attrs.style` explicitly so callers keep styling the list.
 
 > [!NOTE]
-> **`ListSwitcher` exception.** The per-item keys `item`, `active`, `label`, `icon`, and `color` are derived per item by `ListSwitcher` itself and are layered *on top of* the resolver output, so a `PropsListSwitcherItem` block cannot override them — the switcher-wide resolver cannot see individual items. Customize them through `ListSwitcher`'s own `label` / `icon` function props, which receive the item. All other keys behave normally.
+> **ListViews.** `ListSwitcher` and `List` share `useListView`. Configure named views, display props, and overrides through [ListViews](UI_LIST_SWITCHER.md).
 
 ### 1.5 The Page State (`src/composables/resources/usePageState.js`)
 Centralizes the reactive form state shared across the Header, Content, and Action sections. It is the single source of truth for input collection, request building, and submission on a resource page.

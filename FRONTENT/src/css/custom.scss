@@ -963,6 +963,36 @@
   scrollbar-width: none; /* Firefox */
 }
 
+.list-switcher__tabs {
+  position: relative;
+  display: flex;
+  width: 100%;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: map-get($space-sm, x);
+  // Top room keeps balloon badges inside the scroll clip.
+  padding: 12px map-get($space-md, x) map-get($space-sm, y);
+  border-radius: 0;
+  background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+  border: 1px solid rgba($primary, 0.08);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.04);
+  overflow-x: auto;
+  overflow-y: hidden;
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+
+  &::-webkit-scrollbar {
+    display: none;
+  }
+
+  // Pills parked inside More stay measurable without taking row space.
+  .aql-list-switcher-item--hidden {
+    position: absolute;
+    visibility: hidden;
+    pointer-events: none;
+  }
+}
+
 .aql-list-switcher-item {
   position: relative;
   display: inline-flex;
@@ -1008,6 +1038,24 @@
     border-radius: 2px;
     opacity: 0.75;
   }
+
+  .aql-list-switcher-item__count {
+    position: absolute;
+    top: -9px;
+    right: -7px;
+    min-width: 17px;
+    height: 16px;
+    padding: 0 5px;
+    border-radius: 9px;
+    background: rgba($ink-muted, 0.55);
+    color: #fff;
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 16px;
+    text-align: center;
+    border: 1.5px solid #fff;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+  }
 }
 
 // Active state — fully dynamic. Components set `--aql-switcher-color` inline to any resolved
@@ -1031,6 +1079,11 @@
 
   .aql-list-switcher-item__dot {
     background: color-mix(in srgb, var(--aql-switcher-color) 85%, transparent);
+  }
+
+  .aql-list-switcher-item__count {
+    background: var(--aql-switcher-color);
+    color: #fff;
   }
 }
 

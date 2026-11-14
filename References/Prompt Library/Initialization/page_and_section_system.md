@@ -96,6 +96,8 @@ When creating a new base section component inside `src/components/sections/` (e.
 5. **No `<style>` block**: Section components are override targets — a tenant `.vue` override cannot inherit scoped CSS. Put every rule in `src/css/custom.scss` under an `.aql-*` class family and consume it by name (ARCHITECTURE RULES §7).
 6. **Document Props**: Always document the prop catalog and default behavior in `Documents/UI_PAGE_AND_SECTION_SYSTEM.md` §2.3, and log the component in `FRONTENT/src/components/REGISTRY.md`.
 
+**ListViews**: Read [list_views_development.md](list_views_development.md) for list work. ListSwitcher and List share `useListView`; configure named views through ListViews.
+
 **Existing base sections**: `PageHeader`, `FilterInput`, `ListSwitcher` / `ListSwitcherItem`, `MetricCards` (dashboard stat counters — see canonical doc §2.4), and `LinearProgress` (completion progress bars from a `value`/`max` pair or a bare percentage, with `value` and `max` rendered at either end of the row below the bar — see canonical doc §2.5). Check these for reuse before adding a new one.
 
 > [!TIP]
@@ -155,7 +157,7 @@ export default {
   PropsSection:    { dense: true },                 // broadcast: every section
   PropsContent:    { flat: true },                  // broadcast: every content
   PropsPageHeader: { title: "Today's Visits" },     // just PageHeader
-  PropsListToday:  { layout: 'grid' }               // just the ListToday per-view list
+  PropsFilterInput: { label: 'Search visits' }       // just FilterInput
 }
 ```
 
@@ -171,7 +173,7 @@ export default {
 > **Any component with a DOM root that sits in a drill path MUST declare `inheritAttrs: false`.** `Props*` blocks are objects, so with fallthrough enabled Vue writes them onto the element as `propspageheader="[object Object]"`. If a component legitimately needs `class`/`style` fallthrough, re-bind `$attrs.class` / `$attrs.style` explicitly (see `components/abstract/List.vue`).
 
 > [!NOTE]
-> When adding a new nesting hop that resolves its own identity, build its resolver bag from `$attrs` **first**, then the local props. Rebuilding the bag from scratch silently severs the drill chain — this is exactly what `contents/List.vue` and `sections/ListSwitcher.vue` used to do.
+> When a nested identity resolves props, build its resolver bag from `$attrs` first, then local props.
 
 ### 3.3 Attribute Fallthrough in Vue Overrides (Strict)
 To prevent property collisions when wrapping default components inside an override:

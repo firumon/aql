@@ -18,7 +18,7 @@ const num = (value) => {
 }
 const todayISO = () => new Date().toISOString().slice(0, 10)
 
-/** One lowercase haystack per row, built here so a keystroke costs one `includes`. */
+
 const haystack = (...parts) => parts.map(text).filter(Boolean).join(' ').toLowerCase()
 
 const isActiveRow = (row) => {
@@ -267,7 +267,8 @@ const build = (recordSource) => {
     overdueMetrics,
     todayCollectionsMetrics,
     linearProgressData,
-    views
+    views,
+    recencyOf
   }
 }
 

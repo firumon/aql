@@ -133,11 +133,45 @@ Layer 2 has three clear parts. Each part has one job.
 | Folder | Role | Used by |
 |---|---|---|
 | `composables/` | Operational domain logic. It enriches entities, checks CRUD input, applies state changes, builds payloads, and owns in-memory `O(1)` indexes such as `useOutletIndex.js`. | Index, View, Add, and Edit pages. |
-| `Data/` | Analytical domain logic (DJS). It prepares topic data, filters by date range, ranks items such as Top N results, builds KPI summaries, and exposes dashboard controls. | Dashboard items and report components. |
+| `Data/` | Domain data (DJS): topic facts, metrics, and shared list sources. `useData` and focused family data sources prepare rows; `useList` supplies list rules. | Dashboard items, reports, and the ListViews engine. |
 | `Dashboard/` | Dashboard item descriptors (DBI). Each descriptor declares the widget preset, size, permissions, and DJS data source binding. | The dashboard engine. |
 
-The `Data/` purity rule is strict: a DJS calculates metrics only for its own resource
-domain entity. It does not become a second calculation engine for another resource.
+#### List source files in Data/
+
+Before preparing a list seed, settle the row source and final row shape:
+
+- Use `Data/useData.js` when the list shows this resource's own records, decorated with calculated facts.
+- Use a focused `use<Family>Data.js` when the rows need another resource or form a shared
+  cross-resource result. Read each source through its own Layer 2 API.
+- Use the resource's `Data/useList.js` for the list's own filters and row decoration.
+- Check the final rows, field names, and values. Then prepare the seed to display those fields.
+
+The ListViews engine finds `Data/useData.js` and `Data/useList.js` for each resource. It does
+not discover a family data file by itself; connect that source through the resource's
+`Data/useList.js` rule.
+
+- `useData` owns shared domain calculations and facts for this resource's rows. Keep rows that another list may need.
+- `useList` owns row membership for that resource across its UIs. Its default rule is the shared baseline. Named rules add fixed list purposes. For example, Completed always means Progress = COMPLETED.
+- `useList` may prepare mapped or formatted row fields needed by several list views. Keep shared
+  domain calculations in `useData`.
+- Use a view's Map override for fields needed by only that view. Prefer new fields so source
+  values stay available. Replacing an existing field is allowed when needed.
+- The sheet's `item` config chooses which fields, labels, captions, chips, colors, and layout
+  are shown. Map may shape fields for one view for that config to use.
+- Keep all resource list filters out of `APP.Resources.ListViews`. Use the sheet for view names, labels, icons, colors, and default selection.
+- Keep row display in the UI item config or a ListViews display override.
+
+**Current engine limit:** A ready per-view `Data` override replaces the source rules. Otherwise, `useListResolver` selects the exact view rule, else the default rule, else the base rows. It does not run the default rule and then the named rule. To meet this policy, the engine must pick the row source first, run the shared default rule, and then run the named purpose rule. The shared rule must also run on rows from a `Data` override. The engine needs a clear bypass for a list outside the common baseline, such as an inactive or invalidated list. Until then, named rules and `Data` overrides must apply the common rule themselves.
+
+These are list data adapters, not another place to repeat domain facts.
+The normal DJS JSDoc rule still applies.
+See ListViews core for current source rules.
+
+The `Data/` purity rule is strict: a resource DJS owns facts for its resource and does not
+become a second calculation engine for another resource. A focused family DJS such as
+`use<Family>Data.js` may join prepared facts from related resources to build one family
+projection. It must get those facts from each source resource's own Layer 2 API and must not
+repeat that resource's business rules.
 
 #### Cross-Resource Domain Purity Rule
 
@@ -146,12 +180,21 @@ to recalculate Resource B's business logic. It must import Resource B's own Laye
 composables and consume their calculated figures. This keeps each business rule in one
 place and keeps resource changes safe.
 
+For a list that spans resources, the family DJS owns only the shared projection for that
+family: it may select source rows by the family's rule, group them, and return the rows the
+list needs. The target resource's `Data/useList.js` selects that result for its view. The
+generic List engine then handles the view's sheet display settings. Keep this projection in
+Layer 2 so dashboard items and lists can read the same answer. For example, one
+`OutletConsumptionQueue` projection can serve the pending-consumption views of both the
+OutletConsumptions and OutletConsumptionInvoices resources.
+
 ### 3.1 What does NOT belong here
 
 - Anything that renders — no Vue templates, no component definitions.
 - Anything that calls `inject()` or holds a component-lifecycle-bound `ref()`.
-- Anything that formats for display only (a row preset, a sort order for a specific list
-  view) — that is presentation, and belongs in a UI Composable (§4) instead.
+- Shared mapped or formatted list fields may be prepared in `Data/useList.js`; use the view's
+  Map override for fields needed by only that view. The sheet's `item` config decides which
+  fields and display settings appear.
 - Anything that imports a **service** module directly.
 - A **pure** builder or predicate must not reach a store — it takes `record`/`records` and
   answers from them, so a `PageAction.js` outside setup can call it.
@@ -242,12 +285,12 @@ export const ITEM_ROW_META = { ...PROGRESS_META, ALLOCATED: { label: 'Allocated'
 
 ## 4. What Stays in `_ui/{Ui}/composables/`
 
-Presentation-only helpers that assemble **display** from a Layer-2 predicate, but are not
-themselves a business rule:
+Presentation-only helpers that read Layer-2 facts but do not own resource row membership:
 
-- List row presets that call a Layer-2 predicate to filter/sort, then shape the result for
-  the list component.
-- Per-view sort/format functions.
+- List display helpers read fields prepared by `Data/useList.js` or the view's Map override.
+  Shared fields belong in `Data/useList.js`; view-only row shaping belongs in Map. The sheet's
+  `item` config chooses which fields and display settings appear.
+- Per-view sort functions.
 - The **injection-relay composable** (§6) — owns `inject()`, calls into Layer 2 for
   derived values, exposes both to components.
 - The **form surface** — one stateless composable per resource that every card of a form

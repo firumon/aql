@@ -1,193 +1,52 @@
 # 3-Layer UI — Content, Lists & the View Blueprint
 
-> Part of **[3-Layer UI — Resource UI Module Developer Guide](UI_MODULE_DEVELOPER_GUIDE.md)**. Per-view list overrides, row presentation and ordering, row action clusters, and the View card blueprint.
+> Part of **[3-Layer UI — Resource UI Module Developer Guide](UI_MODULE_DEVELOPER_GUIDE.md)**. ListViews and the View card blueprint.
 
 ---
 
-## 7. Content — Lists, Rows, and the View Blueprint
+## 7. Content: Lists, Rows, and the View Blueprint
 
-Framework bases in `src/components/contents/` include `List.vue`, `View.vue`, `Create.vue`,
-`Update.vue`, `FormRecord.vue`, `FormChild.vue`, `ViewRecord.vue`. Their full prop surfaces
-are in [`components/REGISTRY.md`](file:///f:/AQL/FRONTENT/src/components/REGISTRY.md).
-Resolution mirrors §3.
+The framework List content uses `useListView` with ListSwitcher on the same page.
+The [ListViews guide](UI_LIST_SWITCHER.md) describes sheet settings and the data flow.
 
-### 7.1 Per-active-view list overrides — `List<ViewName>`
+### 7.1 Named views and overrides
 
-When a list view is active, `contents/List.vue` sets its resolver identity to
-``List${toPascalCase(activeViewName)}`` instead of plain `'List'`.
+Each view can choose source rules, row stages, presentation, actions, a click target, and permissions.
+Use the [core guide](UI_LIST_SWITCHER_COMPONENTS.md#45-override-lookup) for override paths and exports.
 
-```
-APP.Resources.ListViews  →  [{ "name": "Today", … }, { "name": "Overdue", … }]
-                                      │
-active view "Today"  ──►  content identity "ListToday"
-                                      │
-       _ui/{Ui}/components/{Scope}/{Resource}/Index/ListToday.vue    (Vue override)
-       _ui/{Ui}/components/{Scope}/{Resource}/Index/ListToday.js     (JS modifier)
-```
+### Resource list rules
 
-> [!IMPORTANT]
-> The view's `name` in the sheet is the **bare bucket** (`"Today"`), not `"ListToday"`. A
-> view named `"ListToday"` looks for `ListListToday` and matches nothing.
+For every resource, use its Layer 2 Data files for shared facts and resource list behavior:
 
-**Start with a `PropsList<ViewName>` block** (§5.3) and fall back to a file only when it
-earns one — mounting a component as a prop value, or needing a template.
+- Choose one row source for each list. Use `useData` when the rows are this resource's own records, decorated with calculated facts. Use a focused `use<Family>Data` when rows need another resource or form a shared cross-resource summary.
+- `useList` owns row membership across all UIs for that resource. Its default rule is the shared baseline, such as active rows when the resource uses Status. Named rules hold fixed list purposes, such as Completed always meaning Progress = COMPLETED.
+- Keep all resource list filters out of `APP.Resources.ListViews`. The sheet names views and sets labels, icons, colors, and the default view.
+- A list that must include rows outside the shared baseline needs a clear bypass.
+- `useList` applies the list's own rules to the chosen source. Keep shared calculations in that source; keep screen labels, captions, chips, colors, and other display in item settings or a display override.
+- When list rows use related resources, put the filter, grouping, and row projection in a focused Layer 2 family data composable. Read each source through its own Layer 2 Data or domain API. Then let the resource's `useList` rule select that row set. For example, `useOutletConsumptionQueueData.js` can provide the shared outlet summary for invoiceable lists. Do not rebuild a source resource's rules or put the projection in `List<Name>.vue`.
 
-**A `.vue` per-view override must read rows from both places.** `items` arrives as a
-declared prop from the resolver's final bag, but the override is also mounted with the
-drilled attrs, and which of the two carries the rows depends on how far up the chain they
-were set:
+Before writing a view seed, check the final rows and their field names and values. Build the
+seed's display settings from those fields. If several lists need the same grouped or changed
+rows, prepare that shared data first and let each list use it.
 
-```javascript
-const incoming = computed(() => (props.items?.length ? props.items : (attrs.items || [])))
-```
+**Current engine limit:** A ready per-view `Data` override replaces source rules. Otherwise, the resolver chooses a named rule or the default; it does not run both. It must choose the row source, run the common default, then the named purpose rule. It must apply the common rule to override rows too, with a bypass for lists outside the baseline. Until then, named rules and `Data` overrides must apply the common rule themselves. The [core guide](UI_LIST_SWITCHER_COMPONENTS.md#43-data-source-and-source-rules) records this limit.
 
-**A view that unions two states divides, it does not tab.** When one queue is genuinely one
-job to the person doing it — approved and partially-delivered are both "stock committed,
-not yet at the outlet" — the list view unions them and the override restores the
-distinction as a labelled divider (`SectionDividerLabel`) between two groups. Splitting
-them into two pills makes the user check two lists to answer one question. When it does:
+### 7.2 Row presentation
 
-- **one consolidated empty state for the whole view**, not one per group — two "nothing here"
-  cards stacked read as two failures instead of one clear queue. If one sub-list has no items,
-  hide its section divider and space completely; if *all* sub-lists are empty, show a single
-  clean empty-text box (`empty-text="Nothing awaiting delivery."`);
-- **drop any per-row chip the divider now carries.** The divider already names the state; a
-  chip repeating the heading on every row is noise. Keep what varies per row.
+The active view supplies AppList props through `useListView`. Use `view.item` and display overrides
+for layout, labels, captions, meta, icon, color, and highlight. Use `paginate`, `perPage`,
+`threshold`, or a Props override for view-wide props. See the [item guide](UI_LIST_VIEWS_ITEMS.md).
 
-**The same rule applies inside a card.** A review step reporting a split outcome — what is
-being committed versus what is being written off — renders two labelled lists, not one list
-with a status column. A mobile row has no width to make that distinction legible, and the
-two are different *kinds* of outcome (deferred work versus work that will never happen),
-which a column of chips flattens into a detail.
+Show the facts a person needs to understand a row. Choose the order with `view.order`.
+Use a real ownership field and `$userCode` for personal queues. A list filter is not an access check.
+Keep row getters intact when preparing fields.
 
-### 7.2 List rows — presentation, ordering, and what a row says
+### 7.3 Row actions
 
-Before writing a single resolver, check §9.4: the list strategy already infers
-label/caption/chip/meta from the resource's headers and relations. Override only what the
-inference gets wrong.
-
-When a resource's queues do need presets, they follow one shape — a shared preset function
-per view, exported from the resource's composable and applied as a function-valued
-`Props<Identity>` block, so the same row reads identically wherever it is rendered:
-
-```javascript
-PropsListPendingApproval: (props) => awaitingApprovalPreset(props.items)
-```
-
-**Personal queue scoping vs. upline access policies.** A personal work queue (such
-as `"My Drafts"`) must filter rows down to the active `userId` (`user.value?.id`). While
-upline access policies permit managers to read subordinates' rows, drafts
-are editable only by their author. Without explicit `userId` scoping, a manager's draft
-queue becomes cluttered with un-editable drafts from other people.
-
-**Queue-intent caption derivation matrix.** A row's caption should state the exact fact
-explaining why the row sits in this specific queue, rather than a generic record summary:
-
-| Work queue | Primary caption content | Secondary detail |
-|---|---|---|
-| **Drafts** | `Date` (creation date) | Requester's private draft context |
-| **Pending Approval** | `RequestedUser` + `SubmittedComment` | Who asked and why |
-| **Needs Revision** | `RevisionRequiredComment` | The reviewer's exact instructions to change |
-| **Approved / In Fulfilment** | `Date` + `ApprovedBy` or `ApprovedComment` | Committed date and approver context |
-| **Partially Delivered** | `Date` + `DeliveredComment` | Outstanding delivery note |
-| **Delivered / History** | `Date` + `DeliveredBy` | Final completion timestamp and actor |
-| **Rejected** | `RejectedComment` | Rejection rationale |
-
-**Ordering is a work order, not a preference:**
-
-| Queue type | Order | Why |
-|---|---|---|
-| Awaiting someone's action | **oldest first** | the longest wait is the most urgent |
-| Settled / history | **newest first** | the most recent completion is the interesting one |
-
-**A settled row drops the urgency chip.** A colour-coded age chip is a queue position; on a
-delivered or rejected row the same age is history, and only the plain "how long ago"
-caption survives. The chip's *weight* carries the same distinction one step earlier: a
-queue row's age chip is **outlined** (`chipOutline: true`) so a screen of them reads as a
-scale rather than a wall of solid colour, and a row that keeps a solid chip is carrying a
-state, not an age.
-
-> [!IMPORTANT]
-> **A preset sets an unwanted slot to explicit `null` — it does not omit it.** §9.4's
-> inference is a *baseline* that explicit props layer over, so an omitted key is not "off",
-> it re-admits whatever the list strategy inferred for that resource. A preset that means
-> "this row has no badge" must say so:
->
-> ```javascript
-> chip: (row) => ageLabel(daysSince(settledAt(row))),
-> chipColor: (row) => ageColor(daysSince(settledAt(row))),
-> chipOutline: true,
-> meta: null, badge: null, metaLabel: null, metaCaption: null   // ✓ suppressed, not omitted
-> ```
->
-> This is also why a preset that *re-enables* a slot for one view passes `undefined` rather
-> than deleting the key — `undefined` falls back to the base preset's own value.
-
-**Sort and age through a resolver with a documented fallback, never a bare stamp column.**
-Not every row carries every stamp (a record migrated in, or created before the stamp
-existed). Sorting on the raw column sinks all of those to the end however old they are, so
-the list shows "85 days" below "Yesterday" while claiming to be ordered by age. Resolve the
-stamp, fall back to the record's own date, and use the *same* reader for the sort and for
-the displayed age.
-
-**Never surface an unresolved raw identifier code in a row.** Stamp columns are not uniform
-about this: some `*By` columns store a display name, others store a database user code
-(`U0001`). Check which before putting one in a label or caption — a raw code renders as an
-opaque string nobody can read. When the stamp holds a code, prefer the fact the reader
-actually needs (the reason, the age) and leave "who" to the View page, where it can be
-resolved.
-
-### 7.3 Mobile-first row action clusters
-
-A row's `btn` slot is the one place a list becomes interactive. Six rules govern it:
-
-**1. Mobile width constraint — maximum 3, preferred 2 buttons.** Most users navigate on
-mobile devices. Each button competes with the row's own content for screen width; exceeding
-3 buttons forces record labels into multi-line text wrapping and collides chips with
-captions. The standard pair is **1 View navigation button + 1 primary contextual next action**.
-
-**2. Supply the View button explicitly.** `abstract/List.vue` deliberately makes a row
-non-clickable once it carries a `btn`, so a row with buttons never has an ambiguous tap
-target. While correct in general, adding row action buttons turns off whole-row tap
-navigation — always put an icon-only `View` button back explicitly (`icon="visibility"`).
-
-**3. Key the cluster on the record's state, never the active view.** A modifier-mounted `btn`
-component is mounted with `item` and nothing else — `useContentResolver` returns props, not
-slots, so the cluster cannot be told which view it is in. That constraint produces the right
-rule anyway: a record offers Approve because it is pending approval, not because the reader
-happens to be looking at a particular pill, and a unioned view (§7.1) holds rows in two
-states that must offer two different clusters in the same list:
-
-```javascript
-const ACTIONS_BY_PROGRESS = {
-  [DRAFT]:             [],
-  [PENDING_APPROVAL]:  ['Approve'],
-  [APPROVED]:          ['MarkDelivered'],
-  [PARTIALLY_DELIVERED]: ['Reallocate', 'MarkDelivered']
-}
-```
-
-This is a **whitelist of interest, not a permission list** — `useAdditionalActions` still
-decides which of them the signed-in user may see (§8.5). Everything omitted stays available
-on the record's View page.
-
-**4. Prohibit destructive and reason-requiring actions on list rows.** An inline row action
-must be one tap, non-destructive, and either navigate or commit something trivially
-reversible. Therefore:
-- an action needing a **written reason** (reject, request revision) belongs on the record or
-  action page, not one tap from a scrolling list;
-- a **destructive** action (cancel, delete) is never placed on a row;
-- an action where the user **must inspect items first** (submit, resubmit) is off the row
-  — the button that opens the review form (Edit) is the one that belongs there.
-
-**5. Inline Edit buttons require state and ownership gates.** Inline Edit is a CRUD route
-dispatched locally. It must fail closed on missing IDs, verifying both state eligibility
-and strict ownership (`CreatedBy === user.value?.id`).
-
-**6. Dispatch CRUD yourself, delegate workflow.** Edit and View are CRUD routes: the cluster
-navigates them directly. Everything else is a workflow action and goes through
-`AdditionalActionsButtons`, which owns eligibility. Render them as loose siblings at one
-visual scale, never in a `q-btn-group` — see [`_config/config.md` §3.5](file:///f:/AQL/FRONTENT/src/_ui/AQL/_config/config.md).
+The List mounts inline `AdditionalActionsButtons`. `view.actions` and `list{Name}Actions.js`
+select the supported action props. The action system owns permission, visibility, and dispatch.
+The view's Target selects row navigation after a destination access check.
+See [row actions and Target](UI_LIST_VIEWS_ITEMS.md#9-inline-actions-and-row-navigation).
 
 ### 7.4 The View Blueprint — Business-Concept Card Grouping
 

@@ -180,6 +180,7 @@
       v-if="paginationLive"
       v-model="pageModel"
       :max="totalPages"
+      :disable="keepPage && loading"
       :max-pages="7"
       boundary-numbers
       size="md"
@@ -205,6 +206,7 @@ const model = defineModel({ default: undefined })
 const props = defineProps({
   items: { type: Array, default: () => [] },
   page: { type: Number, default: undefined },
+  keepPage: { type: Boolean, default: false },
   paginate: { type: Boolean, default: true },
   perPage: { type: Number, default: 25 },
   threshold: { type: Number, default: 35 },
@@ -224,7 +226,7 @@ const props = defineProps({
   separator: { type: Boolean, default: false },
   dense: { type: Boolean, default: false },
   color: { type: [String, Function], default: 'primary' },
-  highlight: { type: [Boolean, String], default: false },
+  highlight: { type: [Boolean, String], default: undefined },
   highlightColor: { type: [String, Function], default: null },
   clickable: { type: Boolean, default: null },
   selectable: { type: [Boolean, String], default: null, validator: v => v === null || [true, false, 'left', 'right'].includes(v) },
@@ -234,29 +236,29 @@ const props = defineProps({
   falseValue: { default: false },
   checkboxColor: { type: [String, Function], default: null },
   itemClass: { type: [String, Array, Object], default: null },
-  icon: { type: [String, Function], default: null },
+  icon: { type: [String, Function, Boolean], default: null },
   iconColor: { type: [String, Function], default: null },
   align: { type: String, default: 'center', validator: v => ['center', 'top'].includes(v) },
-  avatar: { type: [String, Function], default: null },
-  avatarLabel: { type: [String, Function], default: null },
+  avatar: { type: [String, Function, Boolean], default: null },
+  avatarLabel: { type: [String, Function, Boolean], default: null },
   avatarColor: { type: [String, Function], default: 'primary' },
   avatarSize: { type: String, default: 'md' },
   layout: { type: Array, default: () => ['label', 'caption'] },
   content: { type: [Array, String], default: null },
-  label: { type: [String, Function, Object], default: 'Code' },
+  label: { type: [String, Function, Object, Boolean], default: 'Code' },
   labelClass: { type: [String, Array, Object], default: null },
-  caption: { type: [String, Function, Object], default: null },
+  caption: { type: [String, Function, Object, Boolean], default: null },
   captionClass: { type: [String, Array, Object], default: null },
   meta: { type: Array, default: null },
   metaLayout: { type: Array, default: () => ['chip', 'caption', 'label'] },
   metaColor: { type: [String, Function], default: null },
-  metaLabel: { type: [String, Function, Object], default: null },
-  metaCaption: { type: [String, Function, Object], default: null },
-  chip: { type: [String, Function, Object], default: null },
+  metaLabel: { type: [String, Function, Object, Boolean], default: null },
+  metaCaption: { type: [String, Function, Object, Boolean], default: null },
+  chip: { type: [String, Function, Object, Boolean], default: null },
   chipColor: { type: [String, Function], default: null },
   chipOutline: { type: Boolean, default: false },
   chipTextColor: { type: [String, Function], default: null },
-  badge: { type: [String, Function, Object], default: null },
+  badge: { type: [String, Function, Object, Boolean], default: null },
   badgeColor: { type: [String, Function], default: null },
   badgeTextColor: { type: [String, Function], default: 'white' },
   badgeOutline: { type: Boolean, default: false },
@@ -279,11 +281,6 @@ const slots = useSlots()
 const instance = getCurrentInstance()
 const currentPage = ref(1)
 
-const pageModel = computed({
-  get: () => props.page ?? currentPage.value,
-  set: value => setPage(value)
-})
-
 const gutterClass = computed(() => {
   const token = props.gutter
   if (token === false || token === '' || token === 'none' || token == null) return null
@@ -298,6 +295,13 @@ const staggerStyle = {
 const paginationLive = computed(() => props.paginate && props.items.length > props.threshold)
 const pageSize = computed(() => Math.max(1, props.perPage || 25))
 const totalPages = computed(() => Math.max(1, Math.ceil(props.items.length / pageSize.value)))
+const pageModel = computed({
+  get: () => {
+    const page = props.page ?? currentPage.value
+    return props.keepPage ? Math.min(Math.max(1, page), totalPages.value) : page
+  },
+  set: value => setPage(value)
+})
 const renderedItems = computed(() => {
   if (!paginationLive.value) return props.items
   const start = (pageModel.value - 1) * pageSize.value
@@ -305,10 +309,11 @@ const renderedItems = computed(() => {
 })
 
 watch(() => props.items, () => {
-  setPage(1)
+  if (!props.keepPage) setPage(1)
 }, { deep: true })
 
 watch([paginationLive, totalPages], () => {
+  if (props.keepPage) return
   if (!paginationLive.value || pageModel.value > totalPages.value) setPage(1)
 }, { immediate: true })
 
@@ -377,7 +382,7 @@ const isItemClickable = computed(() => {
   if (hasInput.value) return false
   if (isSelectable.value) return true
   if (props.clickable !== null) {
-    return props.clickable && !props.btn && !slots.btn
+    return props.clickable
   }
   return hasClick.value && !props.btn && !slots.btn
 })
@@ -467,6 +472,7 @@ function toggleItem(item) {
 }
 
 const isHighlighted = computed(() => {
+  if (props.highlight === false || props.highlight === null || String(props.highlight).toLowerCase().trim() === 'false') return false
   if (props.highlightColor && String(props.highlightColor).trim() !== "") return true
   const val = props.highlight
   if (val === undefined || val === null || val === false || String(val).toLowerCase().trim() === 'false') return false

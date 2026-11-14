@@ -1,33 +1,9 @@
-/**
- * Outlets › the one operational projection — Layer 2.
- *
- * ONE pass over the five operational streams, producing every figure the Outlets module
- * shows: the geographic breakdown, the three pending queues, the two visit queues, the
- * activity-health ratio, the six list views, and the per-outlet slices the View page's cards
- * read. Built once per app through the record layer's `remember`, so the pass runs once per app and every
- * caller reads the same memoized computeds.
- *
- * ── WHY ONE AGGREGATE AND NOT A COMPOSABLE PER WIDGET ──
- * Every number on the Index page and every card on the View page is a PROJECTION of the same
- * indexed structure. The "Restocks Pending Approval" metric and the restock card on an
- * outlet's View page are the same filter over the same map, so they cannot drift apart
- * (CORE_ARCHITECTURE_RULES §6 — Enrich Once, Then Project).
- *
- * ── INDEXED JOINS, NOT LINEAR SCANS ──
- * Every stream is grouped into a `Map` keyed by `OutletCode` exactly once. A card asking
- * "this outlet's restocks" is an O(1) lookup; nothing iterates a stream inside a render loop.
- *
- * The workflow vocabulary of each stream is imported from that stream's OWN domain layer —
- * this file never restates what `PENDING_APPROVAL` or `PENDING_INVOICE_GENERATION` mean
- * (UI_RESOURCE_DOMAIN_LOGIC.md §3.2: multi-resource logic is composed by importing named
- * domain modules, never by re-deriving them).
- */
-
 import { computed } from 'vue'
 import { useRecord } from 'src/composables/resources/useRecord'
 import { useOutletResource } from './useOutletResource'
 import { useOutletStorageResource } from 'src/_resource/Operation/OutletStorages/composables/useOutletStorageResource'
 import { toDateOnly } from 'src/utils/dateHelpers'
+import { sortByDate } from 'src/utils/sortHelpers'
 import {
   VISIT_WINDOW_DAYS,
   ACTIVITY_WINDOW_DAYS,
@@ -52,7 +28,6 @@ const text = (value) => (value == null ? '' : String(value).trim())
 const asRow = (value) => (value && typeof value === 'object' ? value : {})
 const upper = (value) => text(value).toUpperCase()
 
-/** Group already-filtered rows into a `Map` keyed by their outlet code. */
 function groupByOutlet (rows, column = 'OutletCode') {
   const map = new Map()
   for (const row of rows) {
@@ -65,7 +40,6 @@ function groupByOutlet (rows, column = 'OutletCode') {
   return map
 }
 
-/** The most recent (largest) ISO date string in a set of rows, or `''` when there is none. */
 const todayISO = () => new Date().toISOString().slice(0, 10)
 
 function latestDate (rows, column, fallbackColumn) {
@@ -81,12 +55,6 @@ function latestDate (rows, column, fallbackColumn) {
   return latest
 }
 
-/**
- * Count distinct outlet codes across a set of rows.
- *
- * The three pending metrics all count OUTLETS, not documents: an outlet with four
- * consumptions awaiting invoicing is one place someone has to go, not four.
- */
 function distinctOutlets (rows) {
   const seen = new Set()
   for (const row of rows) {
@@ -101,20 +69,14 @@ const build = (recordSource) => {
 
   const rows = (name) => (recordSource.rows(name) || []).map(asRow).filter(isActiveRow)
 
-  // ── Raw streams ─────────────────────────────────────────────────────────────
-
   const rawVisits = computed(() => rows('OutletVisits'))
   const rawRestocks = computed(() => rows('OutletRestocks'))
   const rawConsumptions = computed(() => rows('OutletConsumptions'))
   const rawInvoices = computed(() => rows('OutletConsumptionInvoices'))
   const rawPayments = computed(() => rows('OutletPayments'))
   const rawReturns = computed(() => rows('OutletReturns'))
-  // Stock is NOT re-read or re-grouped here: `OutletStorages` owns its own index (rows by
-  // outlet, quantities by outlet × SKU, and the reverse), and this module consumes it —
-  // one pass over the storage sheet for the whole app, not one per aggregate.
-  const { rawStorages, rowsByOutlet: storagesByOutlet, stockRowsOf } = useOutletStorageResource()
 
-  // ── Indexed joins — every stream keyed by outlet, built exactly once ─────────
+  const { rawStorages, rowsByOutlet: storagesByOutlet, stockRowsOf } = useOutletStorageResource()
 
   const visitsByOutlet = computed(() => groupByOutlet(rawVisits.value))
   const restocksByOutlet = computed(() => groupByOutlet(rawRestocks.value))
@@ -122,15 +84,6 @@ const build = (recordSource) => {
   const invoicesByOutlet = computed(() => groupByOutlet(rawInvoices.value))
   const paymentsByOutlet = computed(() => groupByOutlet(rawPayments.value))
   const returnsByOutlet = computed(() => groupByOutlet(rawReturns.value))
-
-  // ── Outlet family: mother companies and their sub-outlets ───────────────────
-  //
-  // One `Map` keyed by `ParentOutletCode`, built once over the outlet master list. Every
-  // family question downstream — is this a mother, who are its children, which codes make
-  // up the group — is then an O(1) map read, never a scan of `outlets`.
-  //
-  // A blank `ParentOutletCode` is a standalone outlet: grouping under `''` would turn every
-  // unassigned outlet into a phantom child of a non-existent parent, so those rows are dropped.
 
   const childOutletsByParent = computed(() => {
     const map = new Map()
@@ -146,20 +99,17 @@ const build = (recordSource) => {
 
   const childOutletsFor = (code) => childOutletsByParent.value.get(text(code)) || []
 
-  /** Outlets that head at least one sub-outlet — the mother companies. */
   const motherOutlets = computed(() =>
     outlets.value.filter((outlet) => childOutletsFor(outlet.Code || outlet.code).length > 0))
 
   const isMother = (code) => childOutletsFor(code).length > 0
 
-  /** The codes a family projection spans: the outlet itself, then each of its children. */
   const familyCodesFor = (code) => {
     const self = text(code)
     const children = childOutletsFor(self).map((outlet) => text(outlet.Code || outlet.code))
     return [self, ...children]
   }
 
-  /** The five activity streams, resolved to their live maps, in vocabulary order. */
   const streamMaps = computed(() => ({
     visit: visitsByOutlet.value,
     restock: restocksByOutlet.value,
@@ -167,13 +117,6 @@ const build = (recordSource) => {
     invoice: invoicesByOutlet.value,
     payment: paymentsByOutlet.value
   }))
-
-  // ── Per-outlet activity summaries ───────────────────────────────────────────
-  //
-  // ONE row per outlet, carrying the last event date per stream, the overall last-activity
-  // date, and its age in days. Everything downstream — the health ratio, the "No Updates"
-  // queue, all four "Recently …" queues, the View page's cards — is a filter or a sort over
-  // this one array.
 
   const outletSummaries = computed(() => {
     const maps = streamMaps.value
@@ -241,24 +184,14 @@ const build = (recordSource) => {
   const summaryByCode = computed(() =>
     new Map(outletSummaries.value.map((summary) => [summary.code, summary])))
 
-  /** Only the summaries of outlets that are themselves Active master records. */
   const activeSummaries = computed(() =>
     outletSummaries.value.filter((summary) => upper(summary.status) === 'ACTIVE'))
-
-  // ── Metric 1: total outlets ─────────────────────────────────────────────────
 
   const totalsMetrics = computed(() => ({
     total: outlets.value.length,
     active: activeOutlets.value.length,
     inactive: outlets.value.length - activeOutlets.value.length
   }))
-
-  // ── Geographic distribution ─────────────────────────────────────────────────
-  //
-  // Counted from ACTIVE outlets only: a distribution is a picture of where the business
-  // currently operates, and an archived outlet is not a place anyone visits. Blank values
-  // are dropped rather than bucketed as "Unknown" — a tenant that never fills `Area` should
-  // see the Area tab empty and the widget hide it, not a single bar labelled with a guess.
 
   function countBy (key) {
     const counts = new Map()
@@ -278,8 +211,6 @@ const build = (recordSource) => {
     area: countBy('area')
   }))
 
-  // ── Metric 2–4: the three pending queues ────────────────────────────────────
-
   const pendingRestockRows = computed(() =>
     rawRestocks.value.filter((row) => upper(row.Progress) === RESTOCK_PENDING_APPROVAL))
 
@@ -298,11 +229,6 @@ const build = (recordSource) => {
     invoiceConsumptions: pendingInvoiceRows.value.length
   }))
 
-  // ── Metric 5–6: the two visit queues ────────────────────────────────────────
-  //
-  // Both read `VISIT_WINDOW_DAYS`, the field-route window, NOT the wider activity window —
-  // "who did we see this week" and "who is on the list" are route questions.
-
   const recentVisitRows = computed(() =>
     rawVisits.value.filter((row) =>
       upper(row.Progress) === VISIT_COMPLETED && withinPastDays(row.Date, VISIT_WINDOW_DAYS)))
@@ -319,11 +245,6 @@ const build = (recordSource) => {
     upcomingOutlets: distinctOutlets(upcomingVisitRows.value)
   }))
 
-  // ── Activity health ─────────────────────────────────────────────────────────
-  //
-  // The denominator is every outlet on the master list, not only the ones with a stream —
-  // an outlet nobody has touched is precisely what this ratio exists to make visible.
-
   const activityMetrics = computed(() => {
     const total = activeSummaries.value.length
     const active = activeSummaries.value.filter((summary) => summary.isActive).length
@@ -336,28 +257,18 @@ const build = (recordSource) => {
     }
   })
 
-  // ── The six list views ──────────────────────────────────────────────────────
-  //
-  // Four of them are "recently X" queues over the SAME activity window as the health ratio,
-  // so the bar and the pills describe one definition of "recent" rather than two. The visit
-  // METRICS above deliberately use the narrower route window; the visit LIST sits beside its
-  // three siblings and uses theirs.
-
   const byName = (a, b) => a.name.localeCompare(b.name)
   const byStreamDesc = (key) => (a, b) =>
     text(b.streams[key].lastAt).localeCompare(text(a.streams[key].lastAt)) || byName(a, b)
 
-  /** Outlets whose given stream fired inside the activity window, newest first. */
   const recentlyIn = (key) => activeSummaries.value
     .filter((summary) => withinPastDays(summary.streams[key].lastAt, ACTIVITY_WINDOW_DAYS))
     .sort(byStreamDesc(key))
 
   const views = computed(() => ({
+    Recent: sortByDate([...activeSummaries.value].sort(byName), 'lastActivityAt', 'desc'),
     AllOutlets: [...activeSummaries.value].sort(byName),
 
-    // Oldest silence first — and outlets that were NEVER touched (`lastActivityDays === null`)
-    // lead the queue, because "no event ever recorded" is the longest silence there is and
-    // sorting them numerically would sink them below a 400-day-old one.
     NoUpdates: activeSummaries.value
       .filter((summary) => !summary.isActive)
       .sort((a, b) => {
@@ -375,20 +286,8 @@ const build = (recordSource) => {
     RecentlyVisited: recentlyIn('visit')
   }))
 
-  // ── Per-outlet slices, for the View page ────────────────────────────────────
-  //
-  // Every getter is an O(1) map read followed by a sort of that outlet's own rows. A View
-  // card never scans a whole stream.
-
   const sortedFor = (map, code, column) =>
     [...(map.get(text(code)) || [])].sort((a, b) => text(b[column]).localeCompare(text(a[column])))
-
-  // ── Per-family projections ──────────────────────────────────────────────────
-  //
-  // A mother company's cards read the same streams as a standalone outlet's, so these are the
-  // `sortedFor` shape widened to every code in the family. Each is `familyCodesFor` (a Map
-  // read) plus one Map read per child — a family card never scans a whole stream, and the
-  // output stays newest-first exactly as the single-outlet slices are.
 
   const sortedFamilyFor = (map, code, column) => {
     const rows = []
@@ -408,7 +307,6 @@ const build = (recordSource) => {
   const familyStockFor = (code) => familyCodesFor(code).flatMap((familyCode) => stockRowsOf(familyCode))
 
   return {
-    // Raw streams — for a consumer that genuinely needs the whole set.
     rawVisits,
     rawRestocks,
     rawConsumptions,
@@ -417,7 +315,6 @@ const build = (recordSource) => {
     rawReturns,
     rawStorages,
 
-    // Indexed joins.
     outletMap,
     visitsByOutlet,
     restocksByOutlet,
@@ -427,26 +324,22 @@ const build = (recordSource) => {
     returnsByOutlet,
     storagesByOutlet,
 
-    // Outlet family.
     childOutletsByParent,
     motherOutlets,
     isMother,
     childOutletsFor,
     familyCodesFor,
 
-    // Summaries.
     outletSummaries,
     summaryByCode,
     activeSummaries,
 
-    // Metrics.
     totalsMetrics,
     geography,
     pendingMetrics,
     visitMetrics,
     activityMetrics,
 
-    // Queues.
     pendingRestockRows,
     pendingDeliveryRows,
     pendingInvoiceRows,
@@ -454,7 +347,6 @@ const build = (recordSource) => {
     upcomingVisitRows,
     views,
 
-    // Per-outlet projections.
     summaryFor: (code) => summaryByCode.value.get(text(code)) || null,
     visitsFor: (code) => sortedFor(visitsByOutlet.value, code, 'Date'),
     restocksFor: (code) => sortedFor(restocksByOutlet.value, code, 'Date'),
@@ -464,7 +356,6 @@ const build = (recordSource) => {
     returnsFor: (code) => sortedFor(returnsByOutlet.value, code, 'Date'),
     stockFor: (code) => stockRowsOf(code),
 
-    // Per-family projections.
     familyVisitsFor,
     familyRestocksFor,
     familyConsumptionsFor,

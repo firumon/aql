@@ -332,6 +332,9 @@ one action write several records (Postpone = stamp this visit **and** create the
 > `additionalActionsSchema.js` (pure field builders), and `GAS/actionTargets.gs`. Full
 > spec in [UI_ACTION_SYSTEM.md](file:///f:/AQL/Documents/UI_ACTION_SYSTEM.md) §7.
 
+Before changing action filters, read [UI_ACTION_MULTI_RECORD.md](file:///f:/AQL/Documents/UI_ACTION_MULTI_RECORD.md) §7.0
+for the shared selection, order, and eligibility rules.
+
 **Two dispatch paths — pick the right one.**
 
 | | Popup | Batched |

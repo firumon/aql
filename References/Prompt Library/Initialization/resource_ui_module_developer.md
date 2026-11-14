@@ -53,7 +53,7 @@ Before touching any file, decide what kind of request this is. Use this table:
 | A brand new module, or "build the whole X module" (Index + Add/Edit + View together) | This is a **FULL MODULE**. Read the whole guide. Do Steps 1–10 below, in order. |
 | A single page, or one piece of a module that already exists (just the list, just the Edit form, just one button, just one card) | This is a **PARTIAL** task. Do NOT run the full pipeline. If the session is already equipped with context, reference **only the relevant guide section** above (or the narrower domain prompt) and execute directly. |
 | The word "dashboard", or anything that sounds like a report/summary/chart over ALL TIME or a whole month | **STOP before building anything.** Per guide §9, an Index page shows only live/open queues — it is not a dashboard. A real dashboard belongs to the separate Dashboard system ([dashboard_implementation.md](file:///f:/AQL/References/Prompt%20Library/Initialization/dashboard_implementation.md)). Ask the user which one they mean before doing anything. Do not ask when the request clearly says dashboard widgets, cards, tiles, charts, KPIs or stats: hand off straight to that prompt. |
-| Anything about a **list** (a table of records, a filter, a view tab) | Read only guide §7.1–§7.3 (per-view overrides, row presentation, row actions) and §9.4 (how a list already builds itself from the resource's fields). Do not rebuild the whole Index page for a list-only ask. |
+| Anything about a **list** | Read [list_views_development.md](list_views_development.md). Use the current ListViews API and build only the named step. |
 | The request is missing pieces — e.g. it doesn't say what the Edit page should contain, or the workflow steps aren't clear | Do **not** guess. Ask the user and wait for their answer before writing any file. |
 
 ### How to ask, when something is unclear
@@ -152,19 +152,12 @@ disagree (guide §7.4).
    - **Stage 3 (Backlog Risk)**: `AgeingBuckets` — time spent in bottleneck queues, permission-gated to the actor who can clear them, aged from queue entry stamp (`...SubmittedAt`).
    - **Stage 4 (Work Execution)**: `FilterInput`, `ListSwitcher`, and `List`.
    Every widget modifier returns `[]` — never zeroes — when there is nothing to say.
-3. **Switcher & Combined Views** (guide §7.1, §9.3) — gate each pill on the action that view
-   starts; fall back to ungated set if all are hidden; correct active view in a microtask.
-   When combining related sub-queues in one view (e.g. Ready to Deliver + In-Progress), use
-   `SectionDividerLabel`; if all sub-lists are empty, show a single clean empty-message box.
-4. **Row Presentation & Scoping** (guide §7.2) — verify list strategy defaults before
-   writing resolvers:
-   - Personal queues ("My Drafts") filter rows down to active `userId` to avoid manager upline clutter.
-   - Queue-intent captions: approver sees requester + submit note; revision queue sees reviewer changes; settled views see actor + timestamp. Suppress raw user codes (`U0001`).
-   - Active queues sort oldest-first with outlined urgency chips; settled history sorts newest-first with plain elapsed time.
-5. **Mobile-First Row Actions** (guide §7.3) — cap at **preferred 2, maximum 3 buttons**;
-   always provide an explicit icon-only `View` button (`icon="visibility"`) because `btn`
-   turns off normal row-click navigation; ban destructive or reason-requiring actions
-   (Reject, Revise, Cancel) from list rows; check both state and record ownership for inline Edit.
+3. **ListViews** - follow [list_views_development.md](list_views_development.md).
+   Use sheet config and Data/feature overrides for row work.
+   ListSwitcher and List share `useListView` for tabs, active rows, display props, actions, and targets.
+4. **Row UI**, only when in scope - use the agreed shared useListView exports and current
+   AppList/action APIs. Keep display and click logic out of templates.
+   Follow guide sections 7.2-7.3 for the row display and actions.
 
 ---
 

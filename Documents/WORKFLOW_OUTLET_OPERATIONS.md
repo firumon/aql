@@ -50,12 +50,16 @@ graph TD
 - The system groups outlets into route territories to optimize sales representative and driver travel.
 
 ### 3.2 Sales Visits & Shelf Audits (`OutletVisits`)
+
+The Today list shows active visits dated today or earlier. The oldest visit dates appear first.
 1. **Check-in**: Field representative checks in at the retail outlet via the PWA.
 2. **Visual Stock Audit**: Checks physical display quantity for each active SKU.
 3. **Refill Recommendation**: If stock is low or nearing stock-out, the visit automatically drafts an `OutletRestocks` request with suggested quantities.
 4. **Visit Completion**: Records visit notes, photo verification, and completes the visit record.
 
 ### 3.3 Refill Requests & Warehouse Allocation (`OutletRestocks`)
+
+Pending Completion shows approved and partly delivered requests in one list, with the oldest last status change first.
 1. **Creation**: Drafted from an outlet visit or created manually by sales operations.
 2. **Approval**: Operations manager reviews requested quantities against outlet sales velocity and credit status.
 3. **Stock Allocation**: Operations assigns specific warehouse storage bins (`WarehouseCode`, `StorageName`) for each SKU in `OutletRestockItems`.
@@ -71,6 +75,8 @@ graph TD
 4. **Completion (`COMPLETED`)**: When all linked items are marked delivered, the `OutletDeliveries` header transitions to `COMPLETED`.
 
 ### 3.5 Sales Consumptions & Invoicing (`OutletConsumptionInvoices`)
+
+Due In 7 Days shows open invoices due from today through seven days from today, with the soonest due first.
 1. **Consumption Tracking**: Recorded during regular audit cycles by comparing opening balance + deliveries vs. ending shelf stock.
 2. **Invoice Generation**: Consumed items generate an `OutletConsumptionInvoices` record calculating wholesale price, discounts, and applicable UAE VAT (5%). In the wizard (ITEMS TO BILL step), lines are seeded via `seedInvoiceLines` grouping consumption items per SKU, preserving any manual additions (`_manualQty`) when ticking/unticking consumptions.
 3. **Invoice Issuance**: Invoice PDF is generated via the Reports system and dispatched to the outlet's accounting department.

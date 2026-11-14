@@ -1,12 +1,3 @@
-import {
-  recentPreset,
-  submittedPreset,
-  awaitingInvoicePreset,
-  awaitingWarehousePreset,
-  completedPreset,
-  cancelledPreset
-} from 'src/_ui/AQL/composables/Operation/OutletReturns/Index/useReturnRowPresets'
-
 export default {
   sections: [
     'PageHeader',
@@ -21,13 +12,5 @@ export default {
     title: 'Outlet Returns'
   },
 
-  PropsSection: (pageProps) => ({ gutter: pageProps.gutter }),
-
-  // Block names must match the sheet's ListViews `name` values or the row shape is ignored.
-  PropsListRecent: (props) => recentPreset(props.items),
-  PropsListSubmitted: (props) => submittedPreset(props.items),
-  PropsListAwaitingInvoiceAdjustment: (props) => awaitingInvoicePreset(props.items),
-  PropsListAwaitingWarehouseReceipt: (props) => awaitingWarehousePreset(props.items),
-  PropsListCompleted: (props) => completedPreset(props.items),
-  PropsListCancelled: (props) => cancelledPreset(props.items)
+  PropsSection: (pageProps) => ({ gutter: pageProps.gutter })
 }

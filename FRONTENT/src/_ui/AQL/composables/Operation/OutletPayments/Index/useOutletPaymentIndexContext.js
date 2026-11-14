@@ -1,13 +1,8 @@
 import { computed, inject } from 'vue'
 import { useResourceNav } from 'src/composables/resources/useResourceNav'
 import { useResourceReload } from 'src/composables/resources/useResourceReload'
+import { listSearchText } from 'src/composables/resources/listViews/listViewSettings'
 import { useOutletPaymentIndex } from 'src/_resource/Operation/OutletPayments/composables/useOutletPaymentIndex'
-
-/**
- * OutletPayments › Index — the Core-composable relay for the Index page
- * (UI_RESOURCE_DOMAIN_LOGIC.md §6.1). Lists may not import `useResourceNav`
- * themselves, so that import lives here.
- */
 
 const text = (value) => (value == null ? '' : String(value).trim())
 
@@ -22,15 +17,10 @@ export function useOutletPaymentIndexContext () {
 
   const resourceRecord = inject('resourceRecord', null)
 
-  /**
-   * The live keyword from `FilterInput`. Every list here renders Layer 2 aggregate rows, not
-   * `filteredRecords`, so the framework search never reaches them and each list applies this.
-   */
   const filterTerm = computed(() => String(resourceRecord?.filterTerm?.value ?? '').trim().toLowerCase())
 
   const sources = ['OutletConsumptionInvoices', 'Outlets']
 
-  /** Renders from cache and syncs the delta in the background — never blocks first paint. */
   const loadSources = () => reloadDependencies({ resources: sources, showError: false })
 
   if (!pending) {
@@ -44,24 +34,18 @@ export function useOutletPaymentIndexContext () {
 
     filterTerm,
 
-    /** Narrow one view's rows by the live keyword. Only the active list pays for a keystroke. */
     filterPayments: (rows) => {
       const keyword = filterTerm.value
       const list = Array.isArray(rows) ? rows : []
       if (!keyword) return list
-      return list.filter((row) => (row?.search || '').includes(keyword))
+      return list.filter((row) => listSearchText(row).includes(keyword))
     },
 
-    /** Open one payment receipt. */
     openPayment: (code) => {
       const next = text(code)
       if (next) nav.goTo('view', { code: next })
     },
 
-    /**
-     * Start a payment. The invoice code is optional: the Outlets queue opens the
-     * form on the outlet and lets the collector pick the invoices there.
-     */
     startPayment: (outletCode, invoiceCode) => {
       const query = { outletCode: text(outletCode) }
       if (text(invoiceCode)) query.invoiceCode = text(invoiceCode)

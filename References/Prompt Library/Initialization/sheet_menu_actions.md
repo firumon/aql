@@ -49,7 +49,7 @@ When creating forms or dialogs editing the `Resources` sheet, you must handle th
   *Rule*: The dialog edit form typically updates the first array item and preserves the rest of the array via a hidden field `_menuArrayFull` (see [appMenu.gs](file:///f:/AQL/GAS/appMenu.gs#L357-L375) mapping).
 - **`UIFields`**: JSON array of fields defining form properties.
 - **`AdditionalActions`**: JSON array configuring custom lifecycle transitions (e.g. Approve, Reject, Cancel).
-- **`ListViews`**: JSON array defining list filter rules and criteria configurations.
+- **`ListViews`**: Named view JSON for permission, row stages, display, actions, and targets. Read [ListViews sheet setup](../../../Documents/UI_LIST_SWITCHER_SHEET.md) for the form and accepted shapes.
 - **`Reports`**: JSON array mapping printable report template sheets and cell inputs.
 - **`DefaultValues`**: JSON object containing default key-value mappings for new records.
 

@@ -359,7 +359,7 @@ List view filters in `APP.Resources.ListViews` can use dynamic region tokens eva
 
 ### 7.4 Form Fields
 `AccessRegion` is an audit column.
-In [`FRONTENT/src/composables/resources/useFormFields.js`](file:///f:/AQL/FRONTENT/src/composables/resources/useFormFields.js#L23) and `useListStrategy.js`, `AccessRegion` is in `ignoredFields`. It is never shown as a text box in normal Add or Edit forms.
+In [`FRONTENT/src/composables/resources/useFormFields.js`](file:///f:/AQL/FRONTENT/src/composables/resources/useFormFields.js#L23), `AccessRegion` is in `ignoredFields`. It is never shown as a text box in normal Add or Edit forms.
 
 ---
 

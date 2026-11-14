@@ -1,345 +1,495 @@
-# List Switcher — Sheet Integration
+# ListViews - Sheet Setup and Config
 
-> Part of **[AQL Frontend List Switcher Architecture](UI_LIST_SWITCHER.md)**. `APP.Resources.ListViews`: schema, filters and tokens.
+Part of the [ListViews guide](UI_LIST_SWITCHER.md).
+Use this guide to set up a list in the Resources sheet or the Manage Lists dialog.
+The app reads each configured view from the resource login config.
 
----
+The runtime [Config override](UI_LIST_SWITCHER_COMPONENTS.md#config-overrides-use-only-when-required)
+can replace supported view settings after the saved permission check. It cannot replace
+`name` or `permission`. Manage Lists edits the saved settings, not that runtime result.
+A Config file is allowed only for a required need and with explicit user permission.
 
-## 5. Sheet Integration (`APP.Resources.ListViews`)
 
-The list view items and filtering are derived dynamically from Google Sheets database configurations.
+## 5.1 Where a view is saved
 
-### 5.1. Sheet Config Relationship
-* **Spreadsheet Setup**: Managed under the `ListViews` column of the `APP.Resources` sheet. See the [AQL Menu Admin Guide](file:///f:/AQL/Documents/SHEET_TOOLBAR_MENU_GUIDE.md#L219-L234).
-* **Admin Dialog**: The `AQL 🚀 → Manage Lists` dialog ([`GAS/listViewsManager.html`](file:///f:/AQL/GAS/listViewsManager.html)) configures this cell. Its **Chip Color** field is a free-text input backed by a `colorSuggestions` datalist — pick a brand/palette suggestion or type any Quasar palette name or Hex code. See [Section 4.4 in UI_LIST_SWITCHER_COMPONENTS.md](UI_LIST_SWITCHER_COMPONENTS.md#44-dynamic-color-resolution) for accepted formats.
-* **JSON Array Structure**: In custom mode, the cell contains a JSON array of item objects:
-  ```json
-  [
-    {
-      "name": "Inactive",
-      "default": true,
-      "color": "positive",
-      "icon": "check_circle",
-      "filter": {
-        "type": "group",
-        "logic": "AND",
-        "items": [
-          { "type": "condition", "column": "Status", "operator": "eq", "value": "Inactive" }
-        ]
-      }
-    }
-  ]
-  ```
-  Every item in the array shares the item object schema detailed in [Section 4.3 in UI_LIST_SWITCHER_COMPONENTS.md](UI_LIST_SWITCHER_COMPONENTS.md#43-list-view-item-object-schema).
+In the APP spreadsheet, find the resource row in the `Resources` sheet.
+Its `Name` identifies the resource. Its `ListViews` cell holds the view array.
+This is often written as `APP.Resources.ListViews`.
 
-#### 5.1.0. Single-Cell Mode Contract (`parseListViewsCell`)
-The backend parser ([`GAS/resourceRegistry.gs`](file:///f:/AQL/GAS/resourceRegistry.gs#L823-L852)) determines `listViewsMode` and `listViews` from the raw cell shape:
-
-| Cell Content / Shape | Resolved Mode (`listViewsMode`) | Views Array (`listViews`) | Description |
-| :--- | :--- | :--- | :--- |
-| **Blank** (`""`, `null`, `undefined`, whitespace) | `"auto"` | `[]` | Uses scope-aware auto-views generated at runtime. |
-| **`[]`** (empty JSON array) | `"off"` | `[]` | Explicitly disables list views for this resource. |
-| **`[ ... ]`** (non-empty JSON array) | `"custom"` | `[...]` | Uses the authored custom views array. |
-| **Invalid JSON or non-array** (e.g. `"off"`, `{}`) | `"auto"` | `[]` | Safe fallback. Defaults to auto-views. |
-
-> [!IMPORTANT]
-> These modes are determined by **cell shape** (empty cell, empty array, non-empty array). Literal strings such as `"off"` or `"auto"` do **not** select a mode; because they are not valid JSON arrays, they fail the array check and fall back to `"auto"`.
-
-#### 5.1.0a. Auto-View Derivation Rules (`useListViews.js`)
-When `listViewsMode` is `"auto"` and no custom views are configured, [`useListViews.js`](file:///f:/AQL/FRONTENT/src/composables/useListViews.js#L162-L193) automatically constructs views using resource metadata:
-
-1. **Master Scope (`scope === 'master'`)**:
-   - If the resource has a `Status` column in `resourceHeaders`, it generates two standard views:
-     - **Active** (`default: true`, `color: 'positive'`, filter: `Status eq 'Active'`)
-     - **Inactive** (`color: 'grey'`, filter: `Status eq 'Inactive'`)
-   - If the resource does not have a `Status` column, **no views** are produced (`[]`).
-2. **Other Scopes (`operation`, `accounts`, etc.)**:
-   - Tries the **`Progress`** column first if present in `resourceHeaders`.
-   - If `Progress` is absent or yields no values, tries the **`Type`** column next.
-   - **Value Resolution for Progress and Type (`resolveColumnValues`)**:
-     - Checks configured options from `useResourceConfig().options(column)` first.
-     - If no options are configured, falls back to scanning live rows (`items`) for distinct, order-preserving values using `uniqueColumnValues()`.
-   - **Candidate Option Column Search (`findAppOptionColumn`)**:
-     - If both `Progress` and `Type` yield no views, searches for the first header that has configured options in `useResourceConfig().options()`.
-     - Unlike `Progress` and `Type`, this step **requires configured options** and does not fall back to live rows.
-     - Skips excluded headers (`AUTO_VIEW_EXCLUDED_HEADERS`: `Code`, `Name`, `Status`, `Progress`, `Type`, `CreatedAt`, `UpdatedAt`, `Revision`, `CreatedBy`, `UpdatedBy`, `AccessRegion`, as well as headers ending in `Code` except `Code`).
-   - **No Views Produced**: If no candidate column exists or candidate columns yield no option values (and no live-row values for `Progress`/`Type`), **no views** are produced (`[]`).
-   - **Item Formatting**: Each distinct value becomes a view where `name` is humanized (`humanizeToken`, e.g. `"IN_PROGRESS"` → `"In Progress"`), `default: true` is assigned to the first item, `color` is picked via `colorForToken` (`positive`, `negative`, `warning`, `primary`, or `grey`), and a condition filter checks `column eq value`.
-
-### 5.1.1. Filter JSON Schema Reference
-The root of the `filter` property must be either a **Group Object** or a **Condition Object**. A raw array at the root is **not a valid filter schema** (even though permissive evaluator fallback treats unrecognized nodes as matching all rows).
-
-#### A. Group Object (`type: "group"`)
-Used to join multiple conditions or nested groups with logical operators:
-- `type`: Must be `"group"`.
-- `logic`: Either `"AND"` or `"OR"` (defaults to `"AND"`).
-- `items`: An array of filter objects. Can recursively contain nested group objects or condition objects.
-
-#### B. Condition Object (`type: "condition"`)
-Represents a single query comparison:
-- `type`: Must be `"condition"`.
-- `column`: String matching the exact Google Sheet header column name.
-- `operator` (or alias `op`): String operator mapping to comparison logic.
-- `value`: The target comparison value. Can be a string, number, array (for `in`/`not_in`), or a **dynamic token** such as `"$startOfMonth"`, `"$daysIn:7"` or `"$userRoles"` — see [Section 5.2](#52-dynamic-tokens-date-time--current-user). Not required for `empty` and `notEmpty`.
-
-#### C. Supported Comparison Operators & Aliases
-The evaluator ([`FRONTENT/src/utils/tokenEvaluator.js`](file:///f:/AQL/FRONTENT/src/utils/tokenEvaluator.js#L356-L380)) normalizes operator strings (case-insensitively) and supports the following canonical operators and aliases:
-
-| Canonical Operator | Accepted Aliases | Description & Behavior |
-| :--- | :--- | :--- |
-| `eq` | | Equal to. Case-insensitive string comparison or exact token comparison. |
-| `neq` | `ne` | Not equal to. Case-insensitive string comparison or exact token comparison. |
-| `in` | | Checks if row value is in target list (case-insensitive strings or coerced values). |
-| `not_in` | `nin`, `notin` | Checks if row value is NOT in target list. |
-| `gt` | | Greater than. Evaluates numerically if both sides are finite numbers, otherwise falls back to lowercase string comparison. |
-| `gte` | | Greater than or equal to (numeric-then-string ordered comparison). |
-| `lt` | | Less than (numeric-then-string ordered comparison). |
-| `lte` | | Less than or equal to (numeric-then-string ordered comparison). |
-| `contains` | | Substring match. Checks if row value string contains search string (case-insensitive). |
-| `empty` | | Checks if column is blank. Takes no target `value`. |
-| `notEmpty` | `not_empty`, `notempty` | Checks if column is not blank. Takes no target `value`. |
-
-#### D. Evaluation Mechanics
-- **Exact Column Lookup (`column in row`)**: In list views (`strictColumn: true`, the default), the column must be present in the row (`column in row`). If the column is missing from the row, the condition immediately evaluates to `false` before checking any operator — including `empty` and `notEmpty`. (Only lenient evaluation with `strictColumn: false`, used by action `visibleWhen`, evaluates a missing column as an empty value).
-- **What Counts as Empty**: When the column exists on the row, an empty value (`isBlank`) is strictly `undefined`, `null`, or empty string `""`. Zero (`0`) and `false` are considered non-empty values.
-- **Ordered Comparisons (`gt`, `gte`, `lt`, `lte`)**:
-  - **Plain (Literal) Values**: Evaluates numerically if both sides are finite numbers (`Number.isFinite`), otherwise falls back to case-insensitive string comparison (`toLowerCase()`).
-  - **Token Values**: Does not use literal numeric-then-text fallback. The column and token are converted into the token's defined comparison space using their declared `coerce` / `coerceToken` pipelines (e.g. epoch ms, signed days, signed hours, ISO strings), and then compared directly.
-- **Operator Key**: Conditions can specify the operator via either `operator` or `op`.
-
----
-
-## 5.2. Dynamic Tokens (Date/Time & Current User)
-
-A condition `value` may be a **token string** instead of a literal. Tokens resolve at evaluation
-time against the clock and the logged-in user, so one sheet-authored view stays correct as the
-date rolls over or a different user signs in.
-
-Registry: [`src/utils/tokenEvaluator.js`](file:///f:/AQL/FRONTENT/src/utils/tokenEvaluator.js).
-Token names are **case-insensitive** (`$startofmonth` works). In the **Manage Lists** admin
-dialog they appear in the grouped `Token...` dropdown next to each condition's value input.
-
-The same registry backs an action's `visibleWhen` (**Manage Actions** → *Visible When*), which is
-evaluated by the same module — so `Date` / `lte` / `$startOfDay:0` hides an action on
-future-dated records and `OwnerCode` / `eq` / `$userCode` shows one only to its owner.
-
-### 5.2.1. Two-Sided Coercion
-
-A token can only be compared against a sheet column when both sides sit in the same space. AQL
-sheets store dates in two shapes — audit columns (`CreatedAt`/`UpdatedAt`) hold **epoch
-milliseconds**, business date columns (`Date`, `DueDate`, `VisitDate`) hold **ISO strings**,
-sometimes with a time component.
-
-Each token therefore declares two pipelines of named primitives from `COERCES`:
-
-| Field | Applies to | Default |
-| :--- | :--- | :--- |
-| `coerce` | the **column** value | — (required) |
-| `coerceToken` | the **resolved token** value | falls back to `coerce` |
-
-Most tokens are symmetric, so `coerce` alone covers both sides. The relative-day tokens are
-deliberately asymmetric: the column is converted to *signed days from today* while the token
-stays a plain number.
-
-Because both pipelines run, **the same token works against either storage format** —
-`gte $startOfMonth` behaves identically on `CreatedAt` (epoch ms) and `VisitDate` (ISO string).
-
-> [!NOTE]
-> **Numeric NaN Guard vs String Date Tokens:**
-> When a token uses numeric coercion (epoch ms, dayNum, hourNum, year), an unparseable or blank column resolves to `NaN`. The evaluator explicitly guards against this (`typeof left === 'number' && Number.isNaN(left) return false`), so unparseable column values never match under any comparison, including `neq` / `not_in`.
-> In contrast, tokens with string pipelines (`$dateTime`, `$date`, `$month`) coerce unparseable/blank values to an empty string `""` (or empty month). They do not trigger the NaN guard, so `neq` or `lt` can match blank rows against string date tokens. Pair string comparisons with a `notEmpty` condition when blank rows must be excluded.
-
-> [!NOTE]
-> **Calendar dates are read literally.** A trailing `Z` on a column value does not shift the day —
-> `2026-08-02T20:00:00.000Z` buckets as 2 Aug regardless of the viewer's timezone. This matches
-> the long-standing `.slice(0, 10)` behaviour in `useOutletVisits` and keeps day buckets stable
-> across regions. Date arithmetic itself is delegated to `date-fns`; only the parse/dispatch step
-> in [`dateHelpers.js`](file:///f:/AQL/FRONTENT/src/utils/dateHelpers.js) is AQL-specific.
-
-### 5.2.2. Date & Time Tokens
-
-| Token | Resolves to | Column is compared as |
-| :--- | :--- | :--- |
-| `$now` | Current timestamp (13-digit ms) | epoch ms (numeric) |
-| `$dateTime` | Current instant as `YYYY-MM-DD HH:mm:ss` (24-hour) — the shape GAS stamps into `...At` / `RespondDate`. Takes **no** `:N` offset | `YYYY-MM-DD HH:mm:ss` (string) |
-| `$date[:N]` | Today as `YYYY-MM-DD` (or N-day offset: `$date:0` = today, `$date:1` = tomorrow, `$date:-1` = yesterday) | `YYYY-MM-DD` (string) |
-| `$day` | Day of year, `1`-`366` | day of year (numeric) |
-| `$month[:N]` | Current month as `"01"`-`"12"` (or N-month offset: `$month:0` = current, `$month:1` = next month, `$month:-1` = previous month) | zero-padded month string `"01"`-`"12"` |
-| `$year` | Current year, `YYYY` | 4-digit year (numeric) |
-| `$week` | Current ISO week, `1`-`53` | ISO week number (numeric) |
-| `$startOfDay[:N]` | Day 00:00:00.000 ms with N-day offset (default N=0 for today) | epoch ms (numeric) |
-| `$endOfDay[:N]` | Day 23:59:59.999 ms with N-day offset (default N=0 for today) | epoch ms (numeric) |
-| `$startOfMonth[:N]` | 1st of month 00:00:00.000 ms with N-month offset (default N=0 for this month) | epoch ms (numeric) |
-| `$endOfMonth[:N]` | Last of month 23:59:59.999 ms with N-month offset (default N=0 for this month) | epoch ms (numeric) |
-
-> ISO weeks run 1-53, not 1-52 — week 53 exists in years whose first Thursday falls late
-> (e.g. 2026-12-31 is week 53).
-
-> [!NOTE]
-> **`$dateTime` is a full instant, so `eq` against it effectively never matches** — the
-> seconds have already moved on. The useful comparisons are the ordered ones, which work
-> because the format sorts lexicographically: `lt $dateTime` means "already in the past".
-> For day-granularity buckets use `$date:N` or `$daysIn:N` instead. Its real job is the
-> **action expression** grammar — seeding a `...At` column from an `AdditionalActions`
-> target, where `$now`'s epoch ms would land an unreadable number in a cell a human reads.
->
-> Its coercion pipeline is **string-valued**, so it follows the `$date` family rather than
-> the epoch family on a blank or unparseable column: the NaN guard does not fire, the
-> column reads as `""`, and `lt`/`neq` therefore still match those rows. Pair it with a
-> `notEmpty` condition when blanks must be excluded.
-
-### 5.2.3. Relative-Day Tokens (Parameterised)
-
-Omitting `:N` uses the registered runtime default (`paramDefault`). For example, `$daysAgo` is equivalent to `$daysAgo:7`, and `$daysIn` is equivalent to `$daysIn:30`. Explicit parameters (such as `$daysIn:0`, negative values, or decimals) take precedence.
-
-| Token | Resolves to |
-| :--- | :--- |
-| `$daysAgo[:N]` | `-N` (past, negative number; runtime default N=7) |
-| `$daysIn[:N]` | `+N` (future, positive number; runtime default N=30) |
-
-The column is converted to **signed whole days from today** — future positive, past negative,
-today `0`. Both are floored to local midnight, so a time component on the column is ignored.
-
-> [!WARNING]
-> **Rolling windows need both edges.** A single `lte $daysIn:7` also matches every overdue
-> record, because an invoice due 90 days ago has an offset of `-90` and `-90 <= 7`. Always pair
-> the bounds:
-> ```json
-> { "type": "group", "logic": "AND", "items": [
->   { "type": "condition", "column": "DueDate", "operator": "gte", "value": "$daysIn:0" },
->   { "type": "condition", "column": "DueDate", "operator": "lte", "value": "$daysIn:7" }
-> ]}
-> ```
-
-Common single-sided patterns that are correct as-is:
-
-| Intent | Condition |
-| :--- | :--- |
-| Overdue | `DueDate` `lt` `$daysIn:0` |
-| Due today | `DueDate` `eq` `$daysIn:0` |
-| Aged 30+ days | `DueDate` `lt` `$daysAgo:30` |
-
-### 5.2.3a. Relative-Hour Tokens (Parameterised)
-
-Omitting `:N` uses the registered runtime default (`paramDefault`). For example, `$hoursAgo` is equivalent to `$hoursAgo:24`, and `$hoursIn` is equivalent to `$hoursIn:24`.
-
-| Token | Resolves to |
-| :--- | :--- |
-| `$hoursAgo[:N]` | `-N` (past, negative number; runtime default N=24) |
-| `$hoursIn[:N]` | `+N` (future, positive number; runtime default N=24) |
-
-The column is converted to **signed whole hours from now** — future positive, past negative,
-truncated toward zero (90 minutes ago reads as `-1`). Unlike the day family the column is **not**
-floored to local midnight, so its time component is what makes the comparison. Use these only for
-sub-day windows; anything measured in days belongs to `$daysAgo` / `$daysIn`, which are stable
-across a clock that keeps moving.
-
-Because the column keeps its time part, these are the right tokens for the datetime stamps GAS
-writes — `RespondDate`, `ProgressCompletedAt` and the rest of the `...At` family — and they work
-equally on an epoch-ms audit column.
-
-> [!WARNING]
-> **Rolling windows need both edges here too.** `gte $hoursAgo:48` alone also matches anything
-> dated in the future, whose offset is positive. Pair the bounds:
-> ```json
-> { "type": "group", "logic": "AND", "items": [
->   { "type": "condition", "column": "RespondDate", "operator": "gte", "value": "$hoursAgo:48" },
->   { "type": "condition", "column": "RespondDate", "operator": "lte", "value": "$hoursIn:0" }
-> ]}
-> ```
-
-### 5.2.4. Current-User Tokens
-
-| Token | Resolves to | Coercion Pipeline |
-| :--- | :--- | :--- |
-| `$userCode` | `user.code ?? user.id` (GAS maps `UserID` → `id`) | trimmed lowercase (`slug`) |
-| `$userEmail` | `user.email` | trimmed lowercase (`slug`) |
-| `$userName` | `user.name` | trimmed lowercase (`slug`) |
-| `$userDesignation` | `user.designation.name` | trimmed lowercase (`slug`) |
-| `$userRole` | `user.role` (primary role) | trimmed lowercase (`slug`) |
-| `$userRoles` | **Array** of all role names (`user.roles`) | trimmed lowercase (`slug`) per element |
-| `$userRegion` | `user.accessRegion.code` | trimmed lowercase (`slug`) |
-| `$userRegions` | **Array** with user region code (`[user.accessRegion.code]`) | trimmed lowercase (`slug`) per element |
-
-All are compared case-insensitively and trimmed via `slug`.
-
-#### Array-Valued Tokens
-Array-valued tokens (`$userRoles` and `$userRegions`) declare `array: true`. When evaluated in `prepareCondition`, they coerce each element individually so they can be matched with `in` or `not_in`:
-
+Use this small test config:
 ```json
-{ "type": "condition", "column": "Role", "operator": "in", "value": "$userRoles" }
+[
+  {
+    "name": "All",
+    "label": "All records"
+  }
+]
 ```
 
-> [!NOTE]
-> **Current Limitation of `$userRegions`**:
-> While `$userRoles` extracts all assigned role names from the user's roles list, `$userRegions` currently wraps only the user's single primary region code: `[user.accessRegion.code]`. It resolves to an array of one item (the same region as `$userRegion`).
+Use a unique, stable name for each view. Use letters and digits when possible.
+The name also picks the resource source rule and override filenames.
+A bare string can name a view; entries with no name are skipped. Duplicate names are not rejected.
+The source rule or Data override can narrow rows before Filter runs.
 
-A literal list may also mix tokens and plain values — `["Viewer", "$userRoles"]` flattens each entry, allowing compound permission checks.
+The backend reads these cell shapes:
 
-### 5.2.5. Worked Example — "My Open Visits This Week"
+| Cell | Backend mode | Views sent to the app | Frontend result |
+|---|---|---|---|
+| Blank | `auto` | `[]` | No configured lists |
+| `[]` | `off` | `[]` | No configured lists |
+| Non-empty JSON array | `custom` | That array | Each named entry runs through the pipeline |
+| Invalid JSON or non-array | `auto` | `[]` | No configured lists |
+
+Do not put the words `auto` or `off` in the cell to choose a mode.
+The frontend reads `ui.listViews`; it does not branch on `listViewsMode`.
+Feature overrides apply to configured names through a separate loader.
+
+Source: [parseListViewsCell](../GAS/resourceRegistry.gs#L744),
+[useListView](../FRONTENT/src/composables/resources/listViews/useListView.js#L38).
+
+## 5.2 Set up a view with Manage Lists
+
+Open **AQL > Resources > Manage Lists**.
+
+Before preparing a seed, first confirm the rows it will display. Use `useData` for this
+resource's own records, decorated with calculated facts, or use `use<Family>Data` when the rows need another
+resource. Then apply the list's rules in `Data/useList.js`. Check the final row fields and
+values. Use those fields when setting the seed's item display. The current engine connects a
+family data file through the resource's `useList.js` rules.
+
+1. Pick a resource.
+2. Choose an existing view, or click **New view**.
+3. Set the view keys in the tabs: **Basic**, **Filter**, **Group**, **Order**,
+   **Search & page**, **Target & actions**, and **Item view**. Each field has an `i` hint.
+4. In **Basic**, set the code name, tab label, icon, color, count, permission,
+   and default flag. Leave a field empty to use its frontend default.
+5. Use the **Custom developer keys** box for other root keys. It must contain one
+   JSON object. Do not repeat a key that has its own tab field.
+6. Click **Done** to add or update the view in this dialog. This does not write the sheet yet.
+7. Reorder the views in **List order** by dragging a row, changing its position,
+   or using the arrow buttons. The order is the order saved in the cell.
+8. Check **ListViews cell preview**, then click **Save to sheet**.
+
+The **Filter** tab edits this view's ListViews `filter` key. For shared resource
+row rules, leave it empty and use that resource's `Data/useList.js`.
+The **Group** tab supports a list of grouping rules. The **Order** tab supports
+sort rules and conditions. The **Search & page** tab can save search fields as
+compact comma text or a JSON array. **Item view** holds AppList display settings.
+In **Target & actions**, an object target can add URL query names and row field paths.
+Blank resource means the current resource. A named resource opens another resource.
+The automatic row target turns off row clicks when action buttons show. It opens View
+when no buttons show. A chosen View target saves `target: true` and stays explicit.
+The **Inline actions** panel has an on/off control. A saved `actions: false` shows
+as off. Off saves root `actions: false` and keeps it in the JSON preview. Turning
+it on clears `false`; the existing action fields are then available.
+
+Defaults such as the primary color, automatic count, pagination, 25 rows per page,
+the 35-row threshold, and 3 action buttons are left out of the saved JSON. A blank
+`limit` means no row cap in the current frontend contract. The preview shows these
+omitted defaults as omitted, so the cell only stores values that differ from them.
+
+The preview and Save to sheet also leave out redundant layouts. Main `caption,label`
+is omitted. A meta layout is omitted when the supplied templates show the same cells,
+in the same order, as the ListViews default. This includes a lone chip, badge, label,
+or caption. A layout that changes the order, repeats a populated cell, or hides a
+supplied value is kept. Explicit hide settings (`[]` or an empty layout string) are
+kept, including when the templates are empty. Save and reopen keep that hide choice.
+
+Keep ListViews sheet data small. If the frontend already makes a final display value,
+including its fallback, the sheet only links the style key to that field. Do not repeat
+that work with a map that sends each value to itself or a second fallback in the sheet.
+See [final style values](UI_LIST_VIEWS_ITEMS.md#final-style-values-from-the-frontend).
+
+Pagination starts checked. Checked leaves out `paginate`; unchecked saves `paginate:false`.
+Rows per page and threshold start blank. Their placeholders show the frontend defaults:
+25 and 35. The Show only and Hide action menus suggest names from the selected resource's
+`AdditionalActions` list. A choice adds that name on its own line.
+
+In **Item view**, a field menu adds `{Field}` at the cursor. Labels and captions can have
+more than one input. Missing labels and captions use the automatic values in the
+[item guide](UI_LIST_VIEWS_ITEMS.md#automatic-labels-and-captions). An empty input that
+was saved stays blank. Each `meta*` key shows one input.
+The Item view also edits row colors and chip outline.
+Each icon or color style has three choices:
+
+- **One value** saves text. A row key with that name takes priority when there is a row.
+- **Use field value** saves `column` and an optional `default`. The field holds the result text.
+- **Map by field** saves `column`, `map`, and an optional `default`. The field picks a map result.
+
+The cell preview shows the same style shape that Save to sheet writes.
+The frontend still accepts arrays for repeated meta slots. Editing a multi-entry value
+in this manager saves only the one template shown. Button size offers `xs`, `sm`, `md`,
+`lg`, and `xl`; a saved custom size stays available while editing. The action limit
+defaults to 3, accepts whole numbers from 0 up, and stays out of JSON when it is 3.
+
+The cell mode selector has three choices:
+
+- **Auto** saves a blank cell when saving the resource.
+- **Custom** saves the view array.
+- **Off** saves `[]`.
+
+Saving a default view clears the default flag on other views. Removing the last
+custom view switches the mode to Off; saving writes `[]`. Choose Auto if you want
+the cell to be blank instead.
+
+Save calls `app_saveResourceListViews`. It writes the cell and clears the
+server resource-config cache. It does not push code or refresh an open app's auth config.
+Sign in again to receive the saved resource config.
+A normal record reload is not an auth-config refresh.
+
+`syncAppResourcesFromCode` protects non-empty `ListViews` cells. It treats blank,
+`[]`, and `{}` cells as blank, though. If the resource has ListViews in its code
+config, a code sync can fill one of those cells from that config. Check the
+resource seed before using an empty cell to keep views off.
+[Code sync](../GAS/syncAppResources.gs#L2466).
+
+### Manager limits
+
+- The fields help build common values. **Custom developer keys** keeps other root
+  JSON keys, but it does not make the frontend read them. Only a frontend feature
+  or a custom view override that reads a key gives it behavior.
+- The Filter tab is still available for a view-level filter. Resource row filters
+  belong in `Data/useList.js`.
+- **Inline actions** saves `actions: false` while off. Turning it on clears that
+  value; the object fields can then set action selection and style.
+- A saved cell is not the same as the app's loaded config. Sign in again after saving.
+
+Source: [manager UI](../GAS/listViewsManager.html#L585),
+[manager save](../GAS/listViewsManager.html#L1860),
+[server save](../GAS/appMenu.gs#L918).
+
+## 5.3 View keys
+
+| Key | Accepted value | If missing |
+|---|---|---|
+| `name` | Non-empty text. A view entry may also be a bare string name. Use distinct names. | An object with no name is skipped. |
+| `label` | Text shown on the tab. | Uses `name`. |
+| `icon` | Icon-name text. The ListViews code does not check it against an icon list. | No tab icon. |
+| `color` | A value in [tab color values](#tab-color-values). Other words fall back to `primary`. | `primary`. |
+| `default` | JSON `true` or `false`. The first allowed view with `true` is the default. | No marked default; after a remembered choice, selection falls back to the first allowed view. |
+| `count` | JSON `true`, JSON `false`, or `"auto"`. | `auto`: show the count only while a search term is present. Other non-boolean values also act as `auto` in current code. |
+| `permission` | One action string; a comma-separated action list; an action array; or a resource-to-action(s) map. Lists use `all` unless marked `any`. | No view-level permission gate. |
+| `filter` | The current engine accepts a condition or condition/group tree. For resource lists, leave this key out and put row rules in `Data/useList.js`. | No filtering. |
+| `group` | Array of rules with `column`, optional `token`, and optional `aggregate`; `null`, `false`, and `[]` also mean no grouping. See [Group](UI_LIST_VIEWS_GROUP_SEARCH_LIMIT.md#group). | No grouping. |
+| `order` | Array of rules; `null`, `false`, and `[]` mean no core sort. See [Order](#55-order). | No core sort. |
+| `search` | Array of field paths or comma-separated text. The text form is smaller: `"Code,Progress,$outlet.Name"`. `true` searches the field named `true`; it is not a switch. See [Search](UI_LIST_VIEWS_GROUP_SEARCH_LIMIT.md#search). | Missing, `null`, `false`, or `""` uses inferred search fields. |
+| `limit` | Whole number `0` or greater. | No cap. `0` returns no core rows. |
+| `paginate` | JSON `true` or `false`. | AppList default: `true`. |
+| `perPage` | Whole number `1` or greater. | AppList default: `25`. |
+| `threshold` | Whole number `0` or greater. | AppList default: `35`. Zero paginates any non-empty list. |
+| `item` | Object. See [item keys](UI_LIST_VIEWS_ITEMS.md#3-item-keys). | Layout is `caption,label`; missing labels and captions use automatic row values. |
+| `actions` | `false`, or an object with `only`, `exclude`, `dense`, `size`, and `max`. See [inline actions](UI_LIST_VIEWS_ITEMS.md#9-inline-actions-and-row-navigation). | Missing or `null`: eligible actions, no exclusions, dense buttons, size `md`, max 3. `false`: no action buttons. |
+| `target` | `true`, `false`, an action-name string, or an object. See [Target](UI_LIST_VIEWS_ITEMS.md#row-click-target). | Missing key: infer from the final action buttons. No buttons opens View; buttons stop the row click. |
+
+Use JSON booleans and numbers, not quoted values. An omitted key keeps the meaning
+shown above. Resource list configs must omit `filter` and put row rules in `Data/useList.js`.
+In particular, an omitted `limit` means no cap; it does not mean 50.
+Setting a shared frontend default of 50 would change that meaning for views that
+need all rows.
+
+ListViews uses the shared [empty state](UI_LIST_VIEWS_ITEMS.md#8-how-rows-reach-applist). Older saved empty text, search text, icon, and icon color keys are ignored and removed on the next save in Manage List Views.
+
+### Nested keys and values
+
+| Parent | Key | Accepted value |
+|---|---|---|
+| `permission` | Resource entry | A non-empty resource name mapped to one action string, a comma-separated list, or an action array. Resource entries all must pass. |
+| `filter` | `type` | `"condition"` or `"group"`. |
+| Condition | `column` | Non-empty field name or safe dot path. |
+| Condition | `operator` or `op` | `eq`, `neq`, `in`, `not_in`, `gt`, `gte`, `lt`, `lte`, `contains`, `empty`, or `notEmpty`. Aliases: `ne`, `nin`, `notin`, `not_empty`, `notempty`. Names ignore case. |
+| Condition | `value` | JSON text, number, boolean, array, or a supported token string. `empty` and `notEmpty` need no value. |
+| Group node | `logic`, `items` | `logic`: uppercase `AND` or `OR`; `items`: array of condition/group nodes. |
+| `group[]` | `column` | Required non-empty field name or safe dot path. |
+| `group[]` | `token` | Optional built-in token or custom token name. Built-in names and limits are in [Group tokens](UI_LIST_VIEWS_TOKENS.md#group-token-values-and-custom-files). |
+| `group[]` | `aggregate` | Optional object from field path to one value or an array: `sum`, `min`, `max`, `avg` (case-sensitive). |
+| `order[]` | `column`, `order`, `type` | Required field path; `asc` or `desc`; `auto`, `text`, `number`, `date`, `unix`, or `epoch`. Direction and type ignore case. |
+| `order[]` | `aggregate` | Optional `min`, `max`, `sum`, or `count` for many values. |
+| `order[]` | `on` | Optional `true`, `false`, `null`, condition, group, or array of conditions/groups. Missing/`true` applies to all rows; false-like values apply to none. |
+| `item` | `layout`, `metaLayout` | CSV string or array. Main slots: `label`, `caption`; meta slots: `chip`, `badge`, `label`, `caption`. Missing main layout uses `caption,label`; missing meta layout uses `label,caption`, with chip/badge slots added when supplied. |
+| `item` | `labels`, `captions`, `metaChip`, `metaBadge`, `metaLabel`, `metaCaption` | CSV string or array of text templates. Use an array when a template contains a comma. |
+| `item` | `chipOutline` | JSON `true` or `false`. |
+| `item` | `icon`, `iconColor`, `color`, `highlight`, `metaColor`, `chipColor`, `badgeColor` | A string, an object with `column` and optional text `default`, or the same object with a `map` of row values to text results. See [style rules](UI_LIST_VIEWS_ITEMS.md#6-icon-color-and-highlight). |
+| `actions` object | `only`, `exclude`, `dense`, `size`, `max` | `only`/`exclude`: arrays of action-key strings or `null`; `dense`: boolean; `size`: non-empty string; `max`: whole number 0 or greater. Missing `max` means 3. Quasar sizes and CSS units are listed in [inline actions](UI_LIST_VIEWS_ITEMS.md#9-inline-actions-and-row-navigation). |
+| `target` object | `resource`, `action`, `code`, `query` | Optional destination, action, code field/path, and query map. Each query value is a row field/path. See [Target](UI_LIST_VIEWS_ITEMS.md#row-click-target). |
+| `target.query` | Plain object from URL query name to row field/path | Keys and values must be non-empty strings. Values are read from the clicked row with `readField`; missing or null row values are omitted. |
+
+These values are the shared frontend contract. The manager may accept less or use
+older shapes; see [manager limits](#manager-limits). The linked guides give the
+full rules for tokens, display, actions, and row navigation.
+
+The shared frontend reads the keys in this table. It keeps other JSON keys on the
+view, but only a custom code override that reads a key can give it behavior.
+The shared frontend does not read `source`, `sort`, `display`, or `processing` as
+view keys. Use the resource's Data modules for source selection, `order` for
+sorting, and `item` for row display. The Custom developer keys panel can store
+other root keys for a code override that reads them.
+
+### Tab color values
+
+The tab uses `resolveCssColor` in the frontend. It accepts:
+
+- Brand names: `primary`, `secondary`, `accent`, `positive`, `negative`, `info`, `warning`, `dark`.
+- Palette families: `red`, `pink`, `purple`, `deep-purple`, `indigo`, `blue`, `light-blue`, `cyan`, `teal`, `green`, `light-green`, `lime`, `yellow`, `amber`, `orange`, `deep-orange`, `brown`, `grey`, `blue-grey`. Each family may have a shade from `-1` to `-14`.
+- Standalone colors: `white`, `black`.
+- CSS strings that start with `#`, `rgb(`, `rgba(`, `hsl(`, `hsla(`, `var(`, or `color-mix(`. The helper passes these strings through; the browser decides whether the CSS value is valid.
+
+Other color words fall back to `primary`. For example, a CSS name such as `tomato`
+is not in the helper's list. Source: [color resolver](../FRONTENT/src/utils/colorHelpers.js#L6).
+
+Use the sheet to set up features. An override is a JavaScript file written by a developer.
+See [override paths and exports](UI_LIST_SWITCHER_COMPONENTS.md#45-override-lookup).
+For row display, read [item keys and usage](UI_LIST_VIEWS_ITEMS.md).
+Keep tab icon/color at the view root; put row icon/color inside item.
+A developer-only `list{Name}Props.js` override can also change pagination and add any
+AppList prop; see [override export shapes](UI_LIST_SWITCHER_COMPONENTS.md#46-override-export-shapes).
+Use the **Item view** tab for `item` settings. The Custom developer keys panel
+only accepts root keys that do not have a tab field.
+
+### View permission
+
+Put `permission` at the view root. The check uses the existing `resourceConfig.allowed` helper.
+Missing or null permission leaves the view unrestricted by this setting.
+A single action string checks the current resource. An action array or comma-separated string checks
+several actions on the current resource. Lists use `all` by default. Add one reserved `any` or `all`
+entry to choose the mode; the marker is removed before actions are checked. The words are matched
+without case differences and with surrounding spaces trimmed.
+
+An object maps resource names to action strings, CSV lists, or arrays. Each resource's list has its
+own mode, and every resource entry must pass. The frontend turns CSV lists into arrays before checking.
+The manager saves action arrays as compact CSV text inside the ListViews JSON cell.
 
 ```json
+[
+  { "name": "Everyone" },
+  { "name": "Readers", "permission": "read" },
+  { "name": "Editors", "permission": "read,update" },
+  { "name": "One of the actions", "permission": "any,send,accept" },
+  { "name": "OutletEditors", "permission": { "Outlets": "read,update" } }
+]
+```
+
+Actions and resource names must be non-empty strings. An empty list or map keeps its current
+behavior and passes. A list with only a marker, both markers, or repeated markers is malformed and
+hides the view. A malformed permission also hides the view. Denied views do not enter the list pipeline or get tabs.
+When access changes, a denied active view falls back to an allowed default or first view.
+If none remain, there is no active view. A remembered view can return if access returns.
+The ListViews cell keeps all raw settings, including denied views.
+These checks do not filter records or replace record or server access checks.
+
+## 5.4 Filter
+
+The current engine reads a `filter` key and runs it after the source rule. For resource
+lists, leave the key out. Put shared row rules and fixed-purpose rules in the resource's
+`Data/useList.js`, so every UI uses the same meaning. For example, Completed always means
+Progress = COMPLETED. The manager's Filter tab can add a view filter; leave it
+empty for shared resource row rules.
+
+The condition below shows syntax the current engine accepts. It is not an example to save
+in `APP.Resources.ListViews` for a resource list.
+```json
 {
-  "name": "My Week",
-  "color": "primary",
-  "filter": {
-    "type": "group",
-    "logic": "AND",
-    "items": [
-      { "type": "condition", "column": "AssignedTo", "operator": "eq",  "value": "$userCode" },
-      { "type": "condition", "column": "Progress",   "operator": "in",  "value": ["PLANNED", "IN_PROGRESS"] },
-      { "type": "condition", "column": "VisitDate",  "operator": "gte", "value": "$daysIn:0" },
-      { "type": "condition", "column": "VisitDate",  "operator": "lte", "value": "$daysIn:7" }
-    ]
-  }
+  "type": "condition",
+  "column": "Progress",
+  "operator": "eq",
+  "value": "PLANNED"
 }
 ```
 
-### 5.2.6. Adding a Token
+A resource list entry has no filter key:
+```json
+[
+  {
+    "name": "Planned",
+    "label": "Planned visits",
+    "color": "primary",
+    "default": true,
+    "order": [{ "column": "Date", "order": "asc", "type": "date" }]
+  }
+]
+```
 
-1. Add the entry to `TOKENS` in [`tokenEvaluator.js`](file:///f:/AQL/FRONTENT/src/utils/tokenEvaluator.js), with `value(params, ctx)` as a plain extractor plus its `coerce` / `coerceToken` pipelines. Add a new primitive to `COERCES` only if no composition of the existing ones fits.
-2. Mirror it in the `TOKENS` array in [`GAS/listViewsManager.html`](file:///f:/AQL/GAS/listViewsManager.html) so admins can pick it from the dropdown. Parameterised tokens set `param` to the seeded default.
-3. Document it in the tables above.
+A group has `type: "group"`, `logic: "AND"` or `"OR"`, and `items: []`.
+Each item can be another group or a condition.
+An empty group matches all rows.
 
-Pipeline names are validated at module load — an unknown `COERCES` key throws immediately
-rather than silently producing an empty tab.
+Filter reads direct keys and dot paths, including prepared fields and $outlet.Name.
+Column names are case-sensitive. Plain string values compare without case.
+An exact key containing dots wins before path traversal.
+For child arrays, the evaluator does not add an any-child rule; use a scalar prepared fact
+or a Filter override for that need.
 
-### 5.2.7. Runtime Notes
+The feature uses `strictColumn: false`.
+A missing field is read as undefined; `empty` can match it.
+Without a filter, Filter passes its input array through unchanged.
+That input may already be reduced to Group's kept rows.
+Use valid node types: an unknown node or root array can silently pass rows through.
+Saving the sheet does not validate the full filter tree.
 
-- **Filters are compiled once per pass.** `prepareFilter(filter, ctx)` walks the tree once and resolves every token (`spec.value` + the `coerceToken` pipeline) plus the normalised forms of literal values into a prepared node; `evaluatePreparedFilter(prepared, row)` then runs per row and does no token parsing at all. `viewCounts` / `viewFilteredItems` use this pair, so token cost is O(conditions) rather than O(conditions × rows). `evaluateFilter(filter, row, ctx)` remains as the single-row entry point and simply prepares-then-evaluates.
-- **Date tokens resolve when the view recomputes**, not on a timer. `viewCounts` / `viewFilteredItems` re-run when the records or the view set change, which covers normal navigation and refresh. A session left open across local midnight keeps the previous day's buckets until the next reload or data refresh. All rows in one pass therefore see the *same* token values — a pass can no longer straddle a midnight rollover.
-- **Filtering is client-side.** Tokens evaluate against the rows already loaded, so counts reflect the fetched set, not the whole sheet.
-- **Non-token conditions are unchanged** — literals still use the original numeric-then-string coercion.
+See [all operators and tokens](UI_LIST_VIEWS_TOKENS.md).
+For a prepared number like `daysUntilVisit`, compare with the number `7`.
+`$daysIn:7` expects a date column and converts that date to a day offset.
 
----
+## 5.5 Order
 
-### 5.3. Sheet Modes vs. UI Component Overrides
+Order config is an array of rules:
+```json
+[
+  {
+    "name": "All",
+    "order": [
+      { "column": "UpdatedAt", "order": "asc", "type": "epoch" },
+      { "column": "RespondDate", "order": "desc", "type": "date" },
+      { "column": "Code", "order": "asc", "type": "text" }
+    ]
+  }
+]
+```
 
-Understanding how sheet configuration interacts with frontend customization requires distinguishing between **domain view calculation** (`useListViews.js`) and **UI section rendering** (`useSectionResolver.js` / `ListSwitcher.vue`):
+Multi-rule sorting follows the pair-comparison rules below.
+A single-field sort uses its type and direction.
+Sorting makes a new array and keeps the same row objects.
+It does not remove rows.
 
-#### 5.3.1. How Sheet Modes Affect Domain Views (`effectiveViews`)
-The sheet's `ListViews` cell governs the default domain views computed by `useListViews.js`:
-1. **`"off"` Mode (`[]` in cell)**:
-   - `effectiveViews` computes to empty `[]`.
-   - By default, no views or tabs exist for this resource.
-2. **`"custom"` Mode (`[...]` non-empty array in cell)**:
-   - `effectiveViews` returns the sheet-authored custom views.
-3. **`"auto"` Mode (blank cell or non-array fallback)**:
-   - `effectiveViews` dynamically generates auto-views based on scope and column metadata (e.g. Active/Inactive for master resources with `Status`, or Progress/Type for operation resources).
+| Rule key | Allowed value | Default |
+|---|---|---|
+| `column` | Field name or dot path | Required |
+| `order` | `asc` or `desc` | `asc` |
+| `type` | `auto`, `text`, `number`, `date`, `unix`, `epoch` | `auto` |
+| `aggregate` | `min`, `max`, `sum`, `count` for many values | None |
+| `on` | Condition, group, array of conditions/groups, or boolean/null | Missing or `true`: all rows apply; `false` or `null`: no rows apply |
 
-#### 5.3.2. Rendering & Resolution Path (`ListSwitcher`)
-The standard UI component that renders list views is [`ListSwitcher.vue`](file:///f:/AQL/FRONTENT/src/components/sections/ListSwitcher.vue) (mounted via `<Section section="ListSwitcher" />`).
+No `order`, `null`, `false`, or an empty array means no core sort.
+An Order override can still run.
 
-Section resolution is handled by [`useSectionResolver.js`](file:///f:/AQL/FRONTENT/src/composables/resources/useSectionResolver.js). The section resolver resolves UI component overrides (`_ui/.../ListSwitcher.vue`) and JS modifiers (`_ui/.../ListSwitcher.js`) based solely on file lookup candidates. **The sheet's `ListViews` cell mode does not block or disable `useSectionResolver` from resolving custom Vue overrides or JS modifiers.**
+### Multi-rule behavior
 
-#### 5.3.3. Items Precedence in `ListSwitcher.vue`
-When `ListSwitcher.vue` renders, it determines its items through [`finalAttrs.value.items`](file:///f:/AQL/FRONTENT/src/components/sections/ListSwitcher.vue#L101-L104):
-1. **Explicit `items` Prop / JS Modifier**:
-   - If a JS modifier (`ListSwitcher.js`) or parent template provides an explicit `items` property (array or function), that explicit items array is rendered directly.
-   - An explicit `items` override completely replaces the views displayed in `ListSwitcher`, bypassing whatever `effectiveViews` computed.
-2. **Fallback to `resourceRecord.effectiveViews`**:
-   - If `items` is not provided (or is `null`/`undefined`), `ListSwitcher.vue` falls back to `resourceRecord.effectiveViews.value`.
-   - In this case, the switcher displays the views produced by the sheet mode (`auto`, `custom`, or `off`). If `effectiveViews` is empty (such as in `"off"` mode), `ListSwitcher.vue` renders nothing (`v-if="finalAttrs.items && finalAttrs.items.length"`).
+Multi-rule sorting uses these pair-comparison rules.
 
----
+1. Each row builds a candidate list. Each rule whose on condition matches adds one value.
+   A rule that does not match adds no value.
+2. Compare every left candidate with every right candidate: A x B pairs, in candidate order.
+   The first non-zero difference decides the order.
+3. Use the left candidate's rule direction: asc or desc.
+4. Blank/null values sort last in both directions.
+5. A row with no candidates sorts after a row with values.
+6. A full tie keeps the input order.
 
-⬑ Back to **[AQL Frontend List Switcher Architecture](UI_LIST_SWITCHER.md)**.
+
+### How types are read
+
+No sheet schema is consulted by the sorter.
+With `auto`, it looks at non-blank values for the rule's matching rows:
+
+1. Any Date object or a date-shaped string makes the rule a date sort.
+2. Otherwise, if all values are numeric, it uses numbers.
+3. Otherwise, it uses text.
+
+Date-shaped strings include `2026-11-10` and `10/11/2026`, with optional time.
+For other date shapes, set `type: "date"`.
+Mixed, dirty values should use an explicit type.
+
+| Type | Meaning |
+|---|---|
+| `text` | Case-insensitive natural text order; e.g. Item 2 comes before Item 10 |
+| `number` | Numeric values and numeric strings; booleans become 0/1 |
+| `date` | Shared date parser; numeric magnitudes from 1e9 up to but below 1e11 are treated as seconds |
+| `unix` | Numeric values are seconds since the epoch; multiply by 1000 |
+| `epoch` | Numeric values are milliseconds since the epoch |
+| `auto` | The three checks above |
+
+An all-numeric timestamp field stays a numeric sort in `auto`.
+It does not guess seconds versus milliseconds there.
+One consistent unit sorts correctly as numbers.
+Mixed units need clear data or an explicit type.
+Use `epoch` for known milliseconds, including dates whose values could fit the seconds heuristic.
+
+Null, undefined, whitespace-only strings, and non-finite numbers go last in both directions.
+Values that cannot be converted under the chosen numeric/date type also go last.
+Object-valued fields need a scalar path; they cannot be sorted as objects.
+
+### Parent and child fields
+
+The path is relative to one row:
+```json
+{
+  "order": [
+    { "column": "$outlet.Name", "order": "asc", "type": "text" },
+    { "column": "$VisitLines.Amount", "order": "desc", "type": "number", "aggregate": "sum" }
+  ]
+}
+```
+
+`$VisitLines` here is an example child getter. Use the real key from `_Children`.
+`_Parents` lists parent/link keys.
+Use `$VisitLines.0.Amount` for one child, or `$VisitLines.length` for its count.
+An exact row key containing dots wins before path traversal.
+
+A path through all children gives many values. Choose:
+
+- `min`: the smallest value.
+- `max`: the largest value.
+- `sum`: the total; use numeric values and `type: "number"`.
+- `count`: the number of array entries, including blank entries.
+
+Empty arrays give 0 for sum/count and a blank for min/max.
+Missing parents sort as blank until related data is available.
+A relation read can trigger the existing record store to queue an authorized resource on first read.
+The list stages do not call the network directly; reactive results update when records arrive.
+
+### Conditional rules with on
+
+```json
+{
+  "order": [
+    {
+      "column": "UpdatedAt",
+      "order": "desc",
+      "type": "epoch",
+      "on": {
+        "type": "group",
+        "logic": "AND",
+        "items": [
+          { "type": "condition", "column": "Progress", "operator": "eq", "value": "PLANNED" },
+          { "type": "condition", "column": "CreatedBy", "operator": "eq", "value": "$userCode" }
+        ]
+      }
+    },
+    { "column": "$outlet.Name", "order": "asc", "type": "text" }
+  ]
+}
+```
+
+on is evaluated for each row. A rule that does not match adds no candidate value.
+It never removes the row itself.
+A row with no active rule values sorts after rows with values.
+
+No `on`, or `on: true`, applies to all rows.
+An explicit false, null, zero, empty string, or undefined skips the rule for all rows.
+A JSON array in `on` means AND; an empty array matches all.
+Nested groups and the shared tokens/operators work here.
+Order accepts type-less condition/group objects in `on`; each condition uses `operator`.
+Prefer the full filter shape in saved config.
+Order's `on` supports scalar dot paths; it does not add "any child matches" logic.
+Tokens belong in condition values, not in the column or direction.
+
+## More row features
+
+Read [Group, Search, and Limit](UI_LIST_VIEWS_GROUP_SEARCH_LIMIT.md) for exact config,
+default search fields, override gates, and the final count.
+Those row features run Group -> Map -> Filter -> Order -> Search -> Limit.
+Props and Target run next. Content -> Meta -> Style add the [item display props](UI_LIST_VIEWS_ITEMS.md),
+and Actions adds the inline action props.
+
+## 5.6 Check your list
+
+1. Start with an identity source and one view.
+2. Put the full array in the ListViews cell.
+3. Check the view count and any error shown on the list.
+4. Check the rows shown for the active view.
+5. Check the shared baseline and named rule in `Data/useList.js`.
+6. Check Order with the pair-comparison rules above.
+7. Check Group's kept rows and each pass's facts, search term, Limit, overrides, and active-view item display.
+8. Save the lasting config in Sheets, then reload the app's auth config.
+
+A count of zero with an error is not an empty successful list.
+Counts cover loaded source rows, not every row on the server.
