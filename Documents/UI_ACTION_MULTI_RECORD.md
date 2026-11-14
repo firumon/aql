@@ -20,7 +20,7 @@ const {
 |---|---|---|
 | `AdditionalActionsButtons` | `actionsFor` + `runAction` | renders its own buttons from the raw configs |
 | `ResourceActions` | `entriesFor` | needs resolver names + presentation props to fold into its cluster |
-| A custom list row | either | e.g. `ListToday.vue` uses `actionsFor({ only })` and sorts locally |
+| A custom list row | either | A non-empty `only` list also sets the returned action order |
 
 #### 7.0.1a `kind: 'navigate'` — targets and params
 
@@ -48,9 +48,9 @@ A `navigate` action collects nothing: `runAction` maps its `navigate` block stra
   does not navigate. Config predating the `resource-page` / `record-page` rename must be
   re-saved through the **Manage Actions** dialog.
 
-Ordering is the one thing a consumer may legitimately decide locally — it is presentation,
-not eligibility. `ListToday.vue` sorts its three actions into escalation order while still
-taking the gate from `actionsFor`.
+A non-empty `only` list selects actions and sets their order. Missing, null, or empty `only`
+keeps the resource's AdditionalActions order. `exclude` hides actions without changing the
+order of the others. Permissions and `visibleWhen` still decide which actions are eligible.
 
 The dialog half is `useAdditionalActionsDialog()`, consumed **only** by the single
 `AdditionalActionsDialog` instance in `MainLayout.vue`.
@@ -248,7 +248,7 @@ server-side.
 | Shape | `{ "column": "Progress", "op": "eq", "value": "PLANNED" }` |
 | Ops | `eq`, `neq`, `in`, `not_in`, `gt`, `gte`, `lt`, `lte`, `contains`, `empty`, `notEmpty` |
 | Legacy ops | `ne` → `neq` and `nin` → `not_in` are aliased on load, so every config already in a sheet keeps working. The **Manage Actions** dialog rewrites them canonically on the next save. |
-| `value` | A literal, an array (for `in`/`not_in`), or a **dynamic token** — the same registry list views use (§5.2 of `UI_LIST_SWITCHER.md`). `{ "column": "Date", "op": "lte", "value": "$startOfDay:0" }` hides an action on future-dated records; `$userCode` / `$userRoles` gate one on the signed-in user. |
+| `value` | A literal, an array (for `in`/`not_in`), or a **dynamic token** — the same registry used by [ListViews](UI_LIST_VIEWS_TOKENS.md). `{ "column": "Date", "op": "lte", "value": "$startOfDay:0" }` hides an action on future-dated records; `$userCode` / `$userRoles` gate one on the signed-in user. |
 | Comparison | Case-insensitive for literals. A date column that cannot be parsed never matches. A column absent from the record reads as blank. |
 | Malformed row | Dropped, exactly as a malformed target `when` is — a dropped condition does not constrain. |
 

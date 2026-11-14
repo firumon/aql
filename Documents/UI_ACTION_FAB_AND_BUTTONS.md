@@ -152,8 +152,13 @@ container and the menu trigger, not items. Tier 1 wins over tier 2, and `.vue` w
 | Shape | Example | Means |
 |-------|---------|-------|
 | String | `'create'` | that action on the **current** resource |
-| Array | `['create', 'update']` | all of those actions on the current resource |
-| Map | `{ OutletConsumptionInvoices: 'create' }` | that action on **another** resource; values may also be arrays, and every entry must pass (AND) |
+| Array | `['create', 'update']` | all listed actions on the current resource; add `'any'` as an item to allow one listed action |
+| Map | `{ OutletConsumptionInvoices: 'create' }` | that action on **another** resource; every resource entry must pass, and each array value uses the same all-by-default or marked-any rule |
+
+`'all'` and `'any'` are reserved markers inside action arrays. If a list has no marker, all
+actions must pass. A list may contain only one marker, and it must also contain an action. The
+`missing()` result follows the same rule: a passing any-list has no missing actions; a failing
+any-list reports its denied actions.
 
 Use the map form whenever the action writes a resource other than the page's own —
 gating on the current resource would show a button the user cannot complete.

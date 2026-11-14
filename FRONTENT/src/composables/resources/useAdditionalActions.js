@@ -24,22 +24,35 @@ export function useAdditionalActions (resourceName = null) {
   const { additionalActions, permissions, allowed, resourceName: activeName } = useResourceConfig(explicit)
   const nav = useResourceNav()
 
-  function actionsFor (record, { only, exclude } = {}) {
-    const allow = Array.isArray(only) && only.length ? only.map(String) : null
+  function actionsFor (record, { only, exclude, max } = {}) {
+    if (max != null && (!Number.isInteger(max) || max < 0)) {
+      throw new TypeError('max must be a whole number of 0 or more.')
+    }
+    const orderedNames = Array.isArray(only) && only.length ? only.map(String) : null
     const deny = Array.isArray(exclude) && exclude.length ? exclude.map(String) : null
     const wantResourceLevel = !record
 
-    return (additionalActions.value || []).filter((action) => {
+    const eligible = (additionalActions.value || []).filter((action) => {
       const name = String(action?.action ?? '')
       if (!name) return false
       if ((action.resourceLevel === true) !== wantResourceLevel) return false
-      if (allow && !allow.includes(name)) return false
       if (deny && deny.includes(name)) return false
       if (!allowed(name, activeName.value, record)) return false
       // A resource-level action writes a new row, so it also needs plain write access.
       if (wantResourceLevel && permissions.value?.canWrite === false) return false
       return isActionVisible(action, record)
     })
+
+    if (!orderedNames) return max == null ? eligible : eligible.slice(0, max)
+
+    const actionsByName = new Map()
+    for (const action of eligible) {
+      const name = String(action?.action ?? '')
+      if (!actionsByName.has(name)) actionsByName.set(name, action)
+    }
+
+    const ordered = [...new Set(orderedNames)].map((name) => actionsByName.get(name)).filter(Boolean)
+    return max == null ? ordered : ordered.slice(0, max)
   }
 
   function entriesFor (record, options = {}) {

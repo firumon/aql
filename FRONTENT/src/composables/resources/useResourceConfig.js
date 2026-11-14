@@ -62,10 +62,29 @@ function checkSingleAction(resConfig, action) {
   return false
 }
 
-function checkActionsList(resConfig, actions) {
+function checkActionsList(resConfig, actions, recordOrCode, auth, gaps) {
   if (!Array.isArray(actions)) return false
   if (!actions.length) return true
-  return actions.every((act) => checkSingleAction(resConfig, act))
+
+  const modes = actions.filter((act) =>
+    typeof act === 'string' && ['all', 'any'].includes(act.trim().toLowerCase()))
+  const checks = actions.filter((act) =>
+    typeof act !== 'string' || !['all', 'any'].includes(act.trim().toLowerCase()))
+  if (modes.length > 1 || (modes.length && !checks.length)) {
+    gaps?.push({ resource: resConfig?.name || '(unknown)', action: '*' })
+    return false
+  }
+
+  const denied = []
+  let passed = 0
+  for (const action of checks) {
+    if (checkActionAllowedOnResource(resConfig, action, recordOrCode, auth)) passed++
+    else denied.push({ resource: resConfig?.name || '(unknown)', action: String(action) })
+  }
+
+  const allowed = modes[0]?.trim().toLowerCase() === 'any' ? passed > 0 : denied.length === 0
+  if (!allowed) gaps?.push(...denied)
+  return allowed
 }
 
 function getDefaultAccessPolicyForScope(scope) {
@@ -311,7 +330,7 @@ export function useResourceConfig(resourceNameOverride) {
         const resConfig = findResourceConfig(resName)
         if (!resConfig) return false
         if (Array.isArray(actQuery)) {
-          return actQuery.every((act) => checkActionAllowedOnResource(resConfig, act, recordOrCode, auth))
+          return checkActionsList(resConfig, actQuery, recordOrCode, auth)
         }
         return checkActionAllowedOnResource(resConfig, actQuery, recordOrCode, auth)
       })
@@ -322,7 +341,7 @@ export function useResourceConfig(resourceNameOverride) {
 
     // 2. Array of actions on a single resource
     if (Array.isArray(query)) {
-      return query.every((act) => checkActionAllowedOnResource(resConfig, act, recordOrCode, auth))
+      return checkActionsList(resConfig, query, recordOrCode, auth)
     }
 
     // 3. Single action on a single resource
@@ -340,11 +359,10 @@ export function useResourceConfig(resourceNameOverride) {
           gaps.push({ resource: resName, action: '*' })
           continue
         }
-        const actions = Array.isArray(actQuery) ? actQuery : [actQuery]
-        for (const act of actions) {
-          if (!checkActionAllowedOnResource(resConfig, act, recordOrCode, auth)) {
-            gaps.push({ resource: resName, action: String(act) })
-          }
+        if (Array.isArray(actQuery)) {
+          checkActionsList(resConfig, actQuery, recordOrCode, auth, gaps)
+        } else if (!checkActionAllowedOnResource(resConfig, actQuery, recordOrCode, auth)) {
+          gaps.push({ resource: resName, action: String(actQuery) })
         }
       }
       return gaps
@@ -354,10 +372,15 @@ export function useResourceConfig(resourceNameOverride) {
     const resConfig = targetResourceName ? findResourceConfig(targetResourceName) : activeConfig.value
     if (!resConfig) return [{ resource: name, action: '*' }]
 
-    const actions = Array.isArray(query) ? query : [query]
-    return actions
-      .filter((act) => !checkActionAllowedOnResource(resConfig, act, recordOrCode, auth))
-      .map((act) => ({ resource: resConfig.name || name, action: String(act) }))
+    if (Array.isArray(query)) {
+      const gaps = []
+      checkActionsList(resConfig, query, recordOrCode, auth, gaps)
+      return gaps
+    }
+
+    return checkActionAllowedOnResource(resConfig, query, recordOrCode, auth)
+      ? []
+      : [{ resource: resConfig.name || name, action: String(query) }]
   }
 
   const requiredHeaders = computed(() => {

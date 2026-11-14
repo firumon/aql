@@ -108,6 +108,7 @@ const props = defineProps({
   // same config rather than maintaining separate lists.
   only:    { type: Array, default: null },
   exclude: { type: Array, default: null },
+  max:     { type: Number, default: null, validator: (value) => value == null || (Number.isInteger(value) && value >= 0) },
 
   dense: { type: Boolean, default: true },
   size:  { type: String, default: 'md' }
@@ -118,7 +119,11 @@ const props = defineProps({
 // resources mid-life.
 const { actionsFor, runAction } = useAdditionalActions(props.resource)
 
-const actions = computed(() => actionsFor(props.record, { only: props.only, exclude: props.exclude }))
+const actions = computed(() => actionsFor(props.record, {
+  only: props.only,
+  exclude: props.exclude,
+  max: props.max
+}))
 
 // Dispatch belongs to the composable — navigate vs mutate is its decision, not
 // this component's.
