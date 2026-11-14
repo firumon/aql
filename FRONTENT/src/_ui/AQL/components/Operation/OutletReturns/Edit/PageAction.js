@@ -17,7 +17,9 @@ export default (props, { pageState, resourceRecord }) => ({
   },
 
   submit: () => {
-    const problem = validateReturnDraft(pageState.getRecord(null, NODE))
+    const problem = validateReturnDraft(pageState.getRecord(null, NODE), {
+      excludeCode: text(resourceRecord?.record?.value?.Code)
+    })
     if (problem) return { valid: false, message: problem }
   },
 

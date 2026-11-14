@@ -39,6 +39,7 @@ graph TD
 | `OutletMovements` | Ledger of stock additions/deductions at the outlet | `ReferenceType` (`RestockDelivery`, `Consumption`, `Adjustment`) |
 | `OutletConsumptions` | Outlet sales consumption records | `Status` (`Draft`, `Invoiced`, `Cancelled`) |
 | `OutletConsumptionInvoices` | Official billing VAT invoices generated from consumptions | `Status` (`Draft`, `Issued`, `Paid`, `Cancelled`) |
+| `OutletReturns` | Returned items with invoice credit or warehouse intake tracking | `Progress` (`SUBMITTED`, `AWAITING_INVOICE_ADJUSTMENT`, `AWAITING_WAREHOUSE_RECEIPT`, `COMPLETED`, `CANCELLED`) |
 | `OutletPayments` | Payment receipts and invoice settlement records | `Status` (`Draft`, `Confirmed`, `Cancelled`) |
 
 ---
@@ -90,7 +91,13 @@ Due In 7 Days shows open invoices due from today through seven days from today, 
 2. **Invoice Generation**: Consumed items generate an `OutletConsumptionInvoices` record calculating wholesale price, discounts, and applicable UAE VAT (5%). In the wizard (ITEMS TO BILL step), lines are seeded via `seedInvoiceLines` grouping consumption items per SKU, preserving any manual additions (`_manualQty`) when ticking/unticking consumptions.
 3. **Invoice Issuance**: Invoice PDF is generated via the Reports system and dispatched to the outlet's accounting department.
 
-### 3.6 Payment Collections & Settlement (`OutletPayments`)
+### 3.6 Returns (`OutletReturns`)
+
+1. A return linked to a source invoice must use an item listed on that invoice.
+2. The available return quantity is the invoiced quantity minus active, non-cancelled returns for the same invoice and item.
+3. A new or edited return cannot exceed the available quantity. Editing a return does not count that row twice. A cancelled return does not use any quantity.
+
+### 3.7 Payment Collections & Settlement (`OutletPayments`)
 1. **Collection**: Representative collects payment (cheque, bank transfer, or cash) on due date.
 2. **Receipting**: An `OutletPayments` record is created linking to the unpaid `OutletConsumptionInvoices`.
 3. **Settlement**: The invoice balance is settled (`Status = Paid`), restoring the outlet's credit limit.

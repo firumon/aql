@@ -74,6 +74,7 @@ const shelfDirection = (qtyChange) => (toNumber(qtyChange) < 0 ? OFF_THE_SHELF :
 
 import { useAuth } from 'src/composables/core/useAuth'
 import { useRecord } from 'src/composables/resources/useRecord'
+import { useReturnResource } from './useReturnResource'
 import { useWarehouseResource } from 'src/_resource/Master/Warehouses/composables/useWarehouseResource'
 import { effectivePriceListCode, priceFromList, resolveReturnUnitPrice } from './useReturnPricing'
 import { resourceRow } from 'src/composables/resources/useResourceConfig'
@@ -125,7 +126,7 @@ const draftOf = (pageState) => asRow(pageState.getRecord(null, RESOURCE_NAME))
 const setDraft = (pageState, key, value) => pageState.setRecord(key, value, RESOURCE_NAME)
 
 // The one line a bill charges for a SKU, plus the list it was billed on.
-function invoiceLineFor (invoiceCode, sku) {
+function invoiceLineFor (invoiceCode, sku, excludeReturnCode = '') {
   const code = text(invoiceCode)
   if (!code) return null
 
@@ -143,7 +144,17 @@ function invoiceLineFor (invoiceCode, sku) {
   }
 
   if (price === null) return null
-  return { qty, price, priceListCode: text(header?.PriceListCode) }
+  const { returnsOfInvoice } = useReturnResource()
+  const returnedQty = returnsOfInvoice(code, { source: true })
+    .filter((row) => text(row.SKU) === text(sku) && text(row.Code) !== text(excludeReturnCode))
+    .reduce((sum, row) => sum + Math.abs(toNumber(row.Qty)), 0)
+  return {
+    qty,
+    returnedQty,
+    remainingQty: Math.max(0, qty - returnedQty),
+    price,
+    priceListCode: text(header?.PriceListCode)
+  }
 }
 
 // Price from the chosen list, filling only what nobody has claimed. A bill-linked draft is
@@ -175,7 +186,7 @@ function applyReturnSku (sku, pageState) {
 }
 
 // Picking or clearing a source invoice reshapes the draft. Runs as the node's `derive`.
-export function applyReturnSourceInvoice (invoiceCode, pageState) {
+export function applyReturnSourceInvoice (invoiceCode, pageState, excludeReturnCode = '') {
   if (!pageState) return
   const code = text(invoiceCode)
 
@@ -184,11 +195,11 @@ export function applyReturnSourceInvoice (invoiceCode, pageState) {
     return
   }
 
-  const line = invoiceLineFor(code, draftOf(pageState).SKU)
+  const line = invoiceLineFor(code, draftOf(pageState).SKU, excludeReturnCode)
   if (!line) return
 
   pageState.setRecord(null, {
-    Qty: line.qty,
+    Qty: line.remainingQty,
     Price: line.price,
     InvoiceAdjustmentRequired: flag(true),
     InvoiceAdjustmentDone: flag(false)
@@ -304,7 +315,8 @@ export function returnDraftDerivations ({ movement = true, stored = null } = {})
   return [
     { key: 'returnAdd:outlet', on: on({ record: 'OutletCode' }), immediate: false, handler: applyReturnOutlet },
     { key: 'returnAdd:sku', on: on({ record: 'SKU' }), immediate: false, handler: applyReturnSku },
-    { key: 'returnAdd:sourceInvoice', on: on({ record: 'SourceInvoiceCode' }), immediate: false, handler: applyReturnSourceInvoice },
+    { key: 'returnAdd:sourceInvoice', on: on({ record: 'SourceInvoiceCode' }), immediate: false,
+      handler: (value, api) => applyReturnSourceInvoice(value, api, text(asRow(stored).Code)) },
     { key: 'returnAdd:priceList', on: on({ control: PRICE_LIST_CONTROL }), immediate: false, handler: (value, api) => repriceDraft(api) },
     { key: 'returnAdd:invoiceTrack', on: on({ record: 'InvoiceAdjustmentRequired' }), immediate: false, handler: applyReturnInvoiceTrack },
     { key: 'returnAdd:warehouseTrack', on: on({ record: 'WarehouseActionRequired' }), immediate: false, handler: applyReturnWarehouseTrack },
@@ -316,12 +328,22 @@ export function returnDraftDerivations ({ movement = true, stored = null } = {})
 
 // Why a draft cannot be submitted, or '' when it can. The ONE rule set: the create builder
 // asks it too, so the headless bulk path and the page can never disagree.
-export function validateReturnDraft (record = {}, { requireTrack = true } = {}) {
+export function validateReturnDraft (record = {}, { requireTrack = true, excludeCode = '' } = {}) {
   const entry = asRow(record)
 
   if (!text(entry.OutletCode)) return 'Outlet is required.'
   if (!text(entry.SKU)) return 'SKU is required.'
-  if (Math.abs(toNumber(entry.Qty)) <= 0) return 'Returned quantity must be greater than 0.'
+  const quantity = Math.abs(toNumber(entry.Qty))
+  const invoiceCode = text(entry.SourceInvoiceCode)
+  if (invoiceCode) {
+    const line = invoiceLineFor(invoiceCode, entry.SKU, text(excludeCode) || text(entry.Code))
+    if (!line) return 'The selected invoice does not include this item.'
+    if (line.remainingQty <= 0) return 'This invoice line has no quantity left to return.'
+    if (quantity > line.remainingQty) {
+      return `Returned quantity exceeds the remaining invoice quantity (${line.remainingQty}).`
+    }
+  }
+  if (quantity <= 0) return 'Returned quantity must be greater than 0.'
   if (requireTrack && !returnRequiresTrack(entry)) {
     return 'A return must either be credited on an invoice or move stock off the shelf.'
   }

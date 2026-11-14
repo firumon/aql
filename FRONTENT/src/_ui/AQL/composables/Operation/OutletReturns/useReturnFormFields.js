@@ -4,6 +4,7 @@ import { useCurrency } from 'src/composables/useCurrency'
 import { useRouteConfig } from 'src/composables/resources/useRouteConfig'
 import { useReturnFormContext } from 'src/_ui/AQL/composables/Operation/OutletReturns/useReturnFormContext'
 import { buildReturnEditNodes, applyReturnWarehouseTrack } from 'src/_resource/Operation/OutletReturns/composables/useReturnPayload'
+import { useReturnResource } from 'src/_resource/Operation/OutletReturns/composables/useReturnResource'
 import { useSkuResource } from 'src/_resource/Master/SKUs/composables/useSkuResource'
 import { useOutletResource } from 'src/_resource/Master/Outlets/composables/useOutletResource'
 import { useWarehouseResource } from 'src/_resource/Master/Warehouses/composables/useWarehouseResource'
@@ -29,6 +30,7 @@ export function useReturnFormFields () {
   const { user } = useAuth()
   const { query } = useRouteConfig()
   const { _C } = useCurrency()
+  const { returnsOfInvoice } = useReturnResource()
 
   // Published ONCE by the resource that owns the rows. Never rebuilt here — this composable
   // is imported by six cards, so a list built here would be built six times (§13.7 rule 5).
@@ -85,6 +87,13 @@ export function useReturnFormFields () {
         map.set(code, { qty, price, amount: Number(row.Total) || qty * price })
       }
     }
+    const excludeCode = text(serverRecord.value?.Code)
+    for (const [code, line] of map) {
+      const returnedQty = returnsOfInvoice(code, { source: true })
+        .filter((row) => text(row.SKU) === sku && text(row.Code) !== excludeCode)
+        .reduce((sum, row) => sum + Math.abs(Number(row.Qty) || 0), 0)
+      line.remainingQty = Math.max(0, line.qty - returnedQty)
+    }
     return map
   })
 
@@ -102,10 +111,10 @@ export function useReturnFormFields () {
           Code: code,
           date: text(row.Date),
           priceListCode: text(row.PriceListCode),
-          qty: line.qty,
+          qty: line.remainingQty,
           price: line.price,
           label: [text(row.Date), text(row.Username)].filter(Boolean).join(' • '),
-          qtyLabel: `Invoiced Quantity: ${line.qty}`,
+          qtyLabel: `Left to return: ${line.remainingQty} of ${line.qty}`,
           totalLabel: `Invoice Total: ${_C(line.amount)}`,
           priceLabel: _C(line.price)
         }

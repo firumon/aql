@@ -1,4 +1,5 @@
 import { useRecord } from 'src/composables/resources/useRecord'
+import { isActiveRow, isCancelled } from './useReturnProgress'
 
 const RESOURCE_NAME = 'OutletReturns'
 
@@ -9,10 +10,12 @@ export { RESOURCE_NAME }
 export function useReturnResource () {
   const record = useRecord()
 
-  const returnsOfInvoice = (invoiceCode) => {
+  const returnsOfInvoice = (invoiceCode, { source = false } = {}) => {
     const key = text(invoiceCode)
     if (!key) return []
-    return record.recordsBy(RESOURCE_NAME, 'ConsumptionInvoiceCode', key)
+    const field = source ? 'SourceInvoiceCode' : 'ConsumptionInvoiceCode'
+    const rows = record.recordsBy(RESOURCE_NAME, field, key)
+    return source ? rows.filter((row) => isActiveRow(row) && !isCancelled(row)) : rows
   }
 
   return {
