@@ -1864,7 +1864,8 @@ function initAppResourcesCodeConfig() {
                 "confirm": false,
                 "column": "Progress",
                 "columnValue": "APPROVED",
-                "columnValueOptions": []
+                "columnValueOptions": [],
+                "visibleWhen": { "column": "Progress", "op": "eq", "value": "SUBMITTED" }
             },
             {
                 "action": "Cancel",
@@ -1885,11 +1886,7 @@ function initAppResourcesCodeConfig() {
                         "required": true
                     }
                 ],
-                "visibleWhen": {
-                    "column": "Progress",
-                    "op": "eq",
-                    "value": "SUBMITTED"
-                }
+                "visibleWhen": { "column": "Progress", "op": "eq", "value": "SUBMITTED" }
             }
         ]),
         Menu: JSON.stringify([
