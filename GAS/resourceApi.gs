@@ -53,7 +53,7 @@ function resolveUnchangedResourceResponse(auth, resourceName, config, lastUpdate
   };
 }
 
-function handleResourceGetRecords(auth, payload) {
+function handleResourceGetRecords(auth, payload, preparedResource) {
   const resourceName = resolveResourceName(payload);
   // Config first: the permission check and short-circuit need no spreadsheet.
   const config = getResourceConfig(resourceName);
@@ -64,7 +64,7 @@ function handleResourceGetRecords(auth, payload) {
   const unchanged = resolveUnchangedResourceResponse(auth, resourceName, config, lastUpdatedAt);
   if (unchanged) return unchanged;
 
-  const resource = openResourceSheet(resourceName);
+  const resource = preparedResource || openResourceSheet(resourceName);
   // Not getSheetHeaders: that derives the file id via a getParent() round-trip
   // per resource, ~40 of them on an initial sync. Same cache key.
   const headers = getSheetHeadersByMeta(config.fileId, config.sheetName, resource.sheet);
@@ -121,16 +121,30 @@ function handleResourceGetMultiRecords(auth, payload) {
   } catch (e) { /* best-effort warm; per-resource lookup still works */ }
 
   const data = {};
-  requestedResources.forEach(function (resourceName) {
+  const pending = [];
+  const readPlan = _activeBatchWritePlan || createBatchWritePlan();
+  const selectedSheets = new Set();
+  for (const resourceName of requestedResources) {
     const singlePayload = cloneWithResource(payload, resourceName);
     const cursor = resolveMultiResourceCursor(payload, resourceName);
-    if (cursor !== null && cursor !== undefined && cursor !== '') {
-      singlePayload.lastUpdatedAt = cursor;
-    } else {
-      delete singlePayload.lastUpdatedAt;
+    if (cursor !== null && cursor !== undefined && cursor !== '') singlePayload.lastUpdatedAt = cursor;
+    else delete singlePayload.lastUpdatedAt;
+    const config = getResourceConfig(resourceName);
+    enforceMasterPermission(auth, resourceName, 'canRead');
+    const lastUpdatedAt = singlePayload.lastUpdatedAt ? parseDateInput(singlePayload.lastUpdatedAt) : null;
+    const unchanged = resolveUnchangedResourceResponse(auth, resourceName, config, lastUpdatedAt);
+    if (unchanged) {
+      data[resourceName] = unchanged;
+      continue;
     }
-    data[resourceName] = handleResourceGetRecords(auth, singlePayload);
-  });
+    const resource = openResourceSheet(resourceName);
+    resource.sheet = getBatchSheetView(readPlan, resource.sheet);
+    const headers = getSheetHeadersByMeta(config.fileId, config.sheetName, resource.sheet);
+    if (headers.length) selectedSheets.add(config.fileId + ':' + resource.sheet.getSheetId());
+    pending.push({ resourceName, payload: singlePayload, resource });
+  }
+  preloadBatchSheetEntry(Array.from(selectedSheets, function(key) { return readPlan.sheets.get(key); }));
+  for (const item of pending) data[item.resourceName] = handleResourceGetRecords(auth, item.payload, item.resource);
 
   return {
     success: true,
@@ -156,6 +170,7 @@ function handleResourceRecordFetch(auth, payload) {
   let missingByResource = {};
   let errors = [];
   let fatalErrors = [];
+  const readPlan = _activeBatchWritePlan || createBatchWritePlan();
 
   for (let r = 0; r < resourceRequests.length; r++) {
     let entry = resourceRequests[r] || {};
@@ -185,7 +200,7 @@ function handleResourceRecordFetch(auth, payload) {
     missingByResource[resourceName] = [];
 
     let resource = openResourceSheet(resourceName);
-    let sheet = resource.sheet;
+    let sheet = getBatchSheetView(readPlan, resource.sheet);
     let headers = getSheetHeadersByMeta(resource.config.fileId, resource.config.sheetName, sheet);
     let idx = getHeaderIndexMap(headers);
     let foundRows = [];
@@ -213,8 +228,8 @@ function handleResourceRecordFetch(auth, payload) {
           if (code && !rowNumByCode.has(code)) rowNumByCode.set(code, i + 1);
         }
         const matchedRowNums = codes.map(function(code) { return rowNumByCode.get(code); }).filter(Boolean);
-        if (_activeBatchWritePlan && matchedRowNums.length) {
-          getBatchSheetView(_activeBatchWritePlan, sheet, null, { rows: matchedRowNums, width: headers.length });
+        if (matchedRowNums.length) {
+          getBatchSheetView(readPlan, sheet, null, { rows: matchedRowNums, width: headers.length });
         }
         codes.forEach(function (code) {
           const rNum = rowNumByCode.get(code);
@@ -413,7 +428,6 @@ function dispatchPostActionHook(config, payload, result, auth, action, meta, res
   if (_activeBatchWritePlan && _activeBatchWritePlan.strict && STAGED_POST_ACTIONS.indexOf(postAction) === -1) {
     throw new Error('PostAction is not supported in a staged batch: ' + postAction);
   }
-  const hookStartedAt = Date.now();
   const candidates = [postAction + '_after' + suffix, postAction];
   try {
     for (let i = 0; i < candidates.length; i++) {
@@ -432,8 +446,6 @@ function dispatchPostActionHook(config, payload, result, auth, action, meta, res
       throw e;
     }
     Logger.log('dispatchPostActionHook error for "' + postAction + '" (' + normalizedAction + '): ' + String(e));
-  } finally {
-    if (_requestMetrics) _requestMetrics.hookMs = (_requestMetrics.hookMs || 0) + Date.now() - hookStartedAt;
   }
 }
 

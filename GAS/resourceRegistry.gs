@@ -51,9 +51,6 @@ function buildRoleCatalogCacheKey(memoKey) {
     + '_' + memoKey.replace(/[^A-Za-z0-9_|:-]/g, '');
 }
 
-// Diagnostics: 'cache' | 'metadata' | 'rebuild' for the last config map read.
-var _resource_config_map_source = '';
-
 // Bump this whenever the config map shape changes so stale caches are not served.
 var RESOURCE_CONFIG_CACHE_KEY = 'AQL_RESOURCE_CONFIG_MAP_V3';
 var RESOURCE_CONFIG_LEGACY_CACHE_KEYS = ['AQL_RESOURCE_CONFIG_MAP_V2'];
@@ -102,10 +99,7 @@ function getResourceConfigMap() {
       // Promote metadata hits, or the faster CacheService tier stays starved:
       // the fallback answers every execution and returns before the persist below.
       if (servedFromMetadata) {
-        _resource_config_map_source = 'metadata';
         putChunkedCache(scopedKey, cachedJson, CACHE_TTL_SEC);
-      } else {
-        _resource_config_map_source = 'cache';
       }
 
       return _resource_config_map_cache;
@@ -230,7 +224,6 @@ function getResourceConfigMap() {
 
   // Persist to CacheService AND Permanent Metadata, both chunked so neither
   // silently drops an oversized payload.
-  _resource_config_map_source = 'rebuild';
   try {
     var json = JSON.stringify(map);
     putChunkedCache(scopedKey, json, CACHE_TTL_SEC);

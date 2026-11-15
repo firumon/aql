@@ -179,32 +179,32 @@ function getSheetHeadersByMeta(fileId, sheetName, sheetObject, options) {
 }
 
 function getSheetHeadersBatch(entries, options) {
-  var out = {};
-  var list = Array.isArray(entries) ? entries : [];
+  let out = {};
+  let list = Array.isArray(entries) ? entries : [];
   if (!list.length) return out;
 
   // Forced: re-read row 1 and write through both tiers — the only way a schema change lands.
-  var force = !!(options && options.force);
+  let force = !!(options && options.force);
 
-  var wanted = {};
-  var order = [];
-  for (var i = 0; i < list.length; i++) {
-    var entry = list[i] || {};
-    var fileId = (entry.fileId || '').toString().trim();
-    var sheetName = (entry.sheetName || '').toString().trim();
+  let wanted = {};
+  let order = [];
+  for (let i = 0; i < list.length; i++) {
+    let entry = list[i] || {};
+    let fileId = (entry.fileId || '').toString().trim();
+    let sheetName = (entry.sheetName || '').toString().trim();
     if (!fileId || !sheetName) continue;
 
-    var pairKey = fileId + '::' + sheetName;
+    let pairKey = fileId + '::' + sheetName;
     if (wanted[pairKey]) continue;
     wanted[pairKey] = { fileId: fileId, sheetName: sheetName, cacheKey: 'HEADERS_' + fileId + '_' + sheetName };
     order.push(pairKey);
   }
   if (!order.length) return out;
 
-  var pending = [];
-  for (var a = 0; a < order.length; a++) {
-    var memPair = wanted[order[a]];
-    var memHit = force ? null : _sheet_headers_cache[memPair.cacheKey];
+  let pending = [];
+  for (let a = 0; a < order.length; a++) {
+    let memPair = wanted[order[a]];
+    let memHit = force ? null : _sheet_headers_cache[memPair.cacheKey];
     if (memHit) {
       out[order[a]] = memHit;
     } else {
@@ -214,15 +214,15 @@ function getSheetHeadersBatch(entries, options) {
   if (!pending.length) return out;
 
   // One getAll for every remaining key.
-  var cacheKeys = [];
-  var keyToPair = {};
-  for (var b = 0; b < pending.length; b++) {
-    var ck = wanted[pending[b]].cacheKey;
+  let cacheKeys = [];
+  let keyToPair = {};
+  for (let b = 0; b < pending.length; b++) {
+    let ck = wanted[pending[b]].cacheKey;
     cacheKeys.push(ck);
     keyToPair[ck] = pending[b];
   }
 
-  var cached = {};
+  let cached = {};
   if (!force) {
     try {
       cached = CacheService.getScriptCache().getAll(cacheKeys) || {};
@@ -231,13 +231,13 @@ function getSheetHeadersBatch(entries, options) {
     }
   }
 
-  var stillPending = [];
-  for (var c = 0; c < pending.length; c++) {
-    var pairKeyC = pending[c];
-    var raw = cached[wanted[pairKeyC].cacheKey];
+  let stillPending = [];
+  for (let c = 0; c < pending.length; c++) {
+    let pairKeyC = pending[c];
+    let raw = cached[wanted[pairKeyC].cacheKey];
     if (raw) {
       try {
-        var parsed = JSON.parse(raw);
+        let parsed = JSON.parse(raw);
         out[pairKeyC] = parsed;
         _sheet_headers_cache[wanted[pairKeyC].cacheKey] = parsed;
         continue;
@@ -247,13 +247,13 @@ function getSheetHeadersBatch(entries, options) {
   }
   if (!stillPending.length) return out;
 
-  var sheetPending = [];
-  for (var d = 0; d < stillPending.length; d++) {
-    var pairKeyD = stillPending[d];
-    var meta = force ? null : getPermanentMetadata(wanted[pairKeyD].cacheKey);
+  let sheetPending = [];
+  for (let d = 0; d < stillPending.length; d++) {
+    let pairKeyD = stillPending[d];
+    let meta = force ? null : getPermanentMetadata(wanted[pairKeyD].cacheKey);
     if (meta) {
       try {
-        var parsedMeta = JSON.parse(meta);
+        let parsedMeta = JSON.parse(meta);
         out[pairKeyD] = parsedMeta;
         _sheet_headers_cache[wanted[pairKeyD].cacheKey] = parsedMeta;
         continue;
@@ -263,36 +263,95 @@ function getSheetHeadersBatch(entries, options) {
   }
   if (!sheetPending.length) return out;
 
-  // Sheet reads for genuine misses only; openSpreadsheetById dedupes per file.
-  var cacheWrites = {};
-  var metadataWrites = {};
+  const cacheWrites = {};
+  const metadataWrites = {};
+  const reads = [];
 
-  for (var e2 = 0; e2 < sheetPending.length; e2++) {
-    var pairKeyE = sheetPending[e2];
-    var pair = wanted[pairKeyE];
+  for (const pairKey of sheetPending) {
+    const pair = wanted[pairKey];
     try {
-      var ss = openSpreadsheetById(pair.fileId);
-      var sheet = ss ? ss.getSheetByName(pair.sheetName) : null;
-      if (!sheet) {
-        out[pairKeyE] = [];
+      const ss = openSpreadsheetById(pair.fileId);
+      const sheet = ss ? ss.getSheetByName(pair.sheetName) : null;
+      const width = sheet ? sheet.getLastColumn() : 0;
+      if (!width) {
+        out[pairKey] = [];
         continue;
       }
+      reads.push({ pairKey, pair, sheet, width, headers: null });
+    } catch (error) {
+      out[pairKey] = [];
+    }
+  }
 
-      var lastColumn = sheet.getLastColumn();
-      if (!lastColumn) {
-        out[pairKeyE] = [];
-        continue;
+  if (reads.length > 1 && !(typeof _activeBatchWritePlan !== 'undefined' && _activeBatchWritePlan)) {
+    try {
+      SpreadsheetApp.flush();
+      const token = ScriptApp.getOAuthToken();
+      const groups = [];
+      const byFile = new Map();
+      for (const read of reads) {
+        const fileId = read.pair.fileId;
+        const baseUrl = 'https://sheets.googleapis.com/v4/spreadsheets/' + encodeURIComponent(fileId)
+          + '/values:batchGet?majorDimension=ROWS&valueRenderOption=UNFORMATTED_VALUE&dateTimeRenderOption=SERIAL_NUMBER';
+        const range = "'" + read.pair.sheetName.replace(/'/g, "''") + "'!R1C1:R1C" + read.width;
+        const query = '&ranges=' + encodeURIComponent(range);
+        if (baseUrl.length + query.length > 1800) continue;
+        let group = byFile.get(fileId);
+        if (!group || group.url.length + query.length > 1800) {
+          group = { fileId, url: baseUrl, reads: [] };
+          groups.push(group);
+          byFile.set(fileId, group);
+        }
+        group.url += query;
+        group.reads.push(read);
       }
 
-      var headers = sheet.getRange(1, 1, 1, lastColumn).getValues()[0];
-      out[pairKeyE] = headers;
-      _sheet_headers_cache[pair.cacheKey] = headers;
+      for (let offset = 0; offset < groups.length; offset += 8) {
+        const chunk = groups.slice(offset, offset + 8);
+        try {
+          const responses = UrlFetchApp.fetchAll(chunk.map(function(group) {
+            return { url: group.url, method: 'get', headers: { Authorization: 'Bearer ' + token }, muteHttpExceptions: true };
+          }));
+          if (!Array.isArray(responses) || responses.length !== chunk.length) continue;
+          for (let i = 0; i < chunk.length; i++) {
+            try {
+              const response = responses[i];
+              const status = response.getResponseCode();
+              if (status < 200 || status >= 300) continue;
+              const body = JSON.parse(response.getContentText());
+              const group = chunk[i];
+              if (body.spreadsheetId !== group.fileId || !Array.isArray(body.valueRanges)
+                  || body.valueRanges.length !== group.reads.length) continue;
+              for (let r = 0; r < group.reads.length; r++) {
+                const read = group.reads[r];
+                const valueRange = body.valueRanges[r];
+                if (!valueRange || valueRange.majorDimension !== 'ROWS' || !Array.isArray(valueRange.values)
+                    || valueRange.values.length !== 1) continue;
+                const row = valueRange.values[0];
+                if (!Array.isArray(row) || row.length > read.width || row.some(function(cell) { return typeof cell !== 'string'; })) {
+                  continue;
+                }
+                read.headers = Array.from({ length: read.width }, function(_, column) {
+                  return column < row.length ? row[column] : '';
+                });
+              }
+            } catch (error) {}
+          }
+        } catch (error) {}
+      }
+    } catch (error) {}
+  }
 
-      var json = JSON.stringify(headers);
-      cacheWrites[pair.cacheKey] = json;
-      metadataWrites[pair.cacheKey] = json;
-    } catch (err) {
-      out[pairKeyE] = [];
+  for (const read of reads) {
+    try {
+      const headers = read.headers || read.sheet.getRange(1, 1, 1, read.width).getValues()[0];
+      out[read.pairKey] = headers;
+      _sheet_headers_cache[read.pair.cacheKey] = headers;
+      const json = JSON.stringify(headers);
+      cacheWrites[read.pair.cacheKey] = json;
+      metadataWrites[read.pair.cacheKey] = json;
+    } catch (error) {
+      out[read.pairKey] = [];
     }
   }
 
@@ -520,27 +579,6 @@ function resolveFileIdForScope(scope, resourceFileId) {
   return getAppSpreadsheet().getId();
 }
 
-function diagLogResolvedFileIds() {
-  var ss = getAppSpreadsheet();
-  var sheet = ss.getSheetByName(CONFIG.SHEETS.RESOURCES);
-  if (!sheet) { Logger.log('Resources sheet not found'); return; }
-
-  var data = sheet.getDataRange().getValues();
-  var headers = data[0];
-  var idx = {};
-  headers.forEach(function(h, i) { idx[h] = i; });
-
-  var lines = ['=== AQL FileID Resolution Diagnostics ==='];
-  for (var i = 1; i < data.length; i++) {
-    var name = (data[i][idx.Name] || '').toString().trim();
-    if (!name) continue;
-    var scope = (data[i][idx.Scope] || 'master').toString().trim();
-    var rawFileId = (data[i][idx.FileID] || '').toString().trim();
-    var resolved = resolveFileIdForScope(scope, rawFileId);
-    lines.push(name + ' | scope=' + scope + ' | raw=' + (rawFileId || '(blank)') + ' | resolved=' + resolved);
-  }
-  Logger.log(lines.join('\n'));
-}
 var _metadata_cache = null;
 function getMetadataContext() {
   if (_metadata_cache) return _metadata_cache;
@@ -869,100 +907,4 @@ function warmResourceHeaderCaches() {
   }
 
   return result;
-}
-
-// Editor check after a schema change: compares live sheet headers against both cache
-// tiers. `healthy: true` is the pass; omit the name to check every resource.
-function diagResourceHeaders(resourceName) {
-  var configMap = getResourceConfigMap() || {};
-  var names = resourceName
-    ? [resourceName]
-    : Object.keys(configMap).filter(function(name) {
-        var config = configMap[name] || {};
-        return !config.functional && config.isActive !== false && config.fileId && config.sheetName;
-      });
-
-  var report = { checked: 0, stale: [], rows: [] };
-  var scriptCache = CacheService.getScriptCache();
-
-  names.forEach(function(name) {
-    var config = configMap[name];
-    if (!config || !config.fileId || !config.sheetName) return;
-
-    var cacheKey = 'HEADERS_' + config.fileId + '_' + config.sheetName;
-    var live = [];
-    try {
-      var ss = openSpreadsheetById(config.fileId);
-      var sheet = ss ? ss.getSheetByName(config.sheetName) : null;
-      var lastColumn = sheet ? sheet.getLastColumn() : 0;
-      if (sheet && lastColumn) live = sheet.getRange(1, 1, 1, lastColumn).getValues()[0];
-    } catch (e) { /* reported as an empty live list below */ }
-
-    function parse(raw) {
-      if (!raw) return null;
-      try { return JSON.parse(raw); } catch (e) { return null; }
-    }
-
-    var fromCache = parse(scriptCache.get(cacheKey));
-    var fromMetadata = parse(getPermanentMetadata(cacheKey));
-    var liveJson = JSON.stringify(live);
-
-    var row = {
-      resource: name,
-      sheetColumns: live.length,
-      cache: fromCache ? (JSON.stringify(fromCache) === liveJson ? 'in sync' : 'STALE') : 'absent',
-      metadata: fromMetadata ? (JSON.stringify(fromMetadata) === liveJson ? 'in sync' : 'STALE') : 'absent',
-      missingFromCache: fromCache
-        ? live.filter(function(h) { return fromCache.indexOf(h) === -1; })
-        : [],
-      missingFromMetadata: fromMetadata
-        ? live.filter(function(h) { return fromMetadata.indexOf(h) === -1; })
-        : []
-    };
-
-    report.checked++;
-    report.rows.push(row);
-    if (row.cache === 'STALE' || row.metadata === 'STALE') report.stale.push(name);
-  });
-
-  report.healthy = report.stale.length === 0;
-  Logger.log(JSON.stringify(report, null, 2));
-  return report;
-}
-
-function diagCacheHealth() {
-  var report = {};
-  var scopedKey = RESOURCE_CONFIG_CACHE_KEY + '_' + getAppSpreadsheet().getId();
-
-  clearResourceConfigCache();
-  report.purgedCache = !getChunkedCache(scopedKey);
-  report.purgedMetadata = !getPermanentMetadataLarge(RESOURCE_CONFIG_CACHE_KEY);
-
-  _resource_config_map_source = '';
-  var t0 = Date.now();
-  var map = getResourceConfigMap();
-  report.coldMs = Date.now() - t0;
-  report.coldSource = _resource_config_map_source;
-  report.resources = Object.keys(map).length;
-  report.bytes = JSON.stringify(map).length;
-
-  _resource_config_map_cache = null;
-  _resource_registry_context_cache = null;
-  _metadata_cache = null;
-  _resource_config_map_source = '';
-
-  var t1 = Date.now();
-  getResourceConfigMap();
-  report.warmMs = Date.now() - t1;
-  report.warmSource = _resource_config_map_source;
-
-  report.cachePersisted = !!getChunkedCache(scopedKey);
-  report.metadataPersisted = !!getPermanentMetadataLarge(RESOURCE_CONFIG_CACHE_KEY);
-  report.catalogGeneration = getCatalogGeneration();
-  report.healthy = report.warmSource === 'cache'
-    && report.cachePersisted
-    && report.metadataPersisted;
-
-  Logger.log(JSON.stringify(report, null, 2));
-  return report;
 }

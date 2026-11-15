@@ -1,7 +1,5 @@
 const JSON_MIME_TYPE = ContentService.MimeType.JSON;
 let _activeBatchWritePlan = null;
-const GAS_PERFORMANCE_LOGGING = false;
-let _requestMetrics = null;
 const STAGED_POST_ACTIONS = [
   'handleStockMovementsBulkSave', 'handleOutletMovementsBulkSave',
   'handleWarehouseTransfers', 'handleWarehouseTransferItems', 'linkProcurementCodeToPurchaseRequisition'
@@ -10,45 +8,26 @@ const STAGED_POST_ACTIONS = [
 function doPost(e) {
   let request;
   let result;
-  const startedAt = Date.now();
-  _requestMetrics = GAS_PERFORMANCE_LOGGING ? { planReadMs: 0, planReadCalls: 0, planReadCells: 0, commitMs: 0, commitCalls: 0 } : null;
   try {
     request = normalizeIncomingRequest(parseRequestPayload(e));
     const action = (request.action || '').toString().trim();
     if (!action) return jsonResponse(buildErrorEnvelope(request, 'Action is required'));
-    const authStartedAt = Date.now();
     if (action === 'login') {
       result = handleLogin(request.payload.email, request.payload.password);
-      if (_requestMetrics) _requestMetrics.loginMs = Date.now() - authStartedAt;
     } else {
       const proof = verifySessionProof(request.token, request.sessionKey);
-      if (_requestMetrics) _requestMetrics.authMs = Date.now() - authStartedAt;
       if (!proof.ok) return jsonResponse(buildErrorEnvelope(request, 'Unauthorized / ' + proof.message, proof.resync));
       const authContext = proof.auth;
       authContext.token = request.token;
-      const actionStartedAt = Date.now();
       result = dispatchProtectedAction(action, authContext, request.payload);
-      if (_requestMetrics) _requestMetrics.actionMs = Date.now() - actionStartedAt;
     }
-    const envelopeStartedAt = Date.now();
-    const response = jsonResponse(buildApiEnvelope(request, result));
-    if (_requestMetrics) _requestMetrics.responseMs = Date.now() - envelopeStartedAt;
-    return response;
+    return jsonResponse(buildApiEnvelope(request, result));
   } catch (error) {
     return jsonResponse(buildErrorEnvelope(request, error && error.message ? error.message : String(error)));
   } finally {
-    const flushStartedAt = Date.now();
     try {
       if (typeof flushPendingCursorWrites === 'function') flushPendingCursorWrites();
     } catch (error) {}
-    if (_requestMetrics) {
-      _requestMetrics.cursorFlushMs = Date.now() - flushStartedAt;
-      _requestMetrics.totalMs = Date.now() - startedAt;
-      _requestMetrics.requestId = request ? request.requestId : '';
-      _requestMetrics.action = request ? request.action : '';
-      try { console.log(JSON.stringify({ gasPerformance: _requestMetrics })); } catch (error) {}
-    }
-    _requestMetrics = null;
   }
 }
 
@@ -284,7 +263,8 @@ function normalizeActionData(action, requestResource, requestPayload, rawResult)
       return envelope;
     });
 
-    ['retryUnsafe', 'committedFiles', 'unconfirmedFile', 'inProgress', 'replayed'].forEach(function(key) {
+    const outcomeKeys = ['retryUnsafe', 'committedFiles', 'unconfirmedFile', 'attemptedFiles', 'failedFiles', 'unconfirmedFiles'];
+    outcomeKeys.concat(['inProgress', 'replayed']).forEach(function(key) {
       if (rawResult && rawResult[key] !== undefined) result[key] = rawResult[key];
     });
     let deltas = rawResult && rawResult.deltaResources;
@@ -309,7 +289,7 @@ function normalizeActionData(action, requestResource, requestPayload, rawResult)
 
   let topLevelResultKeys = [
     'token', 'user', 'resources', 'appConfig', 'avatarUrl', 'name', 'email', 'archived',
-    'retryUnsafe', 'committedFiles', 'unconfirmedFile'
+    'retryUnsafe', 'committedFiles', 'unconfirmedFile', 'attemptedFiles', 'failedFiles', 'unconfirmedFiles'
   ];
   topLevelResultKeys.forEach(function (key) {
     if (rawResult && rawResult[key] !== undefined) {
@@ -659,6 +639,8 @@ function handleBatchActions(auth, payload) {
   if (state.phase === 'committing' || state.phase === 'review' || state.completed.length) {
     return {
       success: false, retryUnsafe: true, committedFiles: state.committedFiles || [],
+      attemptedFiles: state.attemptedFiles || [], failedFiles: state.failedFiles || [],
+      unconfirmedFiles: state.unconfirmedFiles || [], unconfirmedFile: state.unconfirmedFile || '',
       message: 'This save needs review before retry. Some file writes may already have finished.', data: []
     };
   }
@@ -871,7 +853,6 @@ function runBatchQueue(auth, payload, requests, cache, cacheKey, state, standalo
     : createFormTicketState(requests));
   const pending = state.queue.slice();
   const plan = createBatchWritePlan(!standalone);
-  const prepareStartedAt = Date.now();
   const cursorSnapshot = Object.assign({}, _resource_cursor_cache);
   const pendingCursorSnapshot = Object.assign({}, _pending_cursor_writes);
   const batchContext = standalone ? null : createBatchContext();
@@ -917,8 +898,7 @@ function runBatchQueue(auth, payload, requests, cache, cacheKey, state, standalo
     if (!failure) {
       state.phase = 'committing';
       if (tracked) stampFormTicketState(cache, cacheKey, state);
-      if (_requestMetrics) _requestMetrics.prepareMs = Date.now() - prepareStartedAt;
-      commitBatchWritePlan(plan);
+      commitBatchWritePlan(plan, tracked ? state : null, cache, cacheKey);
       state.completed = state.completed.concat(prepared);
       if (!standalone) refreshResolvedRefs(state.refs, batchContext);
       state.processing = [];
@@ -958,6 +938,10 @@ function runBatchQueue(auth, payload, requests, cache, cacheKey, state, standalo
   state.queue = pending;
   state.phase = retryUnsafe ? 'review' : 'ready';
   state.committedFiles = plan.committedFiles.slice();
+  state.attemptedFiles = plan.attemptedFiles.slice();
+  state.failedFiles = plan.failedFiles.slice();
+  state.unconfirmedFiles = plan.unconfirmedFiles.slice();
+  state.unconfirmedFile = plan.unconfirmedFile || '';
   if (tracked) stampFormTicketState(cache, cacheKey, state);
   const results = requests.map(function(_, index) {
     if (failure && (failure.index === index || (failure.index === -1 && index === 0))) return failure.result;
@@ -972,11 +956,13 @@ function runBatchQueue(auth, payload, requests, cache, cacheKey, state, standalo
       return failure ? failure.result : { success: false, message: 'Batch not saved.' };
     }
     return Object.assign({}, failure ? failure.result : { success: false, message: 'Batch not saved.' }, {
-      retryUnsafe, committedFiles: plan.committedFiles.slice(), unconfirmedFile: plan.unconfirmedFile || ''
+      retryUnsafe, committedFiles: plan.committedFiles.slice(), unconfirmedFile: plan.unconfirmedFile || '',
+      attemptedFiles: plan.attemptedFiles.slice(), failedFiles: plan.failedFiles.slice(), unconfirmedFiles: plan.unconfirmedFiles.slice()
     });
   }
   return {
     success: false, retryUnsafe, committedFiles: plan.committedFiles.slice(), unconfirmedFile: plan.unconfirmedFile || '',
+    attemptedFiles: plan.attemptedFiles.slice(), failedFiles: plan.failedFiles.slice(), unconfirmedFiles: plan.unconfirmedFiles.slice(),
     message: failure ? failure.result.message : 'Batch not saved.', data: results
   };
 }
@@ -1230,7 +1216,8 @@ function handlePollAction(auth, payload) {
 function createBatchWritePlan(strict) {
   return {
     files: new Map(), sheets: new Map(), state: 'open', strict: strict !== false,
-    committedFiles: [], cursors: {}, cursorFileId: '', deltaReads: new Map()
+    committedFiles: [], attemptedFiles: [], failedFiles: [], unconfirmedFiles: [], unconfirmedFile: '',
+    cursors: {}, cursorFileId: '', deltaReads: new Map()
   };
 }
 
@@ -1252,6 +1239,101 @@ function applyLoadedBlockToBatchEntry(entry, block, loadedRows) {
 }
 
 function preloadBatchSheetEntry(entry, preload) {
+  if (Array.isArray(entry)) {
+    const entries = entry.filter(function(item) { return item && item.baseRows > 0 && item.baseColumns > 0; });
+    if (entries.length > 1) {
+      try {
+        if (!_activeBatchWritePlan) SpreadsheetApp.flush();
+        const token = ScriptApp.getOAuthToken();
+        const fields = 'spreadsheetId,properties/defaultFormat/numberFormat/type,'
+          + 'sheets(properties(sheetId,title),data(startRow,startColumn,rowData(values(effectiveValue,effectiveFormat/numberFormat/type))))';
+        const groups = [];
+        const byFile = new Map();
+        for (const item of entries) {
+          const cells = item.baseRows * item.baseColumns;
+          if (cells > 50000) continue;
+          const baseUrl = 'https://sheets.googleapis.com/v4/spreadsheets/' + encodeURIComponent(item.fileId)
+            + '?fields=' + encodeURIComponent(fields);
+          let column = '';
+          for (let n = item.baseColumns; n > 0; n = Math.floor((n - 1) / 26)) column = String.fromCharCode(65 + (n - 1) % 26) + column;
+          const range = "'" + item.sheetName.replace(/'/g, "''") + "'!A1:" + column + item.baseRows;
+          const query = '&ranges=' + encodeURIComponent(range);
+          if (baseUrl.length + query.length > 1800) continue;
+          let group = byFile.get(item.fileId);
+          if (!group || group.url.length + query.length > 1800 || group.cells + cells > 50000) {
+            group = { fileId: item.fileId, url: baseUrl, entries: [], cells: 0 };
+            groups.push(group);
+            byFile.set(item.fileId, group);
+          }
+          group.url += query;
+          group.entries.push(item);
+          group.cells += cells;
+        }
+        for (let offset = 0; offset < groups.length; offset += 8) {
+          const chunk = groups.slice(offset, offset + 8);
+          try {
+            const responses = UrlFetchApp.fetchAll(chunk.map(function(group) {
+              return { url: group.url, method: 'get', headers: { Authorization: 'Bearer ' + token }, muteHttpExceptions: true };
+            }));
+            if (!Array.isArray(responses) || responses.length !== chunk.length) continue;
+            for (let i = 0; i < chunk.length; i++) {
+              try {
+                const status = responses[i].getResponseCode();
+                if (status < 200 || status >= 300) continue;
+                const body = JSON.parse(responses[i].getContentText());
+                const group = chunk[i];
+                if (body.spreadsheetId !== group.fileId || !Array.isArray(body.sheets)) continue;
+                for (const item of group.entries) {
+                  try {
+                    const sheet = body.sheets.find(function(value) {
+                      return value.properties && value.properties.sheetId === item.sheetId && value.properties.title === item.sheetName;
+                    });
+                    if (!sheet || !Array.isArray(sheet.data) || sheet.data.length !== 1) continue;
+                    const grid = sheet.data[0];
+                    if (!grid || (grid.startRow || 0) !== 0 || (grid.startColumn || 0) !== 0) continue;
+                    const rows = grid.rowData === undefined ? [] : grid.rowData;
+                    if (!Array.isArray(rows) || rows.length > item.baseRows) continue;
+                    const values = [];
+                    for (const row of rows) {
+                      if (!row || typeof row !== 'object') throw new Error('Invalid sheet row.');
+                      const cells = row.values === undefined ? [] : row.values;
+                      if (!Array.isArray(cells) || cells.length > item.baseColumns) throw new Error('Invalid sheet width.');
+                      const line = [];
+                      for (const cell of cells) {
+                        if (!cell || typeof cell !== 'object') throw new Error('Invalid sheet cell.');
+                        const value = cell.effectiveValue;
+                        if (value === undefined) {
+                          line.push('');
+                          continue;
+                        }
+                        if (!value || Object.keys(value).length !== 1) throw new Error('Unsupported sheet value.');
+                        if (typeof value.stringValue === 'string') line.push(value.stringValue);
+                        else if (typeof value.boolValue === 'boolean') line.push(value.boolValue);
+                        else if (typeof value.numberValue === 'number' && Number.isFinite(value.numberValue)) {
+                          const format = cell.effectiveFormat && cell.effectiveFormat.numberFormat;
+                          const defaults = body.properties && body.properties.defaultFormat;
+                          const defaultFormat = defaults && defaults.numberFormat;
+                          const type = (format && format.type) || (defaultFormat && defaultFormat.type);
+                          if (type && ['NUMBER', 'PERCENT', 'CURRENCY', 'SCIENTIFIC', 'TEXT'].indexOf(type) === -1) {
+                            throw new Error('Sheet date needs native reading.');
+                          }
+                          line.push(value.numberValue);
+                        } else throw new Error('Unsupported sheet value.');
+                      }
+                      values.push(line);
+                    }
+                    applyLoadedBlockToBatchEntry(item, { row: 1, column: 1, height: item.baseRows, width: item.baseColumns }, values);
+                  } catch (error) {}
+                }
+              } catch (error) {}
+            }
+          } catch (error) {}
+        }
+      } catch (error) {}
+    }
+    entries.forEach(function(item) { item.view.getDataRange().getValues(); });
+    return;
+  }
   if (!preload || !entry || entry.baseRows <= 0 || entry.baseColumns <= 0) return;
   const blocks = [];
   if (Array.isArray(preload.rows) && preload.rows.length) {
@@ -1269,7 +1351,11 @@ function preloadBatchSheetEntry(entry, preload) {
     for (let i = 0; i < rows.length;) {
       const first = rows[i];
       let height = 1;
-      while (++i < rows.length && rows[i] === first + height) height++;
+      while (++i < rows.length) {
+        const nextHeight = rows[i] - first + 1;
+        if (rows[i] !== first + height && (rows[i] - rows[i - 1] > 2 || nextHeight * reqWidth > 4096)) break;
+        height = nextHeight;
+      }
       blocks.push({ row: first, column: 1, height: height, width: reqWidth });
     }
   }
@@ -1327,13 +1413,7 @@ function getBatchSheetView(plan, sheet, initialValues, preload) {
         }
       }
       if (bottom !== -1) {
-        const readStartedAt = Date.now();
         const loaded = sheet.getRange(top + 1, left + 1, bottom - top + 1, right - left + 1).getValues();
-        if (_requestMetrics) {
-          _requestMetrics.planReadMs += Date.now() - readStartedAt;
-          _requestMetrics.planReadCalls++;
-          _requestMetrics.planReadCells += (bottom - top + 1) * (right - left + 1);
-        }
         applyLoadedBlockToBatchEntry(entry, {
           row: top + 1, column: left + 1, height: bottom - top + 1, width: right - left + 1
         }, loaded);
@@ -1495,6 +1575,20 @@ function batchCellValue(value, timeZone) {
 function batchFileRequests(entries) {
   const requests = [];
   const timeZones = new Map();
+  const metadata = new Map();
+  for (const entry of entries) {
+    if (!entry.writes.size || metadata.has(entry.fileId)) continue;
+    metadata.set(entry.fileId, null);
+    try {
+      const file = Sheets.Spreadsheets.get(entry.fileId, {
+        fields: 'spreadsheetId,properties/timeZone,sheets/properties(sheetId,title,gridProperties(rowCount,columnCount))'
+      });
+      if (file.spreadsheetId === entry.fileId && file.properties && typeof file.properties.timeZone === 'string'
+          && file.properties.timeZone.trim() && Array.isArray(file.sheets)) {
+        metadata.set(entry.fileId, file);
+      }
+    } catch (error) {}
+  }
   entries.forEach(function(entry) {
     if (!entry.writes.size) return;
     let lastRow = 0, lastColumn = 0;
@@ -1520,15 +1614,24 @@ function batchFileRequests(entries) {
         }
       }
     });
-    const maxRows = entry.view.getMaxRows();
-    const maxColumns = entry.view.getMaxColumns();
+    const file = metadata.get(entry.fileId);
+    const sheet = file && file.sheets.find(function(item) {
+      return item && item.properties && item.properties.sheetId === entry.sheetId && item.properties.title === entry.sheetName;
+    });
+    const grid = sheet && sheet.properties.gridProperties;
+    const validGrid = grid && Number.isInteger(grid.rowCount) && grid.rowCount > 0
+      && Number.isInteger(grid.columnCount) && grid.columnCount > 0;
+    const maxRows = validGrid ? grid.rowCount : entry.view.getMaxRows();
+    const maxColumns = validGrid ? grid.columnCount : entry.view.getMaxColumns();
     if (lastRow > maxRows) {
       requests.push({ appendDimension: { sheetId: entry.sheetId, dimension: 'ROWS', length: lastRow - maxRows } });
     }
     if (lastColumn > maxColumns) {
       requests.push({ appendDimension: { sheetId: entry.sheetId, dimension: 'COLUMNS', length: lastColumn - maxColumns } });
     }
-    if (!timeZones.has(entry.fileId)) timeZones.set(entry.fileId, entry.file.getSpreadsheetTimeZone());
+    if (!timeZones.has(entry.fileId)) {
+      timeZones.set(entry.fileId, file ? file.properties.timeZone : entry.file.getSpreadsheetTimeZone());
+    }
     const timeZone = timeZones.get(entry.fileId);
     blocks.forEach(function(write) {
       requests.push({
@@ -1545,7 +1648,7 @@ function batchFileRequests(entries) {
   return requests;
 }
 
-function commitBatchWritePlan(plan) {
+function commitBatchWritePlan(plan, state, cache, cacheKey) {
   if (!plan || plan.state === 'discarded') throw new Error('Batch write plan was discarded.');
   if (plan.state === 'committed') return { success: true, committedFiles: plan.committedFiles.slice() };
   if (plan.state !== 'open') throw new Error('Batch write outcome needs review before retry.');
@@ -1556,38 +1659,92 @@ function commitBatchWritePlan(plan) {
   });
   const bodies = files.map(function(file) { return JSON.stringify({ requests: file.requests }); });
   const oauthToken = files.length ? ScriptApp.getOAuthToken() : '';
+  const waves = [];
+  for (let index = 0; index < files.length;) {
+    const wave = [];
+    do {
+      const file = files[index];
+      wave.push({
+        fileId: file.fileId,
+        request: {
+          url: 'https://sheets.googleapis.com/v4/spreadsheets/' + encodeURIComponent(file.fileId) + ':batchUpdate',
+          method: 'post', contentType: 'application/json', headers: { Authorization: 'Bearer ' + oauthToken },
+          payload: bodies[index], muteHttpExceptions: true
+        }
+      });
+      index++;
+    } while (index < files.length && wave.length < 8 && files[index].fileId !== plan.cursorFileId);
+    waves.push(wave);
+  }
   plan.state = 'committing';
   try {
-    files.forEach(function(file, index) {
-      plan.unconfirmedFile = file.fileId;
-      const commitStartedAt = Date.now();
-      const response = UrlFetchApp.fetch(
-        'https://sheets.googleapis.com/v4/spreadsheets/' + encodeURIComponent(file.fileId) + ':batchUpdate', {
-          method: 'post', contentType: 'application/json',
-          headers: { Authorization: 'Bearer ' + oauthToken },
-          payload: bodies[index], muteHttpExceptions: true
-        });
-      if (_requestMetrics) {
-        _requestMetrics.commitMs += Date.now() - commitStartedAt;
-        _requestMetrics.commitCalls++;
+    for (const wave of waves) {
+      plan.unconfirmedFiles = wave.map(function(file) { return file.fileId; });
+      plan.unconfirmedFile = plan.unconfirmedFiles[0] || '';
+      plan.attemptedFiles.push.apply(plan.attemptedFiles, plan.unconfirmedFiles);
+      if (state) {
+        state.committedFiles = plan.committedFiles.slice();
+        state.attemptedFiles = plan.attemptedFiles.slice();
+        state.failedFiles = plan.failedFiles.slice();
+        state.unconfirmedFiles = plan.unconfirmedFiles.slice();
+        state.unconfirmedFile = plan.unconfirmedFile;
+        stampFormTicketState(cache, cacheKey, state);
       }
-      const status = response.getResponseCode();
-      if (status < 200 || status >= 300) {
-        let message = 'Sheets batch write failed (HTTP ' + status + ').';
+      let responses;
+      if (wave.length === 1) {
+        const request = Object.assign({}, wave[0].request);
+        const url = request.url;
+        delete request.url;
+        responses = [UrlFetchApp.fetch(url, request)];
+      } else {
+        responses = UrlFetchApp.fetchAll(wave.map(function(file) { return file.request; }));
+      }
+      if (!Array.isArray(responses) || responses.length !== wave.length) throw new Error('Sheets write outcomes need review.');
+      let failure = '';
+      for (let index = 0; index < wave.length; index++) {
+        const fileId = wave[index].fileId;
         try {
-          const body = JSON.parse(response.getContentText());
-          if (body.error && body.error.message) message = body.error.message;
-        } catch (error) {}
-        throw new Error(message);
+          const response = responses[index];
+          const status = response.getResponseCode();
+          if (status >= 200 && status < 300) {
+            const body = JSON.parse(response.getContentText());
+            if (body.spreadsheetId !== fileId) throw new Error('Sheets write response did not match its file.');
+            plan.committedFiles.push(fileId);
+            plan.unconfirmedFiles = plan.unconfirmedFiles.filter(function(id) { return id !== fileId; });
+          } else {
+            if (status >= 400 && status < 500 && status !== 408) {
+              plan.failedFiles.push(fileId);
+              plan.unconfirmedFiles = plan.unconfirmedFiles.filter(function(id) { return id !== fileId; });
+            }
+            let message = 'Sheets batch write failed (HTTP ' + status + ').';
+            try {
+              const body = JSON.parse(response.getContentText());
+              if (body.error && body.error.message) message = body.error.message;
+            } catch (error) {}
+            if (!failure) failure = message;
+          }
+        } catch (error) {
+          if (!failure) failure = error.message || String(error);
+        }
       }
-      plan.committedFiles.push(file.fileId);
-      plan.unconfirmedFile = '';
-    });
+      plan.unconfirmedFile = plan.unconfirmedFiles[0] || plan.failedFiles[0] || '';
+      if (state) {
+        state.committedFiles = plan.committedFiles.slice();
+        state.failedFiles = plan.failedFiles.slice();
+        state.unconfirmedFiles = plan.unconfirmedFiles.slice();
+        state.unconfirmedFile = plan.unconfirmedFile;
+        stampFormTicketState(cache, cacheKey, state);
+      }
+      if (failure) throw new Error(failure);
+    }
     plan.state = 'committed';
     return { success: true, committedFiles: plan.committedFiles.slice() };
   } catch (error) {
     plan.state = 'failed';
     error.committedFiles = plan.committedFiles.slice();
+    error.attemptedFiles = plan.attemptedFiles.slice();
+    error.failedFiles = plan.failedFiles.slice();
+    error.unconfirmedFiles = plan.unconfirmedFiles.slice();
     error.unconfirmedFile = plan.unconfirmedFile;
     throw error;
   }
