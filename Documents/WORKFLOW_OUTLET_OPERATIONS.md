@@ -94,6 +94,10 @@ Due In 7 Days shows open invoices due from today through seven days from today, 
 2. **Invoice Generation**: Consumed items generate an `OutletConsumptionInvoices` record calculating wholesale price, discounts, and applicable UAE VAT (5%). In the wizard (ITEMS TO BILL step), lines are seeded via `seedInvoiceLines` grouping consumption items per SKU, preserving any manual additions (`_manualQty`) when ticking/unticking consumptions.
 3. **Invoice Issuance**: Invoice PDF is generated via the Reports system and dispatched to the outlet's accounting department.
 
+The consumption draft keeps each new return and its stock movement together. Clearing the return or changing the outlet removes its old movement. Changing the return's invoice or warehouse flags rebuilds the movement even when its quantity stays the same.
+
+New returns are saved before their movements. Each movement uses its own return's position, such as `OutletReturns.records.0.Code`. Updates that link older returns to the new invoice use the separate `invoiceAdjustment` role and run after the invoice. Turning invoicing off removes those updates.
+
 ### 3.6 Returns (`OutletReturns`)
 
 1. A return linked to a source invoice must use an item listed on that invoice.

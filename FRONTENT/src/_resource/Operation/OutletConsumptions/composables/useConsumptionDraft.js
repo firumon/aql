@@ -1,13 +1,9 @@
-// The live Add draft for OutletConsumptions. Layer 2. The wizard's nodes ARE the batch:
-// the UI writes one column, the derives here regenerate every consequence, and submit only
-// validates (UI_PAGE_STATE_NODES.md §5.7A–§5.7D).
-
 import { useRecord } from 'src/composables/resources/useRecord'
 import { useAuth } from 'src/composables/core/useAuth'
 import { useResourceConfig } from 'src/composables/resources/useResourceConfig'
 import { toNumber, countRowsOf, positiveRows } from './useConsumptionStock'
 import { consumptionCompositeNode, buildConsumptionMovementsNode } from './useConsumptionPayload'
-import { buildConsumptionWorkflowChainNodes } from './useConsumptionWorkflow'
+import { buildConsumptionWorkflowChainNodes, RETURN_ADJUSTMENT_ROLE } from './useConsumptionWorkflow'
 import { makeLineTaxResolver } from './useConsumptionInvoice'
 import { returnsNode } from 'src/_resource/Operation/OutletReturns/composables/useReturnPayload'
 import { RESTOCK_CONTROL, restockNode } from 'src/_resource/Operation/OutletRestocks/composables/useRestockPayload'
@@ -32,10 +28,8 @@ const RESTOCK_ITEMS = 'OutletRestockItems'
 const RETURNS = 'OutletReturns'
 const STOCK_MOVEMENTS = 'StockMovements'
 
-/** The next visit is its own record beside the consumption, so it needs its own role. */
 export const CONSUMPTION_ROLE = { NEXT: 'next' }
 
-/** Working state only — never a sheet column. Each names the node it belongs to. */
 export const CONSUMPTION_CONTROL = {
   INVOICING: { header: 'invoicing' },
   RESTOCKING: { header: 'restocking' },
@@ -52,17 +46,13 @@ export const CONSUMPTION_CONTROL = {
   NEXT_VISIT_COMMENT: { header: 'NextVisitComment' }
 }
 
-/** One literal for both the toggle that queues the action and the chain that rebuilds it. */
 export const VISIT_COMPLETE_COMMENT = 'Completed along with consumption'
 
-// The action system derives this header from the column and outcome.
 export const VISIT_COMPLETE_COMMENT_FIELD = 'ProgressCompletedComment'
 
-/** What the live chain handed back, for submit to report and to land on. */
 export const CHAIN_SUCCESS = 'ChainSuccessMsg'
 export const CHAIN_OUTCOME = 'ChainOutcome'
 
-/** The chain's submit verdict, evaluated on every stroke so submit rebuilds nothing. */
 export const CHAIN_BLOCK = 'ChainBlock'
 
 const CTL = CONSUMPTION_CONTROL
@@ -88,7 +78,6 @@ const returnItemsOf = (pageState) =>
 const restockItemsOf = (pageState) =>
   positiveRows(pageState.getChildRows(RESTOCK_ITEMS, RESTOCKS), 'Quantity')
 
-/** One stored return row, in the shape the Layer 2 return builder reads it. */
 function returnMetaFrom (row) {
   return {
     Reason: text(row?.Reason) || 'DAMAGE',
@@ -101,11 +90,9 @@ function returnMetaFrom (row) {
   }
 }
 
-// The next visit's answers. Both the scheduling card and the completion card read them.
 export function nextVisitPlan (pageState, operatingRules = []) {
   const record = pageState.getRecord(null, CONSUMPTIONS) || {}
   const outletCode = text(record.OutletCode)
-  // The audit's own date is day zero — the same base the visit domain counts from.
   const base = text(record.Date) || new Date().toISOString().slice(0, 10)
 
   const frequency = visitFrequencyFor(outletCode, operatingRules)
@@ -117,14 +104,12 @@ export function nextVisitPlan (pageState, operatingRules = []) {
     ? `Planned after consumption on ${base}`
     : text(storedComment)
 
-  // 0 days plans nothing, but is a legitimate thing to type on the way to another number.
   const date = days > 0 ? visitDateFrom(base, days) : ''
   const wanted = getCtl(pageState, CTL.SCHEDULE_NEXT, true) === true
 
   return { outletCode, base, frequency, days, date, comment, wanted, willSchedule: wanted && !!date }
 }
 
-/** Every answer the master chain takes, read straight off the live nodes. */
 function chainInputs (pageState) {
   const form = pageState.getRecord(null, CONSUMPTIONS) || {}
   const outletStorages = storeRows('OutletStorages')
@@ -167,7 +152,6 @@ function chainInputs (pageState) {
     completeVisit: completingVisit,
     completeComment: text(pageState.getActions(
       'Complete', `fields.${VISIT_COMPLETE_COMMENT_FIELD}`, VISITS)) || VISIT_COMPLETE_COMMENT,
-    // The PLAN, not the node: a plan riding on Complete's own target has no node.
     scheduleNext: plan.willSchedule,
     nextVisit: pageState.hasNode(VISITS, CONSUMPTION_ROLE.NEXT)
       ? (pageState.getRecord(null, VISITS, CONSUMPTION_ROLE.NEXT) || {})
@@ -181,8 +165,6 @@ function chainInputs (pageState) {
   }
 }
 
-// The outlet's own shelf becomes the count sheet: one child per SKU it holds, starting at
-// zero. A different outlet is a different sheet, so what was found at the last one goes.
 export function applyConsumptionOutlet (outletCode, pageState) {
   const code = text(outletCode)
   if (!code) return
@@ -191,11 +173,12 @@ export function applyConsumptionOutlet (outletCode, pageState) {
 
   pageState.applyNodes(consumptionCompositeNode({ ...(pageState.getRecord(null, CONSUMPTIONS) || {}) }, lines))
   pageState.removeNode(RETURNS)
+  pageState.removeNode(OUTLET_MOVEMENTS)
+  pageState.removeNode(RETURNS, RETURN_ADJUSTMENT_ROLE)
+  chainDigests.delete(pageState)
   pageState.removeNode(RESTOCKS)
 }
 
-// The invoice node's EXISTENCE is the answer to "does this visit also bill", so one
-// function both raises it and drops it.
 function syncInvoiceNode (pageState) {
   const wanted = getCtl(pageState, CTL.INVOICING, true) === true && allowedTo(INVOICES, 'create')
   const sold = soldItemsOf(pageState)
@@ -203,10 +186,9 @@ function syncInvoiceNode (pageState) {
   if (!pageState.hasNode(INVOICES)) seedConsumptionInvoice(pageState, sold)
 }
 
-// The tax rows `$ref` the invoice's code, so they cannot outlive it. `applyNodes` only ever
-// adds or replaces, so a leg the answer retired has to be taken out by hand.
 export function dropInvoiceNodes (pageState) {
   pageState.removeNode(INVOICES)
+  pageState.removeNode(RETURNS, RETURN_ADJUSTMENT_ROLE)
   for (const at of INVOICE_DOCUMENT_COMPANIONS) pageState.removeNode(at.resource, at.role)
 }
 
@@ -218,7 +200,6 @@ function enforceToggles (pageState) {
   if (!completing) pageState.excludeAdditionalAction('Complete', { resource: VISITS })
 }
 
-// The two ledgers, kept live. Same builders the chain uses, so the preview cannot drift.
 function syncLedgerNodes (pageState) {
   const form = pageState.getRecord(null, CONSUMPTIONS) || {}
   const outletCode = text(form.OutletCode)
@@ -252,41 +233,39 @@ function syncLedgerNodes (pageState) {
     movements.find((node) => node.resource === OUTLET_MOVEMENTS) || null)
 }
 
-/** `ProgressCompletedAt`, `ProgressPlannedBy`, `ProgressInvoiceGeneratedComment`, … */
 const WORKFLOW_STAMP_KEY = /^Progress[A-Za-z]*(At|By|Comment)$/
 
-// Every answer re-derives the whole batch, so submit only validates. The digest stops the
-// loop, since the builder rewrites the nodes it reads.
-let lastDigest = ''
+const chainDigests = new WeakMap()
 
 export function syncConsumptionChain (pageState) {
   enforceToggles(pageState)
-  if (!soldItemsOf(pageState).length && !returnItemsOf(pageState).length) return
+  const returned = returnItemsOf(pageState)
+  if (!returned.length) pageState.removeNode(OUTLET_MOVEMENTS)
+  if (!soldItemsOf(pageState).length && !returned.length) {
+    chainDigests.delete(pageState)
+    return
+  }
 
   const args = chainInputs(pageState)
-  const digest = JSON.stringify(args, (key, value) => {
+  const digest = JSON.stringify({ args, returned }, (key, value) => {
     if (typeof value === 'function') return undefined
-    // The chain STAMPS the same record it reads its inputs from, and every stamp carries a
-    // fresh `new Date()`. Left in, the rebuild loops until Vue gives up.
     if (WORKFLOW_STAMP_KEY.test(key)) return undefined
     return value
   })
-  if (digest === lastDigest) return
+  if (digest === chainDigests.get(pageState)) return
 
-  // DRAFT mode while the wizard is being answered: the submit-only gates run but do not
-  // stop the build, so a half-filled wizard still gets the nodes it can.
   const nodes = buildConsumptionWorkflowChainNodes({ ...args, draft: true })
   if (!Array.isArray(nodes) || nodes.some((node) => node?.valid === false)) return
 
-  // The verdict rides on node one. Read and stripped here, so it never reaches a payload.
   const { chainBlock = '', ...first } = nodes[0] || {}
   const applied = pageState.applyNodes(nodes.length ? [first, ...nodes.slice(1)] : nodes)
   if (applied.valid === false) return
-  // Latched ONLY on success: latching before the apply froze the chain for the rest of the
-  // wizard whenever one pass failed.
-  lastDigest = digest
+  chainDigests.set(pageState, digest)
+  const hasReturnMovements = nodes.some((node) => node.resource === OUTLET_MOVEMENTS && !node.role)
+  if (!hasReturnMovements) pageState.removeNode(OUTLET_MOVEMENTS)
+  const hasReturnAdjustments = nodes.some((node) => node.resource === RETURNS && node.role === RETURN_ADJUSTMENT_ROLE)
+  if (!hasReturnAdjustments) pageState.removeNode(RETURNS, RETURN_ADJUSTMENT_ROLE)
 
-  // Nothing sold means no consumption row to write. The node's EXISTENCE is the answer.
   if (!soldItemsOf(pageState).length) pageState.removeNode(CONSUMPTIONS)
   enforceToggles(pageState)
 
@@ -295,21 +274,14 @@ export function syncConsumptionChain (pageState) {
   pageState.setControls(CHAIN_BLOCK, chainBlock)
 }
 
-// Every consequence the Add page has. The UI writes one column; the rest is regenerated
-// here, so the live nodes are always exactly the batch that would be sent.
 export function consumptionDraftDerivations () {
-  // ONE entry per source address. Two entries watching the same address collide in the
-  // derive registry and only one survives.
   const chain = (value, api) => syncConsumptionChain(api)
   const both = (value, api) => { syncLedgerNodes(api); syncConsumptionChain(api) }
 
   return [
-    // The count sheet follows the outlet. `immediate` so a deep link that arrives with an
-    // outlet already chosen still opens a sheet.
     { key: 'consumptionAdd:outlet', on: { resource: CONSUMPTIONS, record: 'OutletCode' }, immediate: true, handler: applyConsumptionOutlet },
     { key: 'consumptionAdd:seedToggles', on: { resource: CONSUMPTIONS, record: true }, immediate: true, handler: (value, api) => seedConsumptionToggles(api) },
 
-    // Both ledgers and the chain follow these five.
     { key: 'consumptionAdd:soldLines', on: { resource: CONSUMPTIONS, children: true }, handler: both },
     { key: 'consumptionAdd:returns', on: { resource: RETURNS, records: true }, handler: both },
     { key: 'consumptionAdd:restockItems', on: { resource: RESTOCKS, children: true }, handler: both },
@@ -318,7 +290,6 @@ export function consumptionDraftDerivations () {
     { key: 'consumptionAdd:markDelivered', on: { resource: RESTOCKS, control: RESTOCK_CONTROL.DELIVER }, handler: both },
     { key: 'consumptionAdd:warehouse', on: { resource: RESTOCKS, control: RESTOCK_CONTROL.WAREHOUSE }, handler: both },
 
-    // Chain only.
     { key: 'consumptionAdd:header', on: { resource: CONSUMPTIONS, record: true }, handler: chain },
     { key: 'consumptionAdd:invoicing', on: { control: CTL.INVOICING.header }, handler: chain },
     { key: 'consumptionAdd:invoice', on: { resource: INVOICES, record: true }, handler: chain },
@@ -343,13 +314,9 @@ function seedConsumptionToggles (pageState) {
   }
 }
 
-// The opening Add draft. Layer 3 applies it and lists no columns of its own.
 export function buildConsumptionInitNodes ({ outletCode = '', visitCode = '', actorName = '' } = {}) {
   const { user } = useAuth()
-  lastDigest = ''
 
-  // The derive rules are registered by the page contract, NOT carried on the node:
-  // replacing the consumption node would detach every one of them.
   return [consumptionCompositeNode({
     OutletCode: text(outletCode),
     OutletVisitCode: text(visitCode),
@@ -357,18 +324,12 @@ export function buildConsumptionInitNodes ({ outletCode = '', visitCode = '', ac
   }, [])]
 }
 
-// Why the wizard cannot be submitted, or '' when it can. The live rebuild already asked the
-// submit gates, so this only reads its verdict — it builds nothing.
 export function validateConsumptionDraft (pageState) {
   if (!soldItemsOf(pageState).length) {
     return 'No any items sold to proceed ..'
   }
   return text(pageState.getControls(CHAIN_BLOCK, ''))
 }
-
-// ─── Step transitions ─────────────────────────────────────────────────────────
-// Run when the officer LEAVES a step. Dropping a zeroed row on the keystroke that reached
-// zero would unmount it under their finger.
 
 function restockControlsOf (pageState) {
   return {
@@ -378,8 +339,6 @@ function restockControlsOf (pageState) {
   }
 }
 
-// Drop every zeroed line and rebuild each node from the survivors. A leg with nothing
-// left loses its node.
 export function settleConsumptionCount (pageState) {
   const sold = soldItemsOf(pageState)
   const returned = returnItemsOf(pageState)
@@ -397,12 +356,15 @@ export function settleConsumptionCount (pageState) {
   }
 
   if (returned.length) pageState.setResource(RETURNS, null, returnsNode(returned))
-  else pageState.removeNode(RETURNS)
+  else {
+    pageState.removeNode(RETURNS)
+    pageState.removeNode(OUTLET_MOVEMENTS)
+  }
+  chainDigests.delete(pageState)
 
   return { sold, returned, restocks }
 }
 
-// Decides only THAT there is an invoice. What is on it is the invoice domain's.
 export function seedConsumptionInvoice (pageState, sold) {
   const node = invoiceNodeForConsumption(
     pageState.getRecord(null, CONSUMPTIONS),
@@ -415,8 +377,6 @@ export function seedConsumptionInvoice (pageState, sold) {
   return !!node
 }
 
-// The restock answers stop changing here, so the node is rebuilt once and its derive
-// rules are dropped.
 export function settleConsumptionRestock (pageState) {
   if (getCtl(pageState, CTL.RESTOCKING, true) !== true) return pageState.removeNode(RESTOCKS)
   const kept = restockItemsOf(pageState)
@@ -425,7 +385,6 @@ export function settleConsumptionRestock (pageState) {
     { ...(pageState.getRecord(null, RESTOCKS) || {}) }, kept, restockControlsOf(pageState), { withDerive: false }))
 }
 
-/** Unsettled returns raised on an EARLIER visit, which the returns step also offers. */
 export function hasPendingConsumptionReturns (outletCode) {
   return storeRows('OutletReturns').some((row) =>
     text(row?.OutletCode) === text(outletCode) &&
@@ -440,7 +399,6 @@ export const consumptionSoldItems = soldItemsOf
 export const consumptionReturnItems = returnItemsOf
 export const consumptionRestockItems = restockItemsOf
 
-// Composable shape for setup-context callers. Same functions, one import (§5).
 export function useConsumptionDraft () {
   return {
     CONSUMPTION_ROLE,
