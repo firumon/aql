@@ -7,7 +7,7 @@ function handleStockMovementsBulkSave_afterBulk(payload, result, auth, action, m
       : (payload && Array.isArray(payload.records) ? payload.records : []);
     applyBatchStockMovementsToWarehouseStorages(records.map(toStorageMovement), auth);
   } catch (e) {
-    if (_activeBatchWritePlan) {
+    if (_activeBatchWritePlan && _activeBatchWritePlan.strict) {
       _activeBatchWritePlan.failure = e;
       throw e;
     }
@@ -20,7 +20,7 @@ function handleStockMovementsBulkSave_afterCreate(payload, result, auth, action,
     let record = meta && meta.savedRecord ? meta.savedRecord : null;
     if (record) applyStockMovementToWarehouseStorages(record, auth);
   } catch (e) {
-    if (_activeBatchWritePlan) {
+    if (_activeBatchWritePlan && _activeBatchWritePlan.strict) {
       _activeBatchWritePlan.failure = e;
       throw e;
     }
@@ -38,7 +38,7 @@ function applyStockMovementToWarehouseStorages(record, auth) {
     applyBatchStockMovementsToWarehouseStorages([toStorageMovement(record)], auth);
     return { success: true };
   } catch (e) {
-    if (_activeBatchWritePlan) {
+    if (_activeBatchWritePlan && _activeBatchWritePlan.strict) {
       _activeBatchWritePlan.failure = e;
       throw e;
     }
@@ -49,60 +49,67 @@ function applyStockMovementToWarehouseStorages(record, auth) {
 
 // Zero and negative balances are kept as rows so delta reads carry them to the app.
 function applyBatchStockMovementsToWarehouseStorages(records, auth) {
-  var aggregates = {};
+  let aggregates = {};
   (records || []).forEach(function (rec) {
     if (!rec) return;
-    var warehouseCode = (rec.warehouseCode || '').toString().trim();
-    var storageName = (rec.storageName || '').toString().trim();
-    var sku = (rec.sku || '').toString().trim();
-    var qtyChange = Number(rec.qtyChange);
+    let warehouseCode = (rec.warehouseCode || '').toString().trim();
+    let storageName = (rec.storageName || '').toString().trim();
+    let sku = (rec.sku || '').toString().trim();
+    let qtyChange = Number(rec.qtyChange);
     if (!warehouseCode || !storageName || !sku || !Number.isFinite(qtyChange) || qtyChange === 0) return;
-    var key = warehouseCode + '|' + storageName + '|' + sku;
+    let key = warehouseCode + '|' + storageName + '|' + sku;
     if (!aggregates[key]) aggregates[key] = { warehouseCode: warehouseCode, storageName: storageName, sku: sku, qtyChange: 0 };
     aggregates[key].qtyChange += qtyChange;
   });
 
-  var keys = Object.keys(aggregates);
+  let keys = Object.keys(aggregates);
   if (!keys.length) return;
 
-  var resource = openResourceSheet('WarehouseStorages');
-  var sheet = resource.sheet;
-  var config = resource.config;
-  var values = sheet.getDataRange().getValues();
-  var headers = values[0] || [];
-  var idx = getHeaderIndexMap(headers);
-  var updatedRows = {};
-  var newRows = [];
-  var batchContext = { configs: {}, rows: {}, nameToCodeMap: null };
-  var now = Date.now();
-  var userId = auth && auth.user ? (auth.user.UserID || '') : '';
+  let resource = openResourceSheet('WarehouseStorages');
+  let sheet = resource.sheet;
+  let config = resource.config;
+  let headers = getSheetHeadersByMeta(config.fileId, config.sheetName, sheet);
+  let lastRow = sheet.getLastRow();
+  let values = lastRow > 1 ? sheet.getRange(1, 1, lastRow, headers.length).getValues() : [headers];
+  let idx = getHeaderIndexMap(headers);
+  let updatedRows = {};
+  let newRows = [];
+  const codeValues = values.slice();
+  const rowByKey = new Map();
+  for (let i = 1; i < values.length; i++) {
+    const key = JSON.stringify([
+      (values[i][idx.WarehouseCode] || '').toString().trim(),
+      (values[i][idx.StorageName] || '').toString().trim(), (values[i][idx.SKU] || '').toString().trim()
+    ]);
+    if (!rowByKey.has(key)) rowByKey.set(key, i);
+  }
+  let batchContext = { configs: {}, rows: {}, nameToCodeMap: null };
+  let now = Date.now();
+  let userId = auth && auth.user ? (auth.user.UserID || '') : '';
 
   keys.forEach(function (key) {
-    var entry = aggregates[key];
+    let entry = aggregates[key];
     if (!entry.qtyChange) return;
-    var matchedIndex = -1;
-    for (var i = 1; i < values.length; i++) {
-      if ((values[i][idx.WarehouseCode] || '').toString().trim() === entry.warehouseCode &&
-          (values[i][idx.StorageName] || '').toString().trim() === entry.storageName &&
-          (values[i][idx.SKU] || '').toString().trim() === entry.sku) {
-        matchedIndex = i;
-        break;
-      }
-    }
+    const rowKey = JSON.stringify([entry.warehouseCode, entry.storageName, entry.sku]);
+    const matchedIndex = rowByKey.has(rowKey) ? rowByKey.get(rowKey) : -1;
     if (matchedIndex !== -1) {
-      var existing = values[matchedIndex].slice();
-      var nextQty = Number(existing[idx.Quantity] || 0) + entry.qtyChange;
+      let existing = values[matchedIndex].slice();
+      let nextQty = Number(existing[idx.Quantity] || 0) + entry.qtyChange;
       existing[idx.Quantity] = nextQty;
       if (idx.UpdatedAt !== undefined) existing[idx.UpdatedAt] = now;
       if (idx.Revision !== undefined) {
-        var curRev = Number(existing[idx.Revision]);
+        let curRev = Number(existing[idx.Revision]);
         existing[idx.Revision] = (!curRev || isNaN(curRev) || curRev < 0) ? 1 : curRev + 1;
       }
       if (idx.UpdatedBy !== undefined) existing[idx.UpdatedBy] = userId;
       updatedRows[matchedIndex] = existing;
     } else {
-      var newRow = new Array(headers.length).fill('');
-      if (idx.Code !== undefined) newRow[idx.Code] = generateNextCode(values.concat(newRows), idx, (config.codePrefix || 'LOC').toString().trim(), config.codeSequenceLength || 5);
+      let newRow = new Array(headers.length).fill('');
+      if (idx.Code !== undefined) {
+        newRow[idx.Code] = generateNextCode(
+          codeValues, idx, (config.codePrefix || 'LOC').toString().trim(), config.codeSequenceLength || 5
+        );
+      }
       if (idx.WarehouseCode !== undefined) newRow[idx.WarehouseCode] = entry.warehouseCode;
       if (idx.StorageName !== undefined) newRow[idx.StorageName] = entry.storageName;
       if (idx.SKU !== undefined) newRow[idx.SKU] = entry.sku;
@@ -112,16 +119,18 @@ function applyBatchStockMovementsToWarehouseStorages(records, auth) {
       if (idx.UpdatedAt !== undefined) newRow[idx.UpdatedAt] = now;
       if (idx.Revision !== undefined) newRow[idx.Revision] = 1;
       newRows.push(newRow);
+      codeValues.push(newRow);
     }
   });
 
-  Object.keys(updatedRows).forEach(function (rowIndexText) {
-    var rowIndex = parseInt(rowIndexText, 10);
+  const writtenRows = Object.keys(updatedRows).map(function (rowIndexText) {
+    let rowIndex = parseInt(rowIndexText, 10);
     sheet.getRange(rowIndex + 1, 1, 1, headers.length).setValues([updatedRows[rowIndex]]);
-  });
+    return updatedRows[rowIndex];
+  }).concat(newRows);
   if (newRows.length) sheet.getRange(sheet.getLastRow() + 1, 1, newRows.length, headers.length).setValues(newRows);
 
-  if (Object.keys(updatedRows).length || newRows.length) {
+  if (writtenRows.length) {
     updateResourceSyncCursor('WarehouseStorages', now);
   }
 }

@@ -6,7 +6,7 @@ function handleOutletMovementsBulkSave_afterBulk(payload, result, auth, action, 
     let records = meta && Array.isArray(meta.savedRecords) ? meta.savedRecords : (payload && Array.isArray(payload.records) ? payload.records : []);
     applyBatchOutletMovementsToOutletStorages(records, auth);
   } catch (e) {
-    if (_activeBatchWritePlan) {
+    if (_activeBatchWritePlan && _activeBatchWritePlan.strict) {
       _activeBatchWritePlan.failure = e;
       throw e;
     }
@@ -21,7 +21,7 @@ function handleOutletMovementsBulkSave_afterCreate(payload, result, auth, action
     let record = meta && meta.savedRecord ? meta.savedRecord : (payload && payload.record ? payload.record : null);
     if (record) applyOutletMovementToOutletStorages(record, auth);
   } catch (e) {
-    if (_activeBatchWritePlan) {
+    if (_activeBatchWritePlan && _activeBatchWritePlan.strict) {
       _activeBatchWritePlan.failure = e;
       throw e;
     }
@@ -57,25 +57,26 @@ function applyBatchOutletMovementsToOutletStorages(records, auth) {
     let resource = openResourceSheet('OutletStorages');
     let sheet = resource.sheet;
     let config = resource.config;
-    let values = sheet.getDataRange().getValues();
-    let headers = values[0] || [];
+    let headers = getSheetHeadersByMeta(config.fileId, config.sheetName, sheet);
+    let lastRow = sheet.getLastRow();
+    let values = lastRow > 1 ? sheet.getRange(1, 1, lastRow, headers.length).getValues() : [headers];
     let idx = getHeaderIndexMap(headers);
     let updatedRows = {};
     let newRows = [];
+    const codeValues = values.slice();
+    const rowByKey = new Map();
+    for (let i = 1; i < values.length; i++) {
+      const key = JSON.stringify([(values[i][idx.OutletCode] || '').toString().trim(), (values[i][idx.SKU] || '').toString().trim()]);
+      if (!rowByKey.has(key)) rowByKey.set(key, i);
+    }
     let now = Date.now();
     let userId = auth && auth.user ? (auth.user.UserID || '') : '';
 
     keys.forEach(function (key) {
       let entry = aggregates[key];
       if (!entry.qtyChange) return;
-      let matchedIndex = -1;
-      for (let i = 1; i < values.length; i++) {
-        if ((values[i][idx.OutletCode] || '').toString().trim() === entry.outletCode &&
-            (values[i][idx.SKU] || '').toString().trim() === entry.sku) {
-          matchedIndex = i;
-          break;
-        }
-      }
+      const rowKey = JSON.stringify([entry.outletCode, entry.sku]);
+      const matchedIndex = rowByKey.has(rowKey) ? rowByKey.get(rowKey) : -1;
       if (matchedIndex !== -1) {
         let existing = values[matchedIndex].slice();
         let nextQty = Number(existing[idx.Quantity] || 0) + entry.qtyChange;
@@ -90,7 +91,7 @@ function applyBatchOutletMovementsToOutletStorages(records, auth) {
       } else {
         let newRow = new Array(headers.length).fill('');
         if (idx.Code !== undefined) {
-          newRow[idx.Code] = generateNextCode(values.concat(newRows), idx,
+          newRow[idx.Code] = generateNextCode(codeValues, idx,
             (config.codePrefix || 'OST').toString().trim(), config.codeSequenceLength || 7);
         }
         if (idx.OutletCode !== undefined) newRow[idx.OutletCode] = entry.outletCode;
@@ -100,21 +101,23 @@ function applyBatchOutletMovementsToOutletStorages(records, auth) {
         if (idx.UpdatedAt !== undefined) newRow[idx.UpdatedAt] = now;
         if (idx.Revision !== undefined) newRow[idx.Revision] = 1;
         newRows.push(newRow);
+        codeValues.push(newRow);
       }
     });
 
-    Object.keys(updatedRows).forEach(function (rowIndexText) {
+    const writtenRows = Object.keys(updatedRows).map(function (rowIndexText) {
       let rowIndex = parseInt(rowIndexText, 10);
       sheet.getRange(rowIndex + 1, 1, 1, headers.length).setValues([updatedRows[rowIndex]]);
-    });
+      return updatedRows[rowIndex];
+    }).concat(newRows);
     if (newRows.length) sheet.getRange(sheet.getLastRow() + 1, 1, newRows.length, headers.length).setValues(newRows);
 
-    if (Object.keys(updatedRows).length || newRows.length) {
+    if (writtenRows.length) {
       updateResourceSyncCursor('OutletStorages', now);
     }
     return { success: true };
   } catch (e) {
-    if (_activeBatchWritePlan) {
+    if (_activeBatchWritePlan && _activeBatchWritePlan.strict) {
       _activeBatchWritePlan.failure = e;
       throw e;
     }
