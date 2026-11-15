@@ -1,4 +1,3 @@
-
 import { batchRef, textOrRef } from 'src/utils/appHelpers'
 import { toDateTime24 } from 'src/utils/dateHelpers'
 import {
@@ -25,13 +24,10 @@ const STOCK_MOVEMENTS = 'StockMovements'
 
 const REF_RETURN = 'OutletReturn'
 
-/** The batch path a movement created alongside a brand-new return chains its code off. */
 export const RETURN_REF_PATH = `${RESOURCE_NAME}.latest.code`
 
 const DEFAULT_STORAGE = '_default'
 
-// Stamped by GAS on every write. Echoing them back from a hydrated row would re-send the
-// creation audit as if it were an edit.
 const AUDIT_COLUMNS = ['Code', 'CreatedAt', 'CreatedBy', 'UpdatedAt', 'UpdatedBy', 'AccessRegion']
 
 const withoutAudit = (row) => {
@@ -49,7 +45,6 @@ const toNumber = (value) => {
 }
 const todayISO = () => new Date().toISOString().slice(0, 10)
 
-/** The `'TRUE'`/`'FALSE'` strings the sheet stores — never a native boolean. */
 const flag = (value) => (isFlagged(value) ? 'TRUE' : 'FALSE')
 
 export function returnQtyChange (qty, { invoiceRequired = false, warehouseRequired = false } = {}) {
@@ -59,7 +54,6 @@ export function returnQtyChange (qty, { invoiceRequired = false, warehouseRequir
   return 0
 }
 
-/** The same table read off a STORED row, for the cancellation reversal. */
 export function storedQtyChange (record) {
   const row = asRow(record)
   return returnQtyChange(row.Qty, {
@@ -68,8 +62,6 @@ export function storedQtyChange (record) {
   })
 }
 
-// `qtyChange` already carries its sign from `returnQtyChange`; the ledger takes a
-// magnitude plus a direction.
 const shelfDirection = (qtyChange) => (toNumber(qtyChange) < 0 ? OFF_THE_SHELF : ONTO_THE_SHELF)
 
 import { useAuth } from 'src/composables/core/useAuth'
@@ -80,8 +72,6 @@ import { effectivePriceListCode, priceFromList, resolveReturnUnitPrice } from '.
 import { resourceRow } from 'src/composables/resources/useResourceConfig'
 import { priceOf, priceListForOutlet } from 'src/_resource/Operation/OutletConsumptions/composables/useConsumptionStock'
 
-// ROW builder: one OutletReturns sheet row, with every column the domain can answer already
-// resolved — the credit price included. A return has no children, so a row is all it needs.
 export function returnRow (parent = {}, extra = {}) {
   const { user } = useAuth()
   const seed = { ...asRow(parent), ...asRow(extra) }
@@ -104,8 +94,6 @@ export function returnRow (parent = {}, extra = {}) {
   }, parent, extra, { Price: Math.round(price * 100) / 100 })
 }
 
-// NODE builder: the pageState many-node those rows sit on. A return carries no aggregate,
-// so there is nothing to derive.
 export function returnsNode (records = [], options = {}) {
   const rows = (Array.isArray(records) ? records : []).map((row) => returnRow(row, options.extra))
   return {
@@ -125,7 +113,6 @@ const OUTLET_MOVEMENTS = 'OutletMovements'
 const draftOf = (pageState) => asRow(pageState.getRecord(null, RESOURCE_NAME))
 const setDraft = (pageState, key, value) => pageState.setRecord(key, value, RESOURCE_NAME)
 
-// The one line a bill charges for a SKU, plus the list it was billed on.
 function invoiceLineFor (invoiceCode, sku, excludeReturnCode = '') {
   const code = text(invoiceCode)
   if (!code) return null
@@ -157,8 +144,6 @@ function invoiceLineFor (invoiceCode, sku, excludeReturnCode = '') {
   }
 }
 
-// Price from the chosen list, filling only what nobody has claimed. A bill-linked draft is
-// never repriced: its figures came off the invoice, and a list may not argue with it.
 function repriceDraft (pageState) {
   const draft = draftOf(pageState)
   if (text(draft.SourceInvoiceCode)) return
@@ -172,7 +157,6 @@ function repriceDraft (pageState) {
   setDraft(pageState, 'Price', toNumber(price))
 }
 
-// A new outlet bills on its own list, and the old bill was never issued to it.
 function applyReturnOutlet (outletCode, pageState) {
   setDraft(pageState, 'SourceInvoiceCode', '')
   const list = effectivePriceListCode(outletCode)
@@ -185,7 +169,6 @@ function applyReturnSku (sku, pageState) {
   repriceDraft(pageState)
 }
 
-// Picking or clearing a source invoice reshapes the draft. Runs as the node's `derive`.
 export function applyReturnSourceInvoice (invoiceCode, pageState, excludeReturnCode = '') {
   if (!pageState) return
   const code = text(invoiceCode)
@@ -209,13 +192,10 @@ export function applyReturnSourceInvoice (invoiceCode, pageState, excludeReturnC
   pageState.setControls(PRICE_TOUCHED_CONTROL, false, RESOURCE_NAME)
 }
 
-// A return that credits nothing carries no bill. Writing '' twice is a no-op, so this and
-// the source-invoice handler settle each other rather than looping.
 function applyReturnInvoiceTrack (required, pageState) {
   if (!isFlagged(required)) setDraft(pageState, 'SourceInvoiceCode', '')
 }
 
-// Stock only needs a destination while it is actually leaving the shelf.
 export function applyReturnWarehouseTrack (required, pageState) {
   if (!isFlagged(required)) {
     setDraft(pageState, 'WarehouseCode', '')
@@ -225,14 +205,10 @@ export function applyReturnWarehouseTrack (required, pageState) {
   setDraft(pageState, 'WarehouseCode', text(useWarehouseResource().mainWarehouse.value?.code))
 }
 
-// Progress is a FUNCTION of the two track flags, so it is re-derived on the live node.
-// Submit no longer builds a record, so nothing else would ever set it.
 function syncReturnDraftProgress (pageState) {
   setDraft(pageState, 'Progress', deriveReturnProgress(draftOf(pageState)))
 }
 
-// The shelf movement is a NODE. Its existence IS the answer to "does this return move
-// stock", so it is created and dropped as the draft changes, never at submit.
 function syncReturnDraftMovement (pageState, stored = null) {
   const draft = draftOf(pageState)
   const was = asRow(stored)
@@ -240,8 +216,6 @@ function syncReturnDraftMovement (pageState, stored = null) {
   const outletCode = text(draft.OutletCode) || text(was.OutletCode)
   const sku = text(draft.SKU)
 
-  // An edit moves the DIFFERENCE, never the whole: the units already on the ledger stay
-  // there, and only what the correction changed is written.
   const qtyChange = returnQtyChange(draft.Qty, {
     invoiceRequired: isFlagged(draft.InvoiceAdjustmentRequired),
     warehouseRequired: isFlagged(draft.WarehouseActionRequired)
@@ -259,20 +233,16 @@ function syncReturnDraftMovement (pageState, stored = null) {
     qty: qtyChange,
     direction: shelfDirection(qtyChange),
     referenceType: OUTLET_REFERENCE.RETURN,
-    // On Add the return does not exist yet; GAS resolves the ref to its generated code.
     referenceCode: editing ? text(was.Code) : batchRef(RETURN_REF_PATH),
     movementDate: editing ? todayISO() : (text(draft.Date) || todayISO())
   })))
 }
 
-// Progress for an ACTION route: the node holds only the columns that change, so the
-// verdict is asked of the stored row with those changes laid over it.
 function syncReturnActionProgress (pageState, stored) {
   const merged = { ...asRow(stored), ...draftOf(pageState) }
   setDraft(pageState, 'Progress', deriveReturnProgress(merged))
 }
 
-/** Whichever stamp pair the disposition writes. The other is blanked, never left stale. */
 function warehouseStampPair (action, actorName) {
   const now = toDateTime24(new Date())
   const actor = text(actorName)
@@ -281,7 +251,6 @@ function warehouseStampPair (action, actorName) {
     : { WarehouseActionStockedAt: now, WarehouseActionStockedBy: actor, WarehouseActionDisposedAt: '', WarehouseActionDisposedBy: '' }
 }
 
-// A disposal writes stock off; only a stocking puts units back on a warehouse shelf.
 function syncReturnStockMovement (pageState, stored) {
   const was = asRow(stored)
   const draft = draftOf(pageState)
@@ -303,13 +272,7 @@ function syncReturnStockMovement (pageState, stored) {
   })]))
 }
 
-// Every consequence the Add page has, declared once. The UI writes ONE column per
-// interaction; everything that follows from it is regenerated here, so the live nodes are
-// always exactly the batch that would be sent.
 export function returnDraftDerivations ({ movement = true, stored = null } = {}) {
-  // Every entry names its resource. `usePageStateDerive.sourceFor` resolves the address
-  // itself and does NOT inherit it from the node the entry travelled on, so an entry
-  // without `resource` silently watches a blank node and never fires.
   const on = (spec) => ({ ...spec, resource: RESOURCE_NAME })
 
   return [
@@ -326,8 +289,6 @@ export function returnDraftDerivations ({ movement = true, stored = null } = {})
   ]
 }
 
-// Why a draft cannot be submitted, or '' when it can. The ONE rule set: the create builder
-// asks it too, so the headless bulk path and the page can never disagree.
 export function validateReturnDraft (record = {}, { requireTrack = true, excludeCode = '' } = {}) {
   const entry = asRow(record)
 
@@ -356,24 +317,19 @@ export function validateReturnDraft (record = {}, { requireTrack = true, exclude
   return ''
 }
 
-// The blank Add draft, its controls and every rule that keeps it true. Layer 3 applies it.
 export function buildReturnInitNodes ({ actorName = '', outletCode = '' } = {}) {
   const { user } = useAuth()
 
   return [{
     resource: RESOURCE_NAME,
-    // The sheet's own DefaultValues first; only what the PAGE decides is passed in.
     record: resourceRow(RESOURCE_NAME, {
       Date: todayISO(),
       Username: text(actorName) || text(user.value?.name || user.value?.email),
       OutletCode: text(outletCode),
       SKU: '',
-      // Not in DefaultValues yet — belongs in syncAppResources.gs beside the others.
       Reason: 'DAMAGE',
       ReasonComment: '',
       WarehouseCode: '',
-      // The page's opening STANCE, deliberately not the sheet's default: a return is logged
-      // one unit at a time, and its stock usually does leave the shelf.
       Qty: 1,
       WarehouseActionRequired: flag(true)
     }),
@@ -406,8 +362,6 @@ export function buildReturnCreateNodes ({ form = {}, resolvedPrice = 0, actorNam
     ReasonComment: text(entry.ReasonComment),
     InvoiceAdjustmentRequired: flag(invoiceRequired),
     InvoiceAdjustmentDone: 'FALSE',
-    // Only ever populated by the invoice chain, never at creation: a return carries a
-    // SETTLEMENT invoice code once an invoice has actually credited it.
     ConsumptionInvoiceCode: '',
     SourceInvoiceCode: invoiceRequired ? text(entry.SourceInvoiceCode) : '',
     WarehouseActionRequired: flag(warehouseRequired),
@@ -418,7 +372,6 @@ export function buildReturnCreateNodes ({ form = {}, resolvedPrice = 0, actorNam
     Status: 'Active'
   }
 
-  // Asked of the row as it will be STORED — not of the form.
   record.Progress = deriveReturnProgress(record)
 
   const nodes = [{ resource: RESOURCE_NAME, record: record, permissions: { create: 'You are not allowed to create this outlet return.' }}]
@@ -432,7 +385,6 @@ export function buildReturnCreateNodes ({ form = {}, resolvedPrice = 0, actorNam
       qty: qtyChange,
       direction: shelfDirection(qtyChange),
       referenceType: OUTLET_REFERENCE.RETURN,
-      // The return does not exist yet; GAS resolves this to its generated code (§9.4).
       referenceCode: batchRef(RETURN_REF_PATH),
       movementDate: record.Date
     })))
@@ -441,16 +393,12 @@ export function buildReturnCreateNodes ({ form = {}, resolvedPrice = 0, actorNam
   return nodes
 }
 
-// Which list this return was priced on. `OutletReturns` has no PriceListCode column, so it
-// is recovered: the linked bill's list if there is one, else the outlet's effective list.
 function storedPriceListCode (stored) {
   const row = asRow(stored)
   const fromInvoice = invoiceLineFor(row.SourceInvoiceCode, row.SKU)
   return text(fromInvoice?.priceListCode) || text(effectivePriceListCode(row.OutletCode))
 }
 
-// The Edit draft: the stored row, its controls and every rule that keeps it true. The
-// derivations carry the stored row so the shelf movement writes the DIFFERENCE.
 export function buildReturnEditNodes ({ record = {} } = {}) {
   const stored = asRow(record)
   const code = text(stored.Code)
@@ -463,11 +411,7 @@ export function buildReturnEditNodes ({ record = {} } = {}) {
   return [{
     resource: RESOURCE_NAME,
     code: textOrRef(code),
-    // Progress is stated at mount as well as re-derived on change, so an edit that alters
-    // nothing still corrects a row whose stored state predates the current matrix.
     record: { ...withoutAudit(resourceRow(RESOURCE_NAME, stored)), Progress: deriveReturnProgress(stored) },
-    // The stored price is the figure that was recorded, so it counts as typed: nothing may
-    // re-price a correction someone already made.
     controls: { [PRICE_LIST_CONTROL]: storedPriceListCode(stored), [PRICE_TOUCHED_CONTROL]: true },
     derive: returnDraftDerivations({ stored }),
     reload: ['OutletStorages'],
@@ -478,30 +422,28 @@ export function buildReturnEditNodes ({ record = {} } = {}) {
 
 export function buildReturnBulkCreateNodes ({ lines = [], actorName = '', movementDate = '' } = {}) {
   const entries = asList(lines).map(asRow).filter((line) => text(asRow(line.form).SKU))
-  if (!entries.length) return [
-    
-  ]
+  if (!entries.length) return []
 
   const records = []
   const movements = []
 
   for (const line of entries) {
+    const returnIndex = records.length
     const built = buildReturnCreateNodes({
       form: line.form,
       resolvedPrice: line.resolvedPrice,
       actorName,
-      // A consumption surplus line may credit nothing and move nothing; the count is still
-      // a physical fact the officer wrote down, and `PendingReturns.vue` already flags it.
       requireTrack: false
     })
-    // Bubble the child's own message rather than restating it (§9.3).
     if (built[0]?.valid === false) return built
 
-    // Unwrap the per-line requests back into the two bulk collections. The builder is the
-    // one that decided every column and every sign; this only regroups them.
     for (const node of built) {
       if (node.resource === RESOURCE_NAME) records.push(node.record)
-      else movements.push({ ...node.record, MovementDate: text(movementDate) || node.record.MovementDate })
+      else movements.push({
+        ...node.record,
+        ReferenceCode: batchRef(`${RESOURCE_NAME}.records.${returnIndex}.Code`),
+        MovementDate: text(movementDate) || node.record.MovementDate
+      })
     }
   }
 
@@ -511,8 +453,6 @@ export function buildReturnBulkCreateNodes ({ lines = [], actorName = '', moveme
   return nodes
 }
 
-// The warehouse-action draft. The disposition, its stamp pair and the warehouse receipt
-// node all stand on the live node from mount, and follow the operator's choice from there.
 export function buildReturnWarehouseActionInitNodes ({ record = {}, actorName = '' } = {}) {
   const row = asRow(record)
   const code = text(row.Code)
@@ -539,8 +479,6 @@ export function buildReturnWarehouseActionInitNodes ({ record = {}, actorName = 
     record: update,
     reload: ['WarehouseStorages'],
     derive: [
-      // The stamp records the moment the operator DECIDED, and the other pair is blanked
-      // so a switched answer cannot leave the previous one behind.
       { key: 'returnWa:disposition', on: on({ record: 'WarehouseAction' }), immediate: false,
         handler: (action, api) => api.setRecord(null, warehouseStampPair(action, actorName), RESOURCE_NAME) },
       { key: 'returnWa:record', on: on({ record: true }), immediate: false,
@@ -550,8 +488,6 @@ export function buildReturnWarehouseActionInitNodes ({ record = {}, actorName = 
     successMsg: 'Warehouse action confirmed.'
   }]
 
-  // The default disposition STOCKS the units, and a derive only fires on a CHANGE — so the
-  // receipt stands from mount. Switching to Disposed removes it again.
   if (text(row.WarehouseCode)) {
     nodes.push(...buildStockMovementNodes([stockMovementRow({
       warehouseCode: row.WarehouseCode,
@@ -567,7 +503,6 @@ export function buildReturnWarehouseActionInitNodes ({ record = {}, actorName = 
   return nodes
 }
 
-/** Why a warehouse action cannot be confirmed, or '' when it can. */
 export function validateReturnWarehouseActionDraft (draft = {}) {
   const entry = asRow(draft)
   if (text(entry.WarehouseAction) === DISPOSED && !text(entry.WarehouseActionDisposedReason)) {
@@ -576,8 +511,6 @@ export function validateReturnWarehouseActionDraft (draft = {}) {
   return ''
 }
 
-// The settlement draft. `ConsumptionInvoiceCode` is left blank for the card to fill from
-// its invoice match — blank means the credit was settled outside the invoice cycle.
 export function buildReturnMarkInvoiceAdjustedInitNodes ({ record = {} } = {}) {
   const row = asRow(record)
   const code = text(row.Code)
@@ -606,19 +539,14 @@ export function buildReturnMarkInvoiceAdjustedInitNodes ({ record = {} } = {}) {
 
 export function buildReturnInvoiceAdjustmentLinkedNodes ({ returnRows = [], invoiceCode = null, actorName = '' } = {}) {
   const rows = asList(returnRows).map(asRow).filter((row) => text(row.Code))
-  if (!rows.length) return [
-    
-  ]
+  if (!rows.length) return []
 
-  // One bulk, not one update per row: a node is addressed by resource, so several
-  // single-record nodes for OutletReturns would collapse onto each other.
   const records = rows.map((row) => {
     const update = {
       Code: text(row.Code),
       InvoiceAdjustmentDone: 'TRUE',
       ConsumptionInvoiceCode: textOrRef(invoiceCode)
     }
-    // Per row, against that row's own warehouse track — never one verdict for the batch.
     update.Progress = deriveReturnProgress({ ...row, ...update })
     return update
   })
@@ -631,9 +559,7 @@ export function buildReturnInvoiceAdjustmentLinkedNodes ({ returnRows = [], invo
 export function buildReturnInvoiceCreditReversalNodes ({ returnRows = [] } = {}) {
   const rows = asList(returnRows).map(asRow)
     .filter((row) => text(row.Code) && !isCancelled(row))
-  if (!rows.length) return [
-    
-  ]
+  if (!rows.length) return []
 
   return [
     { resource: RESOURCE_NAME, many: true, records: rows.map((row) => {
@@ -644,11 +570,6 @@ export function buildReturnInvoiceCreditReversalNodes ({ returnRows = [] } = {})
   ]
 }
 
-// The cancellation draft. The reversal depends only on the STORED row, so it stands from
-// mount; the reason is the one thing the operator adds.
-//
-// `role` addresses both nodes, so a caller cancelling SEVERAL returns in one batch does not
-// collapse them onto one address. `reason` lets a cascade write its own explanation.
 export function buildReturnCancelInitNodes ({ record = {}, reason = '', role = '' } = {}) {
   const row = asRow(record)
   const code = text(row.Code)
@@ -657,8 +578,6 @@ export function buildReturnCancelInitNodes ({ record = {}, reason = '', role = '
   if (!code) return [{ valid: false, message: 'Return code is missing.' }]
   if (isCancelled(row)) return [{ valid: false, message: 'This return is already cancelled.' }]
 
-  // The reason lives on the record itself: `OutletReturns` has no ProgressCancelled columns,
-  // so a stamp here would be silently dropped by GAS.
   const nodes = [{
     resource: RESOURCE_NAME,
     ...at,
@@ -686,12 +605,10 @@ export function buildReturnCancelInitNodes ({ record = {}, reason = '', role = '
   return nodes
 }
 
-/** Why a cancellation cannot be committed, or '' when it can. */
 export function validateReturnCancelDraft (draft = {}) {
   return text(asRow(draft).ReasonComment) ? '' : 'A cancellation reason is required.'
 }
 
-// Composable shape for setup-context callers. Same functions, one import (§5).
 export function useReturnPayload () {
   return {
     RETURN_REF_PATH,
