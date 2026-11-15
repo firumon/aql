@@ -32,6 +32,10 @@ in `GAS/syncAppResources.gs`. There are no per-view Props files or card helpers 
 Their existing `Data/useList.js` files keep row selection and add final display fields.
 These include joined names, location text, response age, due text, and delay colors.
 The sheet links to those fields. It does not repeat their calculations or fallbacks.
+Processing shows the contact person as a meta label and non-empty phone numbers
+joined with a comma as a caption. Draft, Rejected, Later, and Approved use a meta
+caption for the contact person. Recently Followed Up, Old Leads, and all follow-up
+chips use outlines.
 The source files list each display field in their required data-file header.
 
 Changing the seed does not update existing sheet cells. The sync protects populated
@@ -43,9 +47,10 @@ before the frontend is deployed without the old display overrides.
 All six PurchaseRequisitions views and all four RFQs views have `item` settings in
 `GAS/syncAppResources.gs`. They use the existing source fields and add no display fields.
 Both use the same `caption,label,caption` main layout, with Code as the main label.
-Requisitions show PRDate, Username, Type, Priority, Progress, and RequiredDate.
-RFQs show RFQDate, User, PurchaseRequisitionCode, Progress, and QuotationSubmissionDeadline.
-The side area uses a progress label above its date caption. Its text color follows the view's progress color.
+Requisitions show PRDate, Username, Type, Priority, and RequiredDate.
+RFQs show RFQDate, User, PurchaseRequisitionCode, and QuotationSubmissionDeadline.
+Each view selects one progress value, so its rows do not repeat that value.
+The side area shows its one date value as a chip and keeps its progress color.
 Row filtering and sorting stay in each resource's existing `Data/useList.js`.
 
 ### Other purchase list seed settings
@@ -53,11 +58,29 @@ Row filtering and sorting stay in each resource's existing `Data/useList.js`.
 Procurements, SupplierQuotations, PurchaseOrders, and POReceivings also have `item`
 settings for all 15 named views in `GAS/syncAppResources.gs`. They use existing source
 fields only. Code is the main label. The captions show their existing dates, users,
-linked document codes, suppliers, or receiving details. Their side areas use a progress
-label and a second caption. Raw Progress maps supply colors where one view has several states.
+linked document codes, suppliers, or receiving details. A single side value uses a chip.
+A progress label is shown only when the view can hold more than one progress value.
+Raw Progress maps supply colors where one view has several states.
 Filtering stays in each resource's `Data/useList.js`. Procurements uses the shared filter
 evaluator for its three row rules, with the same case, missing-value, and source-order
 behavior as its former sheet filters. The Procurements seed has no row filters.
+
+### Progress shown by the list name
+
+The seeds leave out a row progress chip or label when the source rule fixes that
+progress for the whole list. This applies to the single-progress purchase lists,
+Outlet Deliveries Completed and Cancelled, and Outlet Returns Submitted, Completed,
+and Cancelled. The two Awaiting Outlet Returns lists also leave out their fixed
+Awaiting Credit and Awaiting Stock chips, which repeat the list purpose.
+
+Mixed-progress lists keep their progress text. These include Recent lists,
+Procurements InFlight, Outlet Restocks PendingCompletion, and Purchase Orders Open,
+Receiving, and Completed. Purchase Orders Completed includes GRN_GENERATED,
+COMPLETED, and CLOSED. Its name alone does not tell the row's exact progress.
+
+Age, delay, due-date, and amount chips stay. These are sheet display choices; the
+engine does not hide a progress value on its own. Existing filled sheet cells need
+the changed JSON saved in Manage Lists. Sign in again to load the saved config.
 
 ## 2. Full OutletVisits example
 
@@ -189,7 +212,7 @@ Each pair is aligned by index when built from the per-kind templates.
 - Extra templates are ignored.
 
 When layout is missing, Content uses `['caption', 'label']`.
-Meta uses `['chip', 'caption', 'label']`, or `['chip', 'badge', 'caption', 'label']` when `metaBadge` is set.
+Meta starts with `['label', 'caption']`, then adds `chip` and `badge` when supplied.
 Setting only a custom layout still uses automatic labels and captions for any missing
 template setting. There is no header-based label or caption inference.
 
@@ -202,8 +225,8 @@ The sheet layouts accept only the named slot kinds above, not component objects.
 
 ### A clean side area with two values
 
-When a row needs two bits of side information, `metaLabel` above `metaCaption` often
-lines up more neatly than a chip beside or above plain text. For example:
+List seeds use `metaLabel` above `metaCaption` when the side area has more than
+one value. For example:
 
 ```json
 {
@@ -212,10 +235,25 @@ lines up more neatly than a chip beside or above plain text. For example:
 }
 ```
 
-This is a useful design choice, not a required rule. The Recent consumption-invoice
-view uses this pattern for progress and age. A single short tag can still use a chip.
-Use a chip with other text when it fits the page well. `metaColor` colors the label
-and caption; remove chip-only settings when a layout no longer uses a chip.
+The seeds use this same rule for every resource:
+
+- One meta value uses `metaChip`.
+- More than one meta value uses `metaLabel` and `metaCaption`.
+- Seeds avoid badges. They do not mix chips with text when showing several values.
+
+Recent Outlet Deliveries, Outlet Restocks, and Outlet Returns show progress as the
+label and age as the caption. Recent consumption invoices use the same pair.
+Partially Paid consumption invoices show the formatted payable balance as the meta
+label and due text as the caption. The balance is not repeated in the main text.
+This pair uses the default meta layout, so the seed leaves out `metaLayout`.
+`metaColor` follows the progress color for both text values. Chip and badge style
+keys are left out when the seed has no chip or badge. For a single value, use
+`chipColor` to keep its color.
+
+These are seed display rules. The core engine and Manage Lists still support all
+meta slot types, including badges, for saved custom views. The engine does not
+switch types based on a row's empty values. Changing code seeds does not replace
+filled sheet cells. Save the new view JSON in Manage Lists, then sign in again.
 
 ## 5. Text templates and field paths
 
@@ -399,6 +437,11 @@ An object keeps the settings below. The Manage Lists **Inline actions** control
 shows a saved `false` as off. Turning it off saves `actions: false` in the preview
 and JSON. Turning it on clears `false` and makes the action fields available.
 
+The Outlet Payments seeds keep eligible actions on Recent and Pending Approval,
+but exclude `Cancel` on both. Overdue Invoices, Outlets, Completed Payments, and
+Cancelled Payments use `actions: false`. The Add row targets on Overdue Invoices
+and Outlets still open payment entry with their existing query values.
+
 94Actions accepts only the five output props below. Other keys are ignored.
 The JavaScript Actions override stays a plain object with only those five props.
 Root `actions: false` skips that override, leaves no action props, and cannot be
@@ -488,6 +531,13 @@ The same query controls work for same-resource and cross-resource targets, inclu
 To open another resource, add `resource`. The old `OutletPayments` OverdueInvoices view maps
 `outletCode` from `outletCode` and `invoiceCode` from `code`. Its Outlets view maps
 `outletCode` from `code`.
+
+Outlet Consumptions uses `actions: false` on all five seeded lists. Its Invoiceable
+rows open Add for `OutletConsumptionInvoices`. The target maps `outletCode` from
+`OutletCode` and `consumptionCode` from `Code`. The invoice add page uses these
+query values to preselect the outlet and consumption. Its outlet picker reapplies
+the chosen consumption after loading its data. No invoice is saved by the row click.
+The other list targets keep their own settings.
 
 At click time, the target reads each path with `readField`. A direct field such as `Progress`
 and a relation path such as `$outlet.Code` both work. It sends the values as `params.query` to
