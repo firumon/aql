@@ -51,9 +51,6 @@ function syncAppResourcesFromCode() { CORE_LIB.syncAppResourcesFromCode(); }
 function recalculateAllResourcesLastDataUpdatedAtAndNotify() { CORE_LIB.recalculateAllResourcesLastDataUpdatedAtAndNotify(); }
 function regenerateAppCacheAndNotify() { CORE_LIB.regenerateAppCacheAndNotify(); }
 
-// --- Diagnostics (run from the Apps Script editor, never as a cell formula) ---
-function diagCacheHealth() { return CORE_LIB.diagCacheHealth(); }
-
 // --- Setup & Refactor Submenu ---
 function setupAppSheets() { CORE_LIB.setupAppSheets(); }
 function setAppFileId() { CORE_LIB.setAppFileId(); }
