@@ -346,17 +346,30 @@ The local batch engine uses a prepared write plan. See [GAS_PATTERNS.md](GAS_PAT
 
 A ticket is optional and must be at most 100 characters from `[A-Za-z0-9_-]`. Invalid or missing tickets take the untracked path. Both paths use the same per-file write plan.
 
-State uses `CacheService` key `FT_<formTicket>` with a 1800 second TTL. It holds `initiated`, `lastUpdatedAt`, `finished`, `resources`, `queue`, `processing`, `completed`, `refs`, `requestHash`, `phase` and `committedFiles`. The hash binds the user ID and request array. Rows and full responses are not cached.
+State uses `CacheService` key `FT_<formTicket>` with a 1800 second TTL. It holds `initiated`, `lastUpdatedAt`, `finished`, `resources`, `queue`, `processing`, `completed`, `refs`, `requestHash`, `phase`, `committedFiles`, `attemptedFiles`, `failedFiles`, `unconfirmedFiles` and `unconfirmedFile`. The hash binds the user ID and request array. Rows and full responses are not cached.
 
 During preparation, all pending step indices remain in `processing`. `completed` and `refs` are updated only after every file commit succeeds. A failed check discards the prepared rows and returns failed step responses without unsaved row deltas.
 
 - `finished`: return a replay response and read fresh deltas, with no write.
 - `ready`: a failed preparation may restart with the unchanged submission.
 - `preparing`: a fresh heartbeat can return `inProgress`; a stale preparation may restart.
-- `committing` or `review`: do not auto-resume. Return `retryUnsafe` and the confirmed file IDs. A lost response can mean that the file was saved.
+- `committing` or `review`: do not auto-resume. Return `retryUnsafe` and all stored file outcome lists. A lost response can mean that any file in the sent group was saved.
 - A changed hash is rejected. Older unfinished tickets with completed steps also require review.
 
-The failure envelope preserves `retryUnsafe`, `committedFiles` and `unconfirmedFile` in `data.result`. These fields describe per-file outcomes. They do not promise rollback across files or durable replay protection. Cache loss, expiry, first-arrival races and clients without tickets remain limits.
+The failure envelope preserves these fields in `data.result` for batch and staged standalone writes:
+
+| Field | Meaning |
+|---|---|
+| `retryUnsafe` | Review the save before retrying. A write was sent or its result may be uncertain. |
+| `attemptedFiles` | File IDs marked for sending. The ticket records them before the HTTP call, so an interrupted call may not have sent every one. |
+| `committedFiles` | File IDs with successful replies that match the requested file. |
+| `failedFiles` | File IDs with an HTTP 4xx reply, except 408. The server rejected that file request. |
+| `unconfirmedFiles` | File IDs without a known outcome. This includes lost replies, HTTP 408/5xx replies and invalid success replies. Any of them may have saved. |
+| `unconfirmedFile` | Kept for older callers. The first unconfirmed file, or the first failed file when no file is unconfirmed. Use the lists for multi-file saves. |
+
+Business files are sent in groups of at most eight. GAS reads all replies in a group before reporting failure. The entire `APP.Resources` file is sent only after all other changed files succeed, even when it also holds business rows. No later group is sent after a failure. Uncertain writes are not retried by the commit code.
+
+These fields do not promise rollback across files or durable replay protection. Cursor cache changes are published only after every file succeeds. Cache loss, expiry, first-arrival races and clients without tickets remain limits.
 
 ---
 

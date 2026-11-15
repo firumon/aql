@@ -81,9 +81,9 @@ The local GAS source prepares batch records in memory. Later steps read those pr
 
 After all steps pass, `commitBatchWritePlan` sends all changed tabs in each file in one `spreadsheets.batchUpdate` call. Grid growth, row values and hooks join that call. Google documents this call as atomic within one file: [Sheets batchUpdate](https://developers.google.com/workspace/sheets/api/reference/rest/v4/spreadsheets/batchUpdate).
 
-- Each file is a separate save unit. There is no cross-file rollback.
-- The file holding `APP.Resources` commits last. When business rows share that file, they join the same call as its sync dates.
-- Cursor cache changes from prepared rows are held until all file commits succeed. On failure, they are dropped. Earlier files can have saved rows without new APP cursor values; the error lists the confirmed file IDs. Review those files and reload source records before retry.
+- Each file is a separate save unit. There is no cross-file rollback. Business files are sent through `fetchAll` in groups of at most eight. Each group must succeed before the next group is sent.
+- The whole file holding `APP.Resources` commits last, after all other changed files report success. When business rows share that file, they join the same call as its sync dates. A single-file save still uses one atomic call.
+- Cursor cache changes from prepared rows are held until all file commits succeed. On failure, they are dropped. Some business files can have saved rows without new APP cursor values. GAS checks every reply in a group, even if another reply failed. It does not send later groups or retry uncertain writes. Review all sent files and reload source records before retry.
 - Allowed batch actions are `get`, `create`, `update`, `bulk`, `compositeSave`, `executeAction` and `record`. Nested batches, profile changes, reports and archive actions are rejected before record writes.
 - Staged PostActions are limited to the checked stock, outlet, warehouse transfer and procurement hooks named in `dispatchPostActionHook`. A caught hook error stops the batch. An unsupported hook is rejected before commit. Standalone writes keep their existing hook behavior.
 - Prepared formula values are not recalculated in memory. A read in the batch does not prove that sheet formulas reflect its pending writes.
@@ -97,10 +97,34 @@ When a ticket is supplied, GAS keeps its state in `CacheService` for 1800 second
 - A ticket with a changed request hash is rejected.
 - Steps are marked completed only after all file commits succeed.
 - A stale preparation can restart because its rows were not written. A failed validation can also restart with the same unchanged request.
-- A ticket in `committing` or `review` cannot auto-resume. The write may have reached Sheets. The response carries `retryUnsafe`, `committedFiles` and `unconfirmedFile` in `data.result`.
+- A ticket in `committing` or `review` cannot auto-resume. The write may have reached Sheets. Before each group is sent, the ticket records all its file IDs as unconfirmed. Replies update the saved outcome lists. A lost connection leaves every file in that group unconfirmed. The response keeps these lists in `data.result`; see [GAS_API_CAPABILITIES.md](GAS_API_CAPABILITIES.md) for the field meanings.
 - Cache eviction, expiry, simultaneous first arrivals and clients without tickets remain limits. This is not durable, exactly-once storage.
 
 These changes are local source work. Live proof requires an explicitly requested GAS update and checks on the approved dummy-data target. No deployment is implied by these docs.
+
+---
+
+## Read batching and safe fallbacks
+
+Cold header warming groups row-1 ranges by spreadsheet file. It uses the Sheets `values.batchGet` endpoint through `UrlFetchApp.fetchAll`, with at most eight HTTP requests per group of calls. Long range lists are split before the URL reaches 1800 characters. File opens and live column-width checks still use `SpreadsheetApp`.
+
+- Memory, CacheService and permanent metadata hits keep the existing path. A forced rebuild skips all three cache tiers.
+- Pending native sheet writes are flushed before API header reads. The fast path is skipped while a batch write plan is active, or when only one sheet needs headers.
+- Only text header rows use the API result. Short rows are padded to the live column width with empty strings. Non-text headers, empty or malformed API results, and failed requests fall back to the native reader for the affected sheets.
+- Successful reads still fill the same caches. Header warming keeps its per-sheet failure handling and its count of persisted headers.
+
+Exact `record` reads and batch row preloads can join nearby requested rows across one skipped row. A join across a gap is allowed only when the resulting range has at most 4096 cells. Wider gaps stay separate. These reads still use the native reader and the batch sheet view, so date objects, blank cells and pending writes keep their existing handling. As with other plan reads, loaded cells remain in memory for that plan; concurrent external edits are not isolated.
+
+Multi-resource `get` reads check read access and unchanged cursors first. The remaining tabs share a read plan. Their bounded ranges are grouped by file and read through `spreadsheets.get` with cell values and number-format types. At most eight HTTP requests run in one `fetchAll` group. Each request covers at most 50000 cells and stays below 1800 URL characters. Larger tabs use the native reader.
+
+- Text, finite numbers and booleans keep their native value types. Missing trailing cells and rows are filled with empty strings to the live range bounds.
+- Date/time formats, including the file's default format, need the native reader. Cell errors, unknown value types, invalid replies and failed HTTP calls also use that reader for the affected tab. A whole tab is checked before any API cells enter the plan.
+- An active write plan is reused. Loaded cells and pending writes win over API values. A standalone multi-read uses a local plan only for that read. Single-resource `get` and exact `record` lookups keep native cell reads.
+- The row filters, access rules, response headers and delta rules still use the existing resource handlers. The Drive check for an unchanged delta read remains in place. These reads do not give a shared snapshot across files.
+
+Write preparation reads each changed file's grid capacity and time zone once through the Sheets metadata API. A missing or invalid result falls back to native metadata. This data is kept only for that call. Sheet identity and the used row/column bounds still come from live native reads. New rows still use the write plan's last row, including its pending rows. No long-lived `lastRow`, `sheetId` or grid-size cache is added, so cache rebuild and tab-recreation rules stay the same.
+
+The Sheets API supplies the value and format fields used by the read path: [spreadsheets.get](https://developers.google.com/workspace/sheets/api/reference/rest/v4/spreadsheets/get) and [CellData](https://developers.google.com/workspace/sheets/api/reference/rest/v4/spreadsheets/cells).
 
 ---
 
