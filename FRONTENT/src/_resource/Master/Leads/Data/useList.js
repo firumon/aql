@@ -2,6 +2,7 @@
  * Selects Leads rows for the pipeline tabs and adds final display values.
  * displayLeadName: Name, then Code.
  * displayLeadPlace: City and Area joined for one caption.
+ * displayLeadPhones: non-empty phone numbers joined with a comma.
  * displayLeadContact: the first contact person, then the second.
  * displayLeadAge: created age in days or rounded months after 99 days.
  * displayLeadAgeColor: negative after 99 days, otherwise amber-8.
@@ -27,6 +28,7 @@ function present (rows) {
     return decorateRow(lead, {
       displayLeadName: lead?.Name || lead?.Code || '',
       displayLeadPlace: [lead?.City, lead?.Area].filter(Boolean).join(' • '),
+      displayLeadPhones: [lead?.Phone1, lead?.Phone2].filter(value => String(value ?? '').trim()).join(', '),
       displayLeadContact: lead?.ContactPerson1 || lead?.ContactPerson2 || '',
       displayLeadAge: count === null ? '' : `${count} ${unit}${count === 1 ? '' : 's'}`,
       displayLeadAgeColor: (days ?? 0) > 99 ? 'negative' : 'amber-8',
