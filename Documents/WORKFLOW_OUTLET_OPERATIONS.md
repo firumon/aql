@@ -61,7 +61,7 @@ activity colors, and recent-stream lists keep their existing activity window.
 
 ### 3.2 Sales Visits & Shelf Audits (`OutletVisits`)
 
-The Today list shows active visits dated today or earlier. The oldest visit dates appear first.
+Today keeps PLANNED visits dated today or earlier, plus any visit with RespondDate today. A visit responded today stays in the list after its Progress changes. Rows sort by Date from newest to oldest; RespondDate does not change the order.
 
 1. **Check-in**: Field representative checks in at the retail outlet via the PWA.
 2. **Visual Stock Audit**: Checks physical display quantity for each active SKU.

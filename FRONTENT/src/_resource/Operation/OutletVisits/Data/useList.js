@@ -1,3 +1,21 @@
+/**
+ * OutletVisits list rules and response delay labels.
+ *
+ * Reads:
+ *   OutletVisits rows: Date, RespondDate, Progress; prepared respondDelayDays.
+ *
+ * Exposes:
+ *   default - returns all rows.
+ *   Today - planned rows through today and visits responded today; sorted by Date descending.
+ *   Overdue - planned rows dated before today.
+ *   Tomorrow - planned rows dated tomorrow.
+ *   Upcomings - planned rows dated after tomorrow.
+ *   Completed - completed rows with a response delay label.
+ *   Postponed - postponed rows with a response delay label.
+ *   Cancelled - cancelled rows with a response delay label.
+ *
+ * Controls: none.
+ */
 import {
   isPlanned,
   daysUntilVisit,
@@ -8,7 +26,7 @@ import {
 } from '../composables/useVisitProgress'
 import { decorateRow } from 'src/utils/appHelpers'
 import { sortByDate } from 'src/utils/sortHelpers'
-import { isActiveRow } from './_shared'
+import { daysFromToday } from 'src/utils/dateHelpers'
 
 function presentResponse (rows) {
   return rows.map(row => {
@@ -29,10 +47,13 @@ function all (base) {
 
 function today (base) {
   const due = base.filter(row => {
-    const days = daysUntilVisit(row)
-    return isActiveRow(row) && days !== null && days <= 0
+    const visitDays = daysUntilVisit(row)
+    return (
+      (isPlanned(row) && visitDays !== null && visitDays <= 0) ||
+      daysFromToday(row?.RespondDate) === 0
+    )
   })
-  return sortByDate(due, 'Date')
+  return sortByDate(due, 'Date', 'desc')
 }
 
 function overdue (base) {
