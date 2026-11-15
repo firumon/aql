@@ -1,11 +1,18 @@
 {
   "timeZone": "Asia/Dubai",
   "dependencies": {
+    "enabledAdvancedServices": [
+      {
+        "userSymbol": "Sheets",
+        "version": "v4",
+        "serviceId": "sheets"
+      }
+    ],
     "libraries": [
       {
         "userSymbol": "AqlCore",
         "libraryId": "1qTNMNpdGwfF3zr-53KqWtM5ibM2bblHiHBIIwB3aJtX3k-82jMLmIiPg",
-        "version": "49",
+        "version": "52",
         "developmentMode": false
       }
     ]
