@@ -8,6 +8,10 @@ This document describes the current operation-scope sheet families and their rol
 - `PurchaseRequisitionItems.Status` uses `Active` and `Inactive`. Edit keeps saved item codes and deactivates removed items through the composite save.
 - Apply both columns through the operation schema refactor. Older rows may have a blank `Username`; do not replace it with the name of an editor.
 
+## RFQ fields
+- `RFQs.User` stores the RFQ creator or owner username. Older rows may have a blank `User`.
+- `RFQs.DefaultQuotationSubmissionDays` in `APP.Resources.Settings` stores the default quotation submission deadline window in days (default: 14).
+
 ## Current Operation Resources
 - `Procurements`
 - `PurchaseRequisitions`

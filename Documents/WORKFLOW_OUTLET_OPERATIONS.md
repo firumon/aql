@@ -116,7 +116,9 @@ New returns are saved before their movements. Each movement uses its own return'
 - **Domain Logic Layer**: Pure business logic, progress helpers, and payload builders live under `FRONTENT/src/_resource/Operation/{OutletResource}/`.
 - **Presentation Layer**: Custom UI overrides, multi-step wizards, and action handlers live under `FRONTENT/src/_ui/AQL/components/Operation/{OutletResource}/`.
 - **Form State**: Add, Edit, and workflow pages manage dirty state and submission via `UI_PAGE_STATE.md`.
-- **Batch Operations**: Multi-record write actions (e.g. delivery creation and item handoffs) execute atomically via `useResourceIoStore.runBatchRequests`.
+- **Batch Operations**: The frontend builds the ordered requests. GAS prepares rows and resolves their `$ref` values before writing. Each spreadsheet file is saved in one atomic Sheets API call. There is no rollback across files. See [GAS_PATTERNS.md](GAS_PATTERNS.md).
+- **Stock Rows**: Movement writes keep `WarehouseStorages` and `OutletStorages` rows when the balance reaches zero or becomes negative. The same row and code are used for later movements. A screen may hide zero balances.
+- **Logic Placement**: Keep business calculations and workflow choices in the frontend. Use GAS for data access, code generation, access checks and write validation. Add pre/post hooks only when the work cannot be handled safely in the frontend. Existing stock hooks still update storage balances.
 
 ---
 
