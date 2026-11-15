@@ -1,58 +1,55 @@
 const JSON_MIME_TYPE = ContentService.MimeType.JSON;
 let _activeBatchWritePlan = null;
+const GAS_PERFORMANCE_LOGGING = false;
+let _requestMetrics = null;
+const STAGED_POST_ACTIONS = [
+  'handleStockMovementsBulkSave', 'handleOutletMovementsBulkSave',
+  'handleWarehouseTransfers', 'handleWarehouseTransferItems', 'linkProcurementCodeToPurchaseRequisition'
+];
 
 function doPost(e) {
-  var request;
-  var result = { success: false, message: 'Invalid request' };
-
+  let request;
+  let result;
+  const startedAt = Date.now();
+  _requestMetrics = GAS_PERFORMANCE_LOGGING ? { planReadMs: 0, planReadCalls: 0, planReadCells: 0, commitMs: 0, commitCalls: 0 } : null;
   try {
     request = normalizeIncomingRequest(parseRequestPayload(e));
-    var action = (request.action || '').toString().trim();
-
-    if (!action) {
-      return jsonResponse(buildErrorEnvelope(request, 'Action is required'));
-    }
-
-    // Public actions
+    const action = (request.action || '').toString().trim();
+    if (!action) return jsonResponse(buildErrorEnvelope(request, 'Action is required'));
+    const authStartedAt = Date.now();
     if (action === 'login') {
       result = handleLogin(request.payload.email, request.payload.password);
-      return jsonResponse(buildApiEnvelope(request, result));
+      if (_requestMetrics) _requestMetrics.loginMs = Date.now() - authStartedAt;
+    } else {
+      const proof = verifySessionProof(request.token, request.sessionKey);
+      if (_requestMetrics) _requestMetrics.authMs = Date.now() - authStartedAt;
+      if (!proof.ok) return jsonResponse(buildErrorEnvelope(request, 'Unauthorized / ' + proof.message, proof.resync));
+      const authContext = proof.auth;
+      authContext.token = request.token;
+      const actionStartedAt = Date.now();
+      result = dispatchProtectedAction(action, authContext, request.payload);
+      if (_requestMetrics) _requestMetrics.actionMs = Date.now() - actionStartedAt;
     }
-
-    // Protected actions
-    // The session proof carries the full auth context, so a verified request
-    // needs no user lookup at all.
-    var proof = verifySessionProof(request.token, request.sessionKey);
-    if (!proof.ok) {
-      return jsonResponse(buildErrorEnvelope(request, 'Unauthorized / ' + proof.message, proof.resync));
-    }
-
-    var authContext = proof.auth;
-    authContext.token = request.token;
-
-    result = dispatchProtectedAction(action, authContext, request.payload);
-  } catch (err) {
-    if (!request) {
-      request = {
-        requestId: Utilities.getUuid(),
-        action: '',
-        resource: '',
-        payload: {},
-        token: '',
-        sessionKey: ''
-      };
-    }
-    return jsonResponse(buildErrorEnvelope(request, err && err.message ? err.message : String(err)));
+    const envelopeStartedAt = Date.now();
+    const response = jsonResponse(buildApiEnvelope(request, result));
+    if (_requestMetrics) _requestMetrics.responseMs = Date.now() - envelopeStartedAt;
+    return response;
+  } catch (error) {
+    return jsonResponse(buildErrorEnvelope(request, error && error.message ? error.message : String(error)));
   } finally {
-    // Read paths queue sync-cursor bumps instead of writing one CacheService key
-    // at a time. Flush them as a single batch, on every exit path including the
-    // early returns above.
+    const flushStartedAt = Date.now();
     try {
       if (typeof flushPendingCursorWrites === 'function') flushPendingCursorWrites();
-    } catch (flushErr) { /* never let a cache flush break the response */ }
+    } catch (error) {}
+    if (_requestMetrics) {
+      _requestMetrics.cursorFlushMs = Date.now() - flushStartedAt;
+      _requestMetrics.totalMs = Date.now() - startedAt;
+      _requestMetrics.requestId = request ? request.requestId : '';
+      _requestMetrics.action = request ? request.action : '';
+      try { console.log(JSON.stringify({ gasPerformance: _requestMetrics })); } catch (error) {}
+    }
+    _requestMetrics = null;
   }
-
-  return jsonResponse(buildApiEnvelope(request, result));
 }
 
 function normalizeIncomingRequest(raw) {
@@ -266,6 +263,7 @@ function normalizeActionData(action, requestResource, requestPayload, rawResult)
   let artifacts = {};
 
   if (action === 'batch') {
+    const headersRequested = new Set();
     let requests = Array.isArray(requestPayload && requestPayload.requests) ? requestPayload.requests : [];
     let rawItems = Array.isArray(rawResult && rawResult.data) ? rawResult.data : [];
     result.responses = rawItems.map(function (entry, index) {
@@ -274,10 +272,12 @@ function normalizeActionData(action, requestResource, requestPayload, rawResult)
         requestId: subReq.requestId || Utilities.getUuid(),
         action: (subReq.action || '').toString().trim(),
         resource: subReq.resource || '',
-        payload: subReq
+        payload: Object.assign({}, subReq, { includeHeaders: true })
       };
       let envelope = buildApiEnvelope(normalizedReq, entry || { success: false, message: 'Empty batch item result' });
-      mergeResourcePayloadMap(resources, envelope && envelope.data ? envelope.data.resources : {});
+      const subResources = envelope && envelope.data ? envelope.data.resources : {};
+      if (subReq.includeHeaders === true) Object.keys(subResources).forEach(function(name) { headersRequested.add(name); });
+      mergeResourcePayloadMap(resources, subResources);
       if (envelope && envelope.data && envelope.data.resources) {
         delete envelope.data.resources;
       }
@@ -294,17 +294,23 @@ function normalizeActionData(action, requestResource, requestPayload, rawResult)
         let delta = deltas[resourceName];
         if (!delta || !Array.isArray(delta.rows)) return;
         deltaPayloads[resourceName] = buildResourcePayload(
-          resourceName, delta.rows, delta.meta, delta.headers, requestPayload
+          resourceName, delta.rows, delta.meta, delta.headers, { includeHeaders: true }
         );
       });
       mergeResourcePayloadMap(resources, deltaPayloads);
     }
+    Object.keys(resources).forEach(function(name) {
+      if ((!requestPayload || requestPayload.includeHeaders !== true) && !headersRequested.has(name)) delete resources[name].headers;
+    });
     return { resources: resources, result: result, artifacts: {} };
   }
 
   extractResourcePayloads(resources, requestResource, rawResult, requestPayload);
 
-  let topLevelResultKeys = ['token', 'user', 'resources', 'appConfig', 'avatarUrl', 'name', 'email', 'archived'];
+  let topLevelResultKeys = [
+    'token', 'user', 'resources', 'appConfig', 'avatarUrl', 'name', 'email', 'archived',
+    'retryUnsafe', 'committedFiles', 'unconfirmedFile'
+  ];
   topLevelResultKeys.forEach(function (key) {
     if (rawResult && rawResult[key] !== undefined) {
       result[key] = rawResult[key];
@@ -427,19 +433,19 @@ function extractResourcePayloads(target, requestResource, rawResult, requestPayl
   if (!rawResult || typeof rawResult !== 'object') return;
 
   if (Array.isArray(rawResult.rows)) {
-    var singleName = resolveRequestedResourceName(requestResource, rawResult.meta);
+    let singleName = resolveRequestedResourceName(requestResource, rawResult.meta);
     if (singleName) {
-      target[singleName] = buildResourcePayload(singleName, rawResult.rows, rawResult.meta, null, requestPayload);
+      target[singleName] = buildResourcePayload(singleName, rawResult.rows, rawResult.meta, rawResult.headers, requestPayload);
     }
   }
 
-  var data = rawResult.data;
+  let data = rawResult.data;
   if (!data || typeof data !== 'object' || Array.isArray(data)) {
     return;
   }
 
   if (Array.isArray(data.rows)) {
-    var dataName = resolveRequestedResourceName(requestResource, data.meta || rawResult.meta);
+    let dataName = resolveRequestedResourceName(requestResource, data.meta || rawResult.meta);
     if (dataName) {
       target[dataName] = buildResourcePayload(dataName, data.rows, data.meta || rawResult.meta, data.headers, requestPayload);
     }
@@ -447,15 +453,17 @@ function extractResourcePayloads(target, requestResource, rawResult, requestPayl
 
   if (data.resources && typeof data.resources === 'object' && !Array.isArray(data.resources)) {
     Object.keys(data.resources).forEach(function (resourceName) {
-      var resourcePayload = data.resources[resourceName];
+      let resourcePayload = data.resources[resourceName];
       if (resourcePayload && typeof resourcePayload === 'object' && Array.isArray(resourcePayload.rows)) {
-        target[resourceName] = buildResourcePayload(resourceName, resourcePayload.rows, resourcePayload.meta, resourcePayload.headers, requestPayload);
+        target[resourceName] = buildResourcePayload(
+          resourceName, resourcePayload.rows, resourcePayload.meta, resourcePayload.headers, requestPayload
+        );
       }
     });
   }
 
   Object.keys(data).forEach(function (key) {
-    var value = data[key];
+    let value = data[key];
     if (!value || typeof value !== 'object' || Array.isArray(value)) return;
 
     if (Array.isArray(value.rows)) {
@@ -511,6 +519,24 @@ function stripResourceFields(data) {
 }
 
 function dispatchProtectedAction(action, auth, data) {
+  const writeAction = isCanonicalCrudVerb(action) ? action.toLowerCase() : action;
+  if (!_activeBatchWritePlan && ['create', 'update', 'bulk', 'compositeSave', 'executeAction'].indexOf(writeAction) !== -1) {
+    let config = null;
+    try {
+      const rawName = writeAction === 'bulk'
+        ? ((data && data.targetResource) || (hasResourceSelector(data) ? resolveResourceName(data) : ''))
+        : ((writeAction === 'compositeSave' || writeAction === 'executeAction')
+          ? (data && data.resource ? String(data.resource).trim() : '')
+          : (hasResourceSelector(data) ? resolveResourceName(data) : ''));
+      if (rawName) config = getResourceConfig(rawName);
+    } catch (error) {
+      config = null;
+    }
+    if (config && (!config.postAction || STAGED_POST_ACTIONS.indexOf(config.postAction) !== -1)) {
+      const request = Object.assign({}, data, { action: writeAction });
+      return runBatchQueue(auth, data, [request], null, null, null, true);
+    }
+  }
   if (isGenericCrudAction(action, data)) {
     return dispatchResourceCrudAction(action, auth, data);
   }
@@ -679,9 +705,6 @@ function createFormTicketState(requests) {
   };
 }
 
-// The queue holds step indexes, not step bodies. A retry always resends the same
-// requests array under the same ticket, so keeping the bodies would only push the
-// cached state past its size budget for nothing.
 function readFormTicketState(cache, cacheKey, requestCount) {
   try {
     let raw = cache.get(cacheKey);
@@ -835,7 +858,7 @@ function buildFormTicketReplayResult(auth, payload, requests, state) {
   };
 }
 
-function runBatchQueue(auth, payload, requests, cache, cacheKey, state) {
+function runBatchQueue(auth, payload, requests, cache, cacheKey, state, standalone) {
   if (_activeBatchWritePlan) return { success: false, message: 'Nested batches are not supported.', data: [] };
   const allowed = ['get', 'create', 'update', 'bulk', 'compositeSave', 'executeAction', 'record'];
   const unsupported = requests.find(function(request) { return !request || allowed.indexOf(request.action) === -1; });
@@ -843,13 +866,16 @@ function runBatchQueue(auth, payload, requests, cache, cacheKey, state) {
     return { success: false, message: 'Batch supports resource reads and writes only.', data: [] };
   }
   const tracked = !!state;
-  state = state || createFormTicketState(requests);
+  state = state || (standalone
+    ? { queue: requests.map(function(_, index) { return index; }), processing: [], completed: [], refs: {} }
+    : createFormTicketState(requests));
   const pending = state.queue.slice();
-  const plan = createBatchWritePlan();
+  const plan = createBatchWritePlan(!standalone);
+  const prepareStartedAt = Date.now();
   const cursorSnapshot = Object.assign({}, _resource_cursor_cache);
   const pendingCursorSnapshot = Object.assign({}, _pending_cursor_writes);
-  const batchContext = createBatchContext();
-  seedBatchContextFromRefs(batchContext, state.refs);
+  const batchContext = standalone ? null : createBatchContext();
+  if (!standalone) seedBatchContextFromRefs(batchContext, state.refs);
   const liveResults = {};
   const prepared = [];
   let failure = null;
@@ -864,9 +890,14 @@ function runBatchQueue(auth, payload, requests, cache, cacheKey, state) {
       let resolvedReq;
       let stepResult;
       try {
-        resolvedReq = resolveBatchReferencesDeep(requests[index], batchContext);
+        resolvedReq = standalone ? requests[index] : resolveBatchReferencesDeep(requests[index], batchContext);
         stepResult = dispatchProtectedAction(resolvedReq.action, auth, resolvedReq);
         if (plan.failure) throw plan.failure;
+        if (!standalone && stepResult && stepResult.data && Array.isArray(stepResult.data.errors) && stepResult.data.errors.length) {
+          stepResult = {
+            success: false, message: 'Bulk save failed. The batch was not written.', errors: stepResult.data.errors
+          };
+        }
       } catch (error) {
         stepResult = { success: false, message: error.message || String(error) };
       }
@@ -874,7 +905,7 @@ function runBatchQueue(auth, payload, requests, cache, cacheKey, state) {
         failure = { index, result: stepResult || { success: false, message: 'Batch action failed.' } };
         break;
       }
-      updateBatchContextFromResult(batchContext, resolvedReq, stepResult);
+      if (!standalone) updateBatchContextFromResult(batchContext, resolvedReq, stepResult);
       const code = extractStepCode(stepResult);
       prepared.push({
         index, action: resolvedReq.action, resource: resolvedReq.resource || '',
@@ -886,14 +917,16 @@ function runBatchQueue(auth, payload, requests, cache, cacheKey, state) {
     if (!failure) {
       state.phase = 'committing';
       if (tracked) stampFormTicketState(cache, cacheKey, state);
+      if (_requestMetrics) _requestMetrics.prepareMs = Date.now() - prepareStartedAt;
       commitBatchWritePlan(plan);
       state.completed = state.completed.concat(prepared);
-      refreshResolvedRefs(state.refs, batchContext);
+      if (!standalone) refreshResolvedRefs(state.refs, batchContext);
       state.processing = [];
       state.finished = true;
       state.phase = 'committed';
       state.committedFiles = plan.committedFiles.slice();
       if (tracked) stampFormTicketState(cache, cacheKey, state);
+      if (standalone) return liveResults[0];
       return {
         success: true, message: 'Batch actions completed successfully',
         data: buildFormTicketStepResults(requests, state, liveResults)
@@ -909,6 +942,9 @@ function runBatchQueue(auth, payload, requests, cache, cacheKey, state) {
       Object.assign(_pending_cursor_writes, stagedCursorWrites);
       Object.keys(plan.cursors).forEach(function(name) {
         _pending_cursor_writes[buildResourceCursorCacheKey(name)] = String(plan.cursors[name]);
+        if (_resource_config_map_cache && _resource_config_map_cache[name]) {
+          _resource_config_map_cache[name].lastDataUpdatedAt = plan.cursors[name];
+        }
       });
     } else {
       _resource_cursor_cache = cursorSnapshot;
@@ -931,6 +967,14 @@ function runBatchQueue(auth, payload, requests, cache, cacheKey, state) {
       errors: failure && Array.isArray(failure.result.errors) ? failure.result.errors : []
     };
   });
+  if (standalone) {
+    if (!retryUnsafe && !plan.committedFiles.length && !plan.unconfirmedFile) {
+      return failure ? failure.result : { success: false, message: 'Batch not saved.' };
+    }
+    return Object.assign({}, failure ? failure.result : { success: false, message: 'Batch not saved.' }, {
+      retryUnsafe, committedFiles: plan.committedFiles.slice(), unconfirmedFile: plan.unconfirmedFile || ''
+    });
+  }
   return {
     success: false, retryUnsafe, committedFiles: plan.committedFiles.slice(), unconfirmedFile: plan.unconfirmedFile || '',
     message: failure ? failure.result.message : 'Batch not saved.', data: results
@@ -958,15 +1002,6 @@ function resolveBatchReferencesDeep(value, batchContext) {
     if (keys.length === 1 && value.$ref !== undefined) {
       return resolveBatchReferencePath(batchContext, value.$ref);
     }
-    // A $ref JOINED to literal codes already known to the caller — e.g. an invoice
-    // bundling the consumption this batch is about to create together with several
-    // earlier ones, whose column holds a comma-separated list.
-    //
-    // The join happens HERE, on resolution, rather than in the frontend: the transport
-    // contract forbids stringifying or concatenating a $ref payload object
-    // (CORE_ARCHITECTURE_RULES §3), because a client-side concatenation would have to
-    // guess the code before the batch has created the record. The literals are plain
-    // strings; only the unresolved half is a reference.
     if (value.$ref !== undefined && Array.isArray(value.$append)) {
       var head = resolveBatchReferencePath(batchContext, value.$ref);
       var separator = value.$separator === undefined ? ',' : String(value.$separator);
@@ -1016,36 +1051,18 @@ function resolveBatchReferencePath(batchContext, refPath) {
 
 function updateBatchContextFromResult(batchContext, request, rawResult) {
   updateBatchContextFromRawResources(batchContext, rawResult);
+  if (rawResult && Array.isArray(rawResult.rows) && rawResult.meta && rawResult.meta.resource) {
+    updateBatchContextResourceFromPayload(batchContext, rawResult.meta.resource, rawResult);
+  }
 
-  var actionResourceName = request && request.resource
+  let actionResourceName = request && request.resource
     ? (Array.isArray(request.resource) ? request.resource[0] : request.resource)
     : '';
-  var actionScalarCode = rawResult && rawResult.data && typeof rawResult.data === 'object' && !Array.isArray(rawResult.data)
+  let actionScalarCode = rawResult && rawResult.data && typeof rawResult.data === 'object' && !Array.isArray(rawResult.data)
     ? (rawResult.data.parentCode || rawResult.data.code || '').toString().trim()
     : '';
   if (actionResourceName && actionScalarCode) {
     ensureBatchContextResource(batchContext, actionResourceName).latest.code = actionScalarCode;
-  }
-
-  var normalizedReq = {
-    requestId: request && request.requestId ? request.requestId : Utilities.getUuid(),
-    action: request && request.action ? request.action : '',
-    resource: request && request.resource ? request.resource : '',
-    payload: request || {}
-  };
-  var envelope = buildApiEnvelope(normalizedReq, rawResult || {});
-  var resourcePayloads = envelope && envelope.data && envelope.data.resources ? envelope.data.resources : {};
-  Object.keys(resourcePayloads).forEach(function (resourceName) {
-    updateBatchContextResourceFromPayload(batchContext, resourceName, resourcePayloads[resourceName]);
-  });
-
-  var result = envelope && envelope.data && envelope.data.result ? envelope.data.result : {};
-  if (request && request.resource) {
-    var scalarCode = (result.parentCode || result.code || '').toString().trim();
-    if (scalarCode) {
-      var resourceName = Array.isArray(request.resource) ? request.resource[0] : request.resource;
-      ensureBatchContextResource(batchContext, resourceName).latest.code = scalarCode;
-    }
   }
 }
 
@@ -1097,7 +1114,6 @@ function ensureBatchContextResource(batchContext, resourceName) {
   }
   return batchContext.resources[name];
 }
-
 
 function hasResourceSelector(payload) {
   if (!payload || typeof payload !== 'object') {
@@ -1183,32 +1199,15 @@ function handlePollAction(auth, payload) {
   const cursors = payload && payload.cursors ? payload.cursors : {};
   const updatedResources = [];
 
-  // Stamp the cursor BEFORE reading any resource state. If the stamp were taken
-  // after evaluation, a write landing mid-evaluation would carry a
-  // LastDataUpdatedAt earlier than the returned serverTime; the client would
-  // then advance its unchanged-resource cursor past that write and never see it.
   const serverTime = Date.now();
 
-  // Live cursors come from the dedicated cursor store (CacheService keyed by
-  // spreadsheet id + resource), NOT from the frozen resource config snapshot.
-  // The config snapshot is cached permanently and its lastDataUpdatedAt goes
-  // stale the moment any write lands, which is what made every poll report
-  // zero updates.
   const resourceNames = Object.keys(cursors);
   const serverCursors = getResourceSyncCursors(resourceNames) || {};
 
-  // Resolve readable resources ONCE for the whole heartbeat. Calling
-  // enforceMasterPermission per resource rebuilt the permission catalog on every
-  // iteration, and the surrounding try/catch cost a console.warn RPC for each
-  // resource the user cannot read — on a poll that fires every 30s.
   const roleIds = auth && Array.isArray(auth.roleIds) ? auth.roleIds : [];
   const readable = getReadableResourceNameSet(roleIds);
 
   resourceNames.forEach(function (resourceName) {
-    // Mirror enforceMasterPermission exactly: catalog membership first, then
-    // the hasRolePermission fallback for resources the catalog omits (inactive,
-    // or IncludeInAuthorizationPayload=FALSE). Skipping straight to the set
-    // alone would silently stop reporting updates for those resources.
     if (!readable[resourceName] && !hasRolePermission(roleIds, resourceName, 'canRead')) return;
 
     const clientCursor = Number(cursors[resourceName]) || 0;
@@ -1228,21 +1227,88 @@ function handlePollAction(auth, payload) {
   };
 }
 
-function createBatchWritePlan() {
-  return { files: new Map(), sheets: new Map(), state: 'open', committedFiles: [], cursors: {}, cursorFileId: '' };
+function createBatchWritePlan(strict) {
+  return {
+    files: new Map(), sheets: new Map(), state: 'open', strict: strict !== false,
+    committedFiles: [], cursors: {}, cursorFileId: '', deltaReads: new Map()
+  };
 }
 
-function getBatchSheetView(plan, sheet) {
+function applyLoadedBlockToBatchEntry(entry, block, loadedRows) {
+  const rawRows = Array.isArray(loadedRows) ? loadedRows : [];
+  for (let y = 0; y < block.height; y++) {
+    const rowIdx = block.row - 1 + y;
+    if (!entry.values[rowIdx]) entry.values[rowIdx] = [];
+    const line = Array.isArray(rawRows[y]) ? rawRows[y] : [];
+    const rowWrites = entry.writes.get(rowIdx);
+    for (let x = 0; x < block.width; x++) {
+      const colIdx = block.column - 1 + x;
+      if (entry.values[rowIdx][colIdx] === undefined && !(rowWrites && rowWrites.has(colIdx))) {
+        const rawCell = x < line.length ? line[x] : '';
+        entry.values[rowIdx][colIdx] = rawCell === null || rawCell === undefined ? '' : rawCell;
+      }
+    }
+  }
+}
+
+function preloadBatchSheetEntry(entry, preload) {
+  if (!preload || !entry || entry.baseRows <= 0 || entry.baseColumns <= 0) return;
+  const blocks = [];
+  if (Array.isArray(preload.rows) && preload.rows.length) {
+    const reqWidth = Math.min(entry.baseColumns, Math.max(1, Number(preload.width) || entry.baseColumns));
+    const rows = Array.from(new Set(preload.rows)).filter(function(row) {
+      if (!Number.isInteger(row) || row <= 0 || row > entry.baseRows) return false;
+      const line = entry.values[row - 1];
+      if (!line) return true;
+      for (let x = 0; x < reqWidth; x++) {
+        if (line[x] === undefined) return true;
+      }
+      return false;
+    });
+    rows.sort(function(a, b) { return a - b; });
+    for (let i = 0; i < rows.length;) {
+      const first = rows[i];
+      let height = 1;
+      while (++i < rows.length && rows[i] === first + height) height++;
+      blocks.push({ row: first, column: 1, height: height, width: reqWidth });
+    }
+  }
+  if (Array.isArray(preload.ranges)) {
+    preload.ranges.forEach(function(r) {
+      if (!r) return;
+      const row = Math.max(1, Number(r.row) || 1);
+      const col = Math.max(1, Number(r.column) || 1);
+      if (row > entry.baseRows || col > entry.baseColumns) return;
+      const height = Math.min(entry.baseRows - row + 1, Math.max(1, Number(r.height) || 1));
+      const width = Math.min(entry.baseColumns - col + 1, Math.max(1, Number(r.width) || 1));
+      blocks.push({ row: row, column: col, height: height, width: width });
+    });
+  }
+  if (!blocks.length) return;
+
+  blocks.forEach(function(block) {
+    entry.view.getRange(block.row, block.column, block.height, block.width).getValues();
+  });
+}
+
+function getBatchSheetView(plan, sheet, initialValues, preload) {
   if (!plan || plan.state !== 'open') throw new Error('Batch write plan is not open.');
   const file = sheet.getParent();
   const fileId = file.getId();
   const sheetId = sheet.getSheetId();
   const key = fileId + ':' + sheetId;
-  if (plan.sheets.has(key)) return plan.sheets.get(key).view;
-  const values = sheet.getDataRange().getValues().map(function(row) { return row.slice(); });
+  if (plan.sheets.has(key)) {
+    const existing = plan.sheets.get(key);
+    if (preload) preloadBatchSheetEntry(existing, preload);
+    return existing.view;
+  }
+  const values = initialValues ? initialValues.map(function(row) { return row.slice(); }) : [];
+  const lastRow = initialValues ? initialValues.length : sheet.getLastRow();
+  const lastColumn = initialValues ? initialValues.reduce(function(width, row) { return Math.max(width, row.length); }, 0) : sheet.getLastColumn();
   const entry = {
-    sheet, file, fileId, sheetId, values, writes: [],
-    maxRows: sheet.getMaxRows(), maxColumns: sheet.getMaxColumns()
+    sheet, file, fileId, sheetId, sheetName: sheet.getName(), values, writes: new Map(), version: 0, finders: new Map(),
+    baseRows: lastRow, baseColumns: lastColumn, lastRow, lastColumn,
+    maxRows: null, maxColumns: null
   };
   function range(row, column, height, width) {
     height = height === undefined ? 1 : height;
@@ -1251,9 +1317,34 @@ function getBatchSheetView(plan, sheet) {
       throw new Error('Batch ranges need positive row and column numbers.');
     }
     function read() {
+      let top = Infinity, left = Infinity, bottom = -1, right = -1;
+      for (let y = row - 1; y < Math.min(row - 1 + height, entry.baseRows); y++) {
+        for (let x = column - 1; x < Math.min(column - 1 + width, entry.baseColumns); x++) {
+          if (!values[y] || values[y][x] === undefined) {
+            top = Math.min(top, y); left = Math.min(left, x);
+            bottom = Math.max(bottom, y); right = Math.max(right, x);
+          }
+        }
+      }
+      if (bottom !== -1) {
+        const readStartedAt = Date.now();
+        const loaded = sheet.getRange(top + 1, left + 1, bottom - top + 1, right - left + 1).getValues();
+        if (_requestMetrics) {
+          _requestMetrics.planReadMs += Date.now() - readStartedAt;
+          _requestMetrics.planReadCalls++;
+          _requestMetrics.planReadCells += (bottom - top + 1) * (right - left + 1);
+        }
+        applyLoadedBlockToBatchEntry(entry, {
+          row: top + 1, column: left + 1, height: bottom - top + 1, width: right - left + 1
+        }, loaded);
+      }
       return Array.from({ length: height }, function(_, y) {
+        const rIdx = row - 1 + y;
+        const rowWrites = entry.writes.get(rIdx);
         return Array.from({ length: width }, function(_, x) {
-          const value = values[row - 1 + y] && values[row - 1 + y][column - 1 + x];
+          const cIdx = column - 1 + x;
+          if (rowWrites && rowWrites.has(cIdx)) return rowWrites.get(cIdx);
+          const value = values[rIdx] && values[rIdx][cIdx];
           return value === undefined ? '' : value;
         });
       });
@@ -1264,12 +1355,27 @@ function getBatchSheetView(plan, sheet) {
           input.some(function(line) { return !Array.isArray(line) || line.length !== width; })) {
         throw new Error('Batch values do not match the range size.');
       }
-      const copied = input.map(function(line) { return line.slice(); });
-      copied.forEach(function(line, y) {
-        if (!values[row - 1 + y]) values[row - 1 + y] = [];
-        line.forEach(function(value, x) { values[row - 1 + y][column - 1 + x] = value; });
+      input.forEach(function(line, y) {
+        const rowIndex = row - 1 + y;
+        if (!values[rowIndex]) values[rowIndex] = [];
+        if (!entry.writes.has(rowIndex)) entry.writes.set(rowIndex, new Map());
+        line.forEach(function(value, x) {
+          const columnIndex = column - 1 + x;
+          if (value === '' || value == null) {
+            if (rowIndex + 1 === entry.lastRow) entry.rowsDirty = true;
+            if (columnIndex + 1 === entry.lastColumn) entry.columnsDirty = true;
+          }
+          const cellValue = value == null ? '' : value;
+          values[rowIndex][columnIndex] = cellValue;
+          entry.writes.get(rowIndex).set(columnIndex, cellValue);
+          if (value !== '' && value != null) {
+            entry.lastRow = Math.max(entry.lastRow, rowIndex + 1);
+            entry.lastColumn = Math.max(entry.lastColumn, columnIndex + 1);
+          }
+        });
       });
-      entry.writes.push({ row, column, values: copied });
+      entry.version++;
+      entry.finders.clear();
       return result;
     }
     const result = {
@@ -1293,11 +1399,27 @@ function getBatchSheetView(plan, sheet) {
           matchCase: function(value) { sensitive = value; return finder; },
           findNext: function() {
             const target = sensitive ? String(text) : String(text).toLowerCase();
+            if (whole) {
+              const indexKey = [row, column, height, width, sensitive].join(':');
+              let index = entry.finders.get(indexKey);
+              if (!index) {
+                index = new Map();
+                read().forEach(function(line, y) {
+                  line.forEach(function(cell, x) {
+                    const value = sensitive ? String(cell) : String(cell).toLowerCase();
+                    if (!index.has(value)) index.set(value, [row + y, column + x]);
+                  });
+                });
+                entry.finders.set(indexKey, index);
+              }
+              const position = index.get(target);
+              return position ? range(position[0], position[1]) : null;
+            }
             const cells = read();
             for (let y = 0; y < height; y++) {
               for (let x = 0; x < width; x++) {
                 const value = sensitive ? String(cells[y][x]) : String(cells[y][x]).toLowerCase();
-                if (whole ? value === target : value.indexOf(target) !== -1) return range(row + y, column + x);
+                if (value.indexOf(target) !== -1) return range(row + y, column + x);
               }
             }
             return null;
@@ -1310,23 +1432,37 @@ function getBatchSheetView(plan, sheet) {
   }
   entry.view = {
     getParent: function() { return file; },
-    getName: function() { return sheet.getName(); },
+    getName: function() { return entry.sheetName; },
     getSheetId: function() { return sheetId; },
-    getMaxRows: function() { return entry.maxRows; },
-    getMaxColumns: function() { return entry.maxColumns; },
+    getMaxRows: function() {
+      if (entry.maxRows === null) entry.maxRows = sheet.getMaxRows();
+      return entry.maxRows;
+    },
+    getMaxColumns: function() {
+      if (entry.maxColumns === null) entry.maxColumns = sheet.getMaxColumns();
+      return entry.maxColumns;
+    },
     getLastRow: function() {
-      for (let index = values.length - 1; index >= 0; index--) {
-        if ((values[index] || []).some(function(value) { return value !== '' && value != null; })) return index + 1;
+      if (entry.rowsDirty) {
+        while (entry.lastRow > 0) {
+          const cells = range(entry.lastRow, 1, 1, Math.max(1, entry.lastColumn)).getValues()[0];
+          if (cells.some(function(value) { return value !== '' && value != null; })) break;
+          entry.lastRow--;
+        }
+        entry.rowsDirty = false;
       }
-      return 0;
+      return entry.lastRow;
     },
     getLastColumn: function() {
-      return values.reduce(function(last, line) {
-        for (let index = line.length - 1; index >= last; index--) {
-          if (line[index] !== '' && line[index] != null) return index + 1;
+      if (entry.columnsDirty) {
+        while (entry.lastColumn > 0) {
+          const cells = range(1, entry.lastColumn, Math.max(1, entry.lastRow), 1).getValues();
+          if (cells.some(function(line) { return line[0] !== '' && line[0] != null; })) break;
+          entry.lastColumn--;
         }
-        return last;
-      }, 0);
+        entry.columnsDirty = false;
+      }
+      return entry.lastColumn;
     },
     getRange: range,
     getDataRange: function() {
@@ -1336,6 +1472,7 @@ function getBatchSheetView(plan, sheet) {
   if (!plan.files.has(fileId)) plan.files.set(fileId, []);
   plan.files.get(fileId).push(entry);
   plan.sheets.set(key, entry);
+  if (preload) preloadBatchSheetEntry(entry, preload);
   return entry.view;
 }
 
@@ -1357,25 +1494,46 @@ function batchCellValue(value, timeZone) {
 
 function batchFileRequests(entries) {
   const requests = [];
+  const timeZones = new Map();
   entries.forEach(function(entry) {
-    if (!entry.writes.length) return;
-    const lastRow = entry.writes.reduce(function(last, write) {
-      return Math.max(last, write.row - 1 + write.values.length);
-    }, 0);
-    const lastColumn = entry.writes.reduce(function(last, write) {
-      return Math.max(last, write.column - 1 + write.values[0].length);
-    }, 0);
-    if (lastRow > entry.maxRows) {
-      requests.push({ appendDimension: { sheetId: entry.sheetId, dimension: 'ROWS', length: lastRow - entry.maxRows } });
+    if (!entry.writes.size) return;
+    let lastRow = 0, lastColumn = 0;
+    const blocks = [];
+    const tails = new Map();
+    Array.from(entry.writes.keys()).sort(function(a, b) { return a - b; }).forEach(function(row) {
+      lastRow = Math.max(lastRow, row + 1);
+      const cells = entry.writes.get(row);
+      const columns = Array.from(cells.keys()).sort(function(a, b) { return a - b; });
+      for (let i = 0; i < columns.length;) {
+        const column = columns[i];
+        const line = [cells.get(column)];
+        while (++i < columns.length && columns[i] === column + line.length) line.push(cells.get(columns[i]));
+        lastColumn = Math.max(lastColumn, column + line.length);
+        const key = column + ':' + line.length;
+        let block = tails.get(key);
+        if (block && block.row + block.values.length === row) {
+          block.values.push(line);
+        } else {
+          block = { row, column, values: [line] };
+          blocks.push(block);
+          tails.set(key, block);
+        }
+      }
+    });
+    const maxRows = entry.view.getMaxRows();
+    const maxColumns = entry.view.getMaxColumns();
+    if (lastRow > maxRows) {
+      requests.push({ appendDimension: { sheetId: entry.sheetId, dimension: 'ROWS', length: lastRow - maxRows } });
     }
-    if (lastColumn > entry.maxColumns) {
-      requests.push({ appendDimension: { sheetId: entry.sheetId, dimension: 'COLUMNS', length: lastColumn - entry.maxColumns } });
+    if (lastColumn > maxColumns) {
+      requests.push({ appendDimension: { sheetId: entry.sheetId, dimension: 'COLUMNS', length: lastColumn - maxColumns } });
     }
-    const timeZone = entry.file.getSpreadsheetTimeZone();
-    entry.writes.forEach(function(write) {
+    if (!timeZones.has(entry.fileId)) timeZones.set(entry.fileId, entry.file.getSpreadsheetTimeZone());
+    const timeZone = timeZones.get(entry.fileId);
+    blocks.forEach(function(write) {
       requests.push({
         updateCells: {
-          start: { sheetId: entry.sheetId, rowIndex: write.row - 1, columnIndex: write.column - 1 },
+          start: { sheetId: entry.sheetId, rowIndex: write.row, columnIndex: write.column },
           rows: write.values.map(function(line) {
             return { values: line.map(function(value) { return { userEnteredValue: batchCellValue(value, timeZone) }; }) };
           }),
@@ -1397,16 +1555,22 @@ function commitBatchWritePlan(plan) {
     return Number(a.fileId === plan.cursorFileId) - Number(b.fileId === plan.cursorFileId);
   });
   const bodies = files.map(function(file) { return JSON.stringify({ requests: file.requests }); });
+  const oauthToken = files.length ? ScriptApp.getOAuthToken() : '';
   plan.state = 'committing';
   try {
     files.forEach(function(file, index) {
       plan.unconfirmedFile = file.fileId;
+      const commitStartedAt = Date.now();
       const response = UrlFetchApp.fetch(
         'https://sheets.googleapis.com/v4/spreadsheets/' + encodeURIComponent(file.fileId) + ':batchUpdate', {
           method: 'post', contentType: 'application/json',
-          headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() },
+          headers: { Authorization: 'Bearer ' + oauthToken },
           payload: bodies[index], muteHttpExceptions: true
         });
+      if (_requestMetrics) {
+        _requestMetrics.commitMs += Date.now() - commitStartedAt;
+        _requestMetrics.commitCalls++;
+      }
       const status = response.getResponseCode();
       if (status < 200 || status >= 300) {
         let message = 'Sheets batch write failed (HTTP ' + status + ').';

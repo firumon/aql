@@ -1,14 +1,7 @@
-/**
- * ============================================================
- * AQL - Authentication Logic
- * ============================================================
- */
-
-// Shared constants are located in Constants.gs
-
 var _users_context_cache = null;
 var _designations_cache = null;
 var _roles_cache = null;
+var _login_app_config_cache = null;
 
 function normalizeEmailKey(value) {
   return (value || '').toString().trim().toLowerCase();
@@ -369,8 +362,19 @@ function handleGetProfile(auth) {
 }
 
 function getLoginAppConfig() {
+  if (_login_app_config_cache) return _login_app_config_cache;
   try {
     var ss = getAppSpreadsheet();
+    var ssId = typeof getAppSpreadsheetId === 'function' ? getAppSpreadsheetId() : ss.getId();
+    var cacheKey = 'AQL_LOGIN_APP_CONFIG_V1_' + ssId;
+    var cache = CacheService.getScriptCache();
+    var cached = cache ? cache.get(cacheKey) : null;
+    if (cached) {
+      try {
+        _login_app_config_cache = JSON.parse(cached);
+        return _login_app_config_cache;
+      } catch (e) { /* fall through */ }
+    }
     var sheet = ss.getSheetByName(CONFIG.SHEETS.CONFIG);
     if (!sheet) return {};
     var values = sheet.getDataRange().getValues();
@@ -380,10 +384,22 @@ function getLoginAppConfig() {
       if (!key) continue;
       map[key] = values[i][1];
     }
+    _login_app_config_cache = map;
+    if (cache) {
+      try { cache.put(cacheKey, JSON.stringify(map), CACHE_TTL_SEC); } catch (e) { /* non-fatal */ }
+    }
     return map;
   } catch (err) {
     return {};
   }
+}
+
+function clearLoginAppConfigCache() {
+  _login_app_config_cache = null;
+  try {
+    var ssId = typeof getAppSpreadsheetId === 'function' ? getAppSpreadsheetId() : getAppSpreadsheet().getId();
+    CacheService.getScriptCache().remove('AQL_LOGIN_APP_CONFIG_V1_' + ssId);
+  } catch (e) { /* non-fatal */ }
 }
 
 function handleGetAuthorizedResources(auth, payload) {
@@ -545,15 +561,11 @@ function handleUpdatePassword(auth, currentPassword, newPassword) {
   return { success: true };
 }
 
-/**
- * Bulk-loads all roles into an in-memory cache.
- * Pattern mirrors _designations_cache approach.
- */
 function getRolesCache() {
   if (_roles_cache) return _roles_cache;
 
-  // Try CacheService
-  var cachedJson = getChunkedCache('AQL_ROLES_CACHE_V1_' + getAppSpreadsheet().getId());
+  var ssId = typeof getAppSpreadsheetId === 'function' ? getAppSpreadsheetId() : getAppSpreadsheet().getId();
+  var cachedJson = getChunkedCache('AQL_ROLES_CACHE_V1_' + ssId);
   if (cachedJson) {
     try {
       _roles_cache = JSON.parse(cachedJson);
@@ -584,23 +596,18 @@ function getRolesCache() {
 
   _roles_cache = { byId: byId };
 
-  // Persist to CacheService
   try {
-    var json = JSON.stringify(_roles_cache);
-    putChunkedCache('AQL_ROLES_CACHE_V1_' + getAppSpreadsheet().getId(), json, CACHE_TTL_SEC);
+    putChunkedCache('AQL_ROLES_CACHE_V1_' + ssId, JSON.stringify(_roles_cache), CACHE_TTL_SEC);
   } catch (e) { /* non-fatal */ }
 
   return _roles_cache;
 }
 
-/**
- * Clears the cached roles data.
- * Call after any write to the Roles sheet.
- */
 function clearRolesCache() {
   _roles_cache = null;
   try {
-    var scopedROLE = 'AQL_ROLES_CACHE_V1_' + getAppSpreadsheet().getId();
+    var ssId = typeof getAppSpreadsheetId === 'function' ? getAppSpreadsheetId() : getAppSpreadsheet().getId();
+    var scopedROLE = 'AQL_ROLES_CACHE_V1_' + ssId;
     CacheService.getScriptCache().remove(scopedROLE);
     removeChunkedCache(scopedROLE);
   } catch (e) { /* non-fatal */ }
@@ -615,6 +622,15 @@ function getRoleNameById(roleId) {
 
 function getDesignationsCache() {
   if (_designations_cache) return _designations_cache;
+
+  var ssId = typeof getAppSpreadsheetId === 'function' ? getAppSpreadsheetId() : getAppSpreadsheet().getId();
+  var cachedJson = getChunkedCache('AQL_DESIGNATIONS_CACHE_V1_' + ssId);
+  if (cachedJson) {
+    try {
+      _designations_cache = JSON.parse(cachedJson);
+      return _designations_cache;
+    } catch (e) { /* fall through */ }
+  }
 
   var sheet = getAppSpreadsheet().getSheetByName(CONFIG.SHEETS.DESIGNATIONS);
   var byId = {};
@@ -632,7 +648,6 @@ function getDesignationsCache() {
         byId[id] = {
           id: id,
           name: (row[idx.Name] || '').toString().trim(),
-          // LEGACY: delete in next release.
           parentDesignationId: idx.ParentDesignationID === undefined
             ? ''
             : (row[idx.ParentDesignationID] || '').toString().trim(),
@@ -649,7 +664,21 @@ function getDesignationsCache() {
 
   _designations_cache = { byId: byId };
 
+  try {
+    putChunkedCache('AQL_DESIGNATIONS_CACHE_V1_' + ssId, JSON.stringify(_designations_cache), CACHE_TTL_SEC);
+  } catch (e) { /* non-fatal */ }
+
   return _designations_cache;
+}
+
+function clearDesignationsCache() {
+  _designations_cache = null;
+  try {
+    var ssId = typeof getAppSpreadsheetId === 'function' ? getAppSpreadsheetId() : getAppSpreadsheet().getId();
+    var scopedDesig = 'AQL_DESIGNATIONS_CACHE_V1_' + ssId;
+    CacheService.getScriptCache().remove(scopedDesig);
+    removeChunkedCache(scopedDesig);
+  } catch (e) { /* non-fatal */ }
 }
 
 

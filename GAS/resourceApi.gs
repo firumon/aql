@@ -1,5 +1,6 @@
 // Memoized per execution: an initial sync spans only 3-4 files.
 var _file_last_updated_cache = {};
+const _code_sequence_cache = new WeakMap();
 
 function getSpreadsheetLastUpdatedMillis(fileId) {
   var id = (fileId || '').toString().trim();
@@ -18,12 +19,6 @@ function getSpreadsheetLastUpdatedMillis(fileId) {
   return millis;
 }
 
-// Answers an unchanged delta read from the cursor instead of re-reading the sheet.
-// The response is byte-identical to a delta read that matched no rows.
-// Skipping needs BOTH guards: the sync cursor (covers API writes) and the file
-// modification time (covers manual edits, imports and formulas, which the cursor
-// cannot see). Guard 2 is per-FILE, so any change forces a real read of every
-// resource in it - a needless read costs time, a wrongly skipped one costs data.
 function resolveUnchangedResourceResponse(auth, resourceName, config, lastUpdatedAt) {
   if (!lastUpdatedAt) return null;
   if (config.scope === 'view') return null;
@@ -121,10 +116,6 @@ function handleResourceGetMultiRecords(auth, payload) {
     throw new Error('Master resources are required');
   }
 
-  // Warm every cursor in ONE batched lookup. buildResourceRowsResponse falls
-  // back to the stored cursor whenever a delta read returns no rows — which is
-  // the common case while polling — and that fallback used to issue a separate
-  // CacheService round-trip per resource.
   try {
     getResourceSyncCursors(requestedResources);
   } catch (e) { /* best-effort warm; per-resource lookup still works */ }
@@ -152,23 +143,23 @@ function handleResourceGetMultiRecords(auth, payload) {
 }
 
 function handleResourceRecordFetch(auth, payload) {
-  var resourceRequests = payload && Array.isArray(payload.resources) ? payload.resources : null;
+  let resourceRequests = payload && Array.isArray(payload.resources) ? payload.resources : null;
   if (!resourceRequests || !resourceRequests.length) {
     return { success: false, message: 'record requires payload.resources[]' };
   }
 
-  var allowMissing = payload && payload.allowMissing === true;
-  var resourcePayloads = {};
-  var recordsByResource = {};
-  var byCodeByResource = {};
-  var codesByResource = {};
-  var missingByResource = {};
-  var errors = [];
-  var fatalErrors = [];
+  let allowMissing = payload && payload.allowMissing === true;
+  let resourcePayloads = {};
+  let recordsByResource = {};
+  let byCodeByResource = {};
+  let codesByResource = {};
+  let missingByResource = {};
+  let errors = [];
+  let fatalErrors = [];
 
-  for (var r = 0; r < resourceRequests.length; r++) {
-    var entry = resourceRequests[r] || {};
-    var requestedResourceName = (entry.resource || '').toString().trim();
+  for (let r = 0; r < resourceRequests.length; r++) {
+    let entry = resourceRequests[r] || {};
+    let requestedResourceName = (entry.resource || '').toString().trim();
     if (!requestedResourceName) {
       fatalErrors.push({ index: r, message: 'resource is required' });
       continue;
@@ -178,7 +169,7 @@ function handleResourceRecordFetch(auth, payload) {
       continue;
     }
 
-    var resourceName;
+    let resourceName;
     try {
       resourceName = resolveResourceName({ resource: requestedResourceName });
       enforceMasterPermission(auth, resourceName, 'canRead');
@@ -187,42 +178,71 @@ function handleResourceRecordFetch(auth, payload) {
       continue;
     }
 
-    var codes = entry.codes.map(function (code) { return (code || '').toString().trim(); }).filter(Boolean);
+    let codes = entry.codes.map(function (code) { return (code || '').toString().trim(); }).filter(Boolean);
     codesByResource[resourceName] = codes;
     recordsByResource[resourceName] = [];
     byCodeByResource[resourceName] = {};
     missingByResource[resourceName] = [];
 
-    var resource = openResourceSheet(resourceName);
-    var sheet = resource.sheet;
-    var values = sheet.getDataRange().getValues();
-    var headers = values[0] || [];
-    var idx = getHeaderIndexMap(headers);
-    var foundRows = [];
+    let resource = openResourceSheet(resourceName);
+    let sheet = resource.sheet;
+    let headers = getSheetHeadersByMeta(resource.config.fileId, resource.config.sheetName, sheet);
+    let idx = getHeaderIndexMap(headers);
+    let foundRows = [];
 
     if (idx.Code === undefined) {
       fatalErrors.push({ resource: resourceName, message: 'Code column is required' });
       continue;
     }
 
-    var rowByCode = {};
-    for (var i = 1; i < values.length; i++) {
-      var row = values[i];
-      var rowCode = (row[idx.Code] || '').toString().trim();
-      if (rowCode && rowByCode[rowCode] === undefined) {
-        rowByCode[rowCode] = row;
+    if (!codes.length) {
+      resourcePayloads[resourceName] = buildDirectWriteResourcePayload(resourceName, resource.config, headers, []);
+      continue;
+    }
+
+    let rowByCode = {};
+    let lastRow = sheet.getLastRow();
+    if (lastRow > 1) {
+      let codeColWidth = idx.Code + 1;
+      let useNarrowLookup = codeColWidth < headers.length && codes.length < Math.max(2, Math.ceil((lastRow - 1) / 4));
+      if (useNarrowLookup) {
+        let codeValues = sheet.getRange(1, 1, lastRow, codeColWidth).getValues();
+        const rowNumByCode = new Map();
+        for (let i = 1; i < codeValues.length; i++) {
+          const code = (codeValues[i][idx.Code] || '').toString().trim();
+          if (code && !rowNumByCode.has(code)) rowNumByCode.set(code, i + 1);
+        }
+        const matchedRowNums = codes.map(function(code) { return rowNumByCode.get(code); }).filter(Boolean);
+        if (_activeBatchWritePlan && matchedRowNums.length) {
+          getBatchSheetView(_activeBatchWritePlan, sheet, null, { rows: matchedRowNums, width: headers.length });
+        }
+        codes.forEach(function (code) {
+          const rNum = rowNumByCode.get(code);
+          if (rNum && rNum !== -1 && !rowByCode[code]) {
+            rowByCode[code] = sheet.getRange(rNum, 1, 1, headers.length).getValues()[0];
+          }
+        });
+      } else {
+        let values = sheet.getRange(1, 1, lastRow, headers.length).getValues();
+        for (let i = 1; i < values.length; i++) {
+          let row = values[i];
+          let rowCode = (row[idx.Code] || '').toString().trim();
+          if (rowCode && rowByCode[rowCode] === undefined) {
+            rowByCode[rowCode] = row;
+          }
+        }
       }
     }
 
     codes.forEach(function (code) {
-      var matchedRow = rowByCode[code];
+      let matchedRow = rowByCode[code];
       if (!matchedRow) {
         missingByResource[resourceName].push(code);
         return;
       }
       try {
         enforceRecordLevelAccess(auth, resource.config, headers, matchedRow);
-        var record = rowArrayToObject(headers, matchedRow);
+        let record = rowArrayToObject(headers, matchedRow);
         foundRows.push(matchedRow);
         recordsByResource[resourceName].push(record);
         byCodeByResource[resourceName][code] = record;
@@ -238,7 +258,7 @@ function handleResourceRecordFetch(auth, payload) {
   }
 
   Object.keys(missingByResource).forEach(function (resourceName) {
-    var missing = missingByResource[resourceName] || [];
+    let missing = missingByResource[resourceName] || [];
     if (!allowMissing && missing.length) {
       missing.forEach(function (code) {
         errors.push({ resource: resourceName, code: code, message: 'Record not found or inaccessible' });
@@ -246,7 +266,7 @@ function handleResourceRecordFetch(auth, payload) {
     }
   });
 
-  var responseErrors = fatalErrors.concat(errors);
+  let responseErrors = fatalErrors.concat(errors);
   if (fatalErrors.length || (errors.length && !allowMissing)) {
     return {
       success: false,
@@ -351,18 +371,17 @@ function handleResourceCreateRecord(auth, payload) {
       directResources
     )
   };
-  dispatchPostActionHook(resource.config, payload, result, auth, 'create', {
-    headers: headers,
-    savedRecord: savedRecord
-  }, resourceName);
-
-  // Safe boundary for side-effect hooks (Bucket B)
   var sideEffectResources = [];
   if (resourceName === 'OutletMovements') {
     sideEffectResources.push('OutletStorages');
   } else if (resourceName === 'StockMovements') {
     sideEffectResources.push('WarehouseStorages');
   }
+  dispatchPostActionHook(resource.config, payload, result, auth, 'create', {
+    headers: headers,
+    savedRecord: savedRecord
+  }, resourceName);
+
   if (sideEffectResources.length) {
     var deltaPayloads = collectWriteDeltaResources(auth, payload, sideEffectResources);
     result.data = mergeDeltaResourcesIntoResult(result.data, deltaPayloads);
@@ -391,30 +410,30 @@ function dispatchPostActionHook(config, payload, result, auth, action, meta, res
   let postAction = config && config.postAction ? config.postAction.toString().trim() : '';
   if (!postAction) return;
 
-  if (_activeBatchWritePlan && [
-    'handleStockMovementsBulkSave', 'handleOutletMovementsBulkSave',
-    'handleWarehouseTransfers', 'handleWarehouseTransferItems', 'linkProcurementCodeToPurchaseRequisition'
-  ].indexOf(postAction) === -1) {
+  if (_activeBatchWritePlan && _activeBatchWritePlan.strict && STAGED_POST_ACTIONS.indexOf(postAction) === -1) {
     throw new Error('PostAction is not supported in a staged batch: ' + postAction);
   }
+  const hookStartedAt = Date.now();
   const candidates = [postAction + '_after' + suffix, postAction];
   try {
     for (let i = 0; i < candidates.length; i++) {
       let fn = this[candidates[i]];
       if (typeof fn === 'function') {
         const outcome = fn(payload || {}, result || {}, auth || {}, normalizedAction, meta || {}, resourceName || '');
-        if (_activeBatchWritePlan && outcome && outcome.success === false) {
+        if (_activeBatchWritePlan && _activeBatchWritePlan.strict && outcome && outcome.success === false) {
           throw new Error(outcome.message || outcome.error || 'PostAction failed: ' + postAction);
         }
         return;
       }
     }
   } catch (e) {
-    if (_activeBatchWritePlan) {
+    if (_activeBatchWritePlan && _activeBatchWritePlan.strict) {
       _activeBatchWritePlan.failure = e;
       throw e;
     }
     Logger.log('dispatchPostActionHook error for "' + postAction + '" (' + normalizedAction + '): ' + String(e));
+  } finally {
+    if (_requestMetrics) _requestMetrics.hookMs = (_requestMetrics.hookMs || 0) + Date.now() - hookStartedAt;
   }
 }
 
@@ -509,17 +528,16 @@ function handleResourceUpdateRecord(auth, payload) {
       directResources
     )
   };
+  var sideEffectResources = [];
+  if (resourceName === 'WarehouseTransferItems') {
+    sideEffectResources.push('WarehouseTransfers', 'StockMovements', 'WarehouseStorages');
+  }
   dispatchPostActionHook(resource.config, payload, result, auth, 'update', {
     headers: headers,
     previousRecord: previousRecord,
     savedRecord: savedRecord
   }, resourceName);
 
-  // Side effect for WarehouseTransferItems update
-  var sideEffectResources = [];
-  if (resourceName === 'WarehouseTransferItems') {
-    sideEffectResources.push('WarehouseTransfers', 'StockMovements', 'WarehouseStorages');
-  }
   if (sideEffectResources.length) {
     var deltaPayloads = collectWriteDeltaResources(auth, payload, sideEffectResources);
     result.data = mergeDeltaResourcesIntoResult(result.data, deltaPayloads);
@@ -630,9 +648,6 @@ function attachResourceName(payload, resourceName) {
   return cloned;
 }
 
-// Writes are already gated by the frontend role rules and by the session proof
-// at doPost, so only record-level policy is re-checked on the write path.
-// An action is allowed by its own grant OR by general update rights.
 function enforceActionPermission(auth, resourceName, actionName) {
   const roleIds = auth && Array.isArray(auth.roleIds) ? auth.roleIds : [];
   if (hasRoleActionPermission(roleIds, resourceName, actionName)) return;
@@ -642,11 +657,8 @@ function enforceActionPermission(auth, resourceName, actionName) {
 
 function enforceMasterPermission(auth, resourceName, permissionName) {
   const roleIds = auth && Array.isArray(auth.roleIds) ? auth.roleIds : [];
-  
+
   if (permissionName === 'canRead') {
-    // Hash lookup against a memoized set. The previous linear .some() over a
-    // freshly rebuilt catalog made this guard the most expensive call in the
-    // API. Semantics are unchanged — see getReadableResourceNameSet().
     if (getReadableResourceNameSet(roleIds)[resourceName]) return;
   }
 
@@ -661,9 +673,10 @@ function buildResourceRowsResponse(auth, resourceName, resource, rows, lastUpdat
     ? headersInput
     : getSheetHeadersByMeta(resource.config.fileId, resource.config.sheetName, resource.sheet);
   const idx = getHeaderIndexMap(headers);
-  var nameToCodeMap = null;
+  let nameToCodeMap = null;
   const scope = buildAuthAccessRegionScope(auth);
-  if (resource && resource.config && resource.config.accessRegionSource && resource.config.accessRegionSource.self && resource.config.accessRegionSource.self.resolve) {
+  const regionSource = resource && resource.config && resource.config.accessRegionSource;
+  if (regionSource && regionSource.self && regionSource.self.resolve) {
     if (auth && auth._nameToRegionCodeMap) {
       nameToCodeMap = auth._nameToRegionCodeMap;
     } else {
@@ -675,14 +688,11 @@ function buildResourceRowsResponse(auth, resourceName, resource, rows, lastUpdat
     return canAccessRowByPolicy(auth, resource.config, row, idx, nameToCodeMap, scope);
   });
 
-  // Derive the true data cursor from the rows we just read: max(UpdatedAt).
-  // Single-pass tracking — never Math.max(...rows), which overflows the call
-  // stack on large sheets.
-  var maxUpdatedAt = 0;
+  let maxUpdatedAt = 0;
   const updatedAtIdx = idx.UpdatedAt;
   if (updatedAtIdx !== undefined) {
-    for (var i = 0; i < rows.length; i++) {
-      var ts = normalizeUpdatedAtMillis(rows[i][updatedAtIdx]);
+    for (let i = 0; i < rows.length; i++) {
+      let ts = normalizeUpdatedAtMillis(rows[i][updatedAtIdx]);
       if (ts > maxUpdatedAt) maxUpdatedAt = ts;
     }
   }
@@ -704,6 +714,7 @@ function buildResourceRowsResponse(auth, resourceName, resource, rows, lastUpdat
   return {
     success: true,
     rows: filteredRows,
+    headers: headers,
     meta: {
       resource: resourceName,
       fileId: resource.config.fileId,
@@ -976,9 +987,20 @@ function resolveAccessRegionOnWriteFallback(row, idx, auth, resourceConfig, batc
 
         if (!batch.rows[targetResourceName]) {
           const res = openResourceSheet(targetResourceName);
-          const vals = res.sheet.getDataRange().getValues();
-          const hdrs = vals[0] || [];
+          const hdrs = getSheetHeadersByMeta(res.config.fileId, res.config.sheetName, res.sheet);
           const hIdx = getHeaderIndexMap(hdrs);
+          const targetSelfCol = (targetConfig && targetConfig.accessRegionSource && targetConfig.accessRegionSource.self && targetConfig.accessRegionSource.self.column)
+            ? targetConfig.accessRegionSource.self.column
+            : 'AccessRegion';
+          const maxColIdx = Math.max(
+            hIdx.Code !== undefined ? hIdx.Code : 0,
+            hIdx[targetSelfCol] !== undefined ? hIdx[targetSelfCol] : 0
+          );
+          const maxNeededCol = Math.min(hdrs.length, maxColIdx + 1);
+          const lastRow = res.sheet.getLastRow();
+          const vals = (lastRow > 1 && maxNeededCol > 0)
+            ? res.sheet.getRange(1, 1, lastRow, maxNeededCol).getValues()
+            : [hdrs];
           const rowMap = {};
           if (hIdx.Code !== undefined) {
             for (let r = 1; r < vals.length; r++) {
@@ -1098,57 +1120,55 @@ function validateRequiredFields(row, idx, requiredHeaders, resourceName) {
   });
 }
 
-function validateMasterUniqueness(values, idx, candidateRow, schema, excludeRowNumber, resourceName) {
-  const singleHeaders = schema.uniqueHeaders || [];
-  const compositeHeaders = schema.uniqueCompositeHeaders || [];
-
-  for (let i = 1; i < values.length; i++) {
-    const rowNumber = i + 1;
-    if (excludeRowNumber && rowNumber === excludeRowNumber) {
-      continue;
-    }
-
-    const existing = values[i];
-
-    for (let j = 0; j < singleHeaders.length; j++) {
-      const header = singleHeaders[j];
-      const headerIdx = idx[header];
-      if (headerIdx === undefined) continue;
-
-      const currentValue = normalizeForComparison(candidateRow[headerIdx]);
-      const existingValue = normalizeForComparison(existing[headerIdx]);
-      if (currentValue && existingValue && currentValue === existingValue) {
-        throw new Error(resourceName + ': duplicate value for ' + header);
+function validateMasterUniqueness(values, idx, candidateRow, schema, excludeRowNumber, resourceName, index) {
+  const state = index || {};
+  if (!state.groups) {
+    state.groups = [];
+    (schema.uniqueHeaders || []).forEach(function(header) {
+      if (idx[header] !== undefined) state.groups.push({ headers: [header], message: 'duplicate value for ' + header });
+    });
+    (schema.uniqueCompositeHeaders || []).forEach(function(headers) {
+      if (headers && headers.length && headers.every(function(header) { return idx[header] !== undefined; })) {
+        state.groups.push({ headers, message: 'duplicate combination for ' + headers.join('+') });
       }
-    }
-
-    for (let k = 0; k < compositeHeaders.length; k++) {
-      const combo = compositeHeaders[k];
-      if (!combo || !combo.length) continue;
-
-      let hasMissing = false;
-      let allMatch = true;
-      for (let c = 0; c < combo.length; c++) {
-        const comboHeader = combo[c];
-        const comboIdx = idx[comboHeader];
-        if (comboIdx === undefined) {
-          hasMissing = true;
-          break;
-        }
-
-        const candidateValue = normalizeForComparison(candidateRow[comboIdx]);
-        const existingValue = normalizeForComparison(existing[comboIdx]);
-        if (!candidateValue || !existingValue || candidateValue !== existingValue) {
-          allMatch = false;
-          break;
-        }
-      }
-
-      if (!hasMissing && allMatch) {
-        throw new Error(resourceName + ': duplicate combination for ' + combo.join('+'));
-      }
-    }
+    });
+    state.groups.forEach(function(group) { group.keys = new Map(); group.rows = new Map(); });
+    state.length = 1;
+    state.changedRows = [];
   }
+  if (!state.groups.length) return;
+  const changed = new Set(state.changedRows);
+  for (let i = state.length; i < values.length; i++) changed.add(i);
+  changed.forEach(function(rowIndex) {
+    state.groups.forEach(function(group) {
+      const previous = group.rows.get(rowIndex);
+      if (previous !== undefined) group.keys.get(previous).delete(rowIndex);
+      group.rows.delete(rowIndex);
+      const parts = group.headers.map(function(header) { return normalizeForComparison(values[rowIndex][idx[header]]); });
+      if (parts.some(function(part) { return !part; })) return;
+      const key = JSON.stringify(parts);
+      if (!group.keys.has(key)) group.keys.set(key, new Set());
+      group.keys.get(key).add(rowIndex);
+      group.rows.set(rowIndex, key);
+    });
+  });
+  state.changedRows = [];
+  state.length = values.length;
+  let firstRow = Infinity;
+  let message = '';
+  state.groups.forEach(function(group) {
+    const parts = group.headers.map(function(header) { return normalizeForComparison(candidateRow[idx[header]]); });
+    if (parts.some(function(part) { return !part; })) return;
+    const matches = group.keys.get(JSON.stringify(parts));
+    if (!matches) return;
+    matches.forEach(function(rowIndex) {
+      if (rowIndex + 1 !== excludeRowNumber && rowIndex < firstRow) {
+        firstRow = rowIndex;
+        message = group.message;
+      }
+    });
+  });
+  if (message) throw new Error(resourceName + ': ' + message);
 }
 
 function normalizeForComparison(value) {
@@ -1178,40 +1198,28 @@ function isAuditHeader(header) {
 }
 
 function generateNextCode(values, idx, prefix, sequenceLength) {
-  let maxCodeNum = 0;
-  const escapedPrefix = escapeRegex(prefix);
-  const codePattern = new RegExp('^' + escapedPrefix + '(\\d+)$');
-
-  for (let i = 1; i < values.length; i++) {
-    const code = (values[i][idx.Code] || '').toString().trim();
-    const match = code.match(codePattern);
-    if (match) {
-      const num = Number(match[1]);
-      if (num > maxCodeNum) maxCodeNum = num;
-    }
+  let sequences = _code_sequence_cache.get(values);
+  if (!sequences) {
+    sequences = new Map();
+    _code_sequence_cache.set(values, sequences);
   }
-
-  const nextNum = maxCodeNum + 1;
-  return prefix + padSequence(nextNum, sequenceLength);
+  const key = JSON.stringify([idx.Code, prefix]);
+  let sequence = sequences.get(key);
+  if (!sequence || sequence.length > values.length) {
+    sequence = { length: 1, max: 0, pattern: new RegExp('^' + escapeRegex(prefix) + '(\\d+)$') };
+    sequences.set(key, sequence);
+  }
+  for (let i = sequence.length; i < values.length; i++) {
+    const match = (values[i][idx.Code] || '').toString().trim().match(sequence.pattern);
+    if (match) sequence.max = Math.max(sequence.max, Number(match[1]));
+  }
+  sequence.length = values.length;
+  return prefix + padSequence(sequence.max + 1, sequenceLength);
 }
 
 function generateNextYearScopedCode(values, idx, prefix, sequenceLength) {
-  var year2 = new Date().getFullYear().toString().slice(-2);
-  var escapedPrefix = escapeRegex(prefix);
-  var codePattern = new RegExp('^' + escapedPrefix + year2 + '(\\d+)$');
-  var maxSeq = 0;
-
-  for (var i = 1; i < values.length; i++) {
-    var code = (values[i][idx.Code] || '').toString().trim();
-    var match = code.match(codePattern);
-    if (match) {
-      var num = Number(match[1]);
-      if (num > maxSeq) maxSeq = num;
-    }
-  }
-
-  var nextSeq = maxSeq + 1;
-  return prefix + year2 + padSequence(nextSeq, sequenceLength);
+  const year = new Date().getFullYear().toString().slice(-2);
+  return generateNextCode(values, idx, prefix + year, sequenceLength);
 }
 
 function escapeRegex(value) {
@@ -1230,14 +1238,18 @@ function padSequence(numberValue, sequenceLength) {
 function parseDateInput(value) {
   if (!value) return null;
 
-  // Google Sheets auto-formatting could still cast to a Date object natively
   if (value instanceof Date) {
     return isNaN(value.getTime()) ? null : value;
   }
 
-  // Assuming value is strictly a Unix Timestamp (either Number or String representation of Number)
-  const parsed = new Date(Number(value));
-  return isNaN(parsed.getTime()) ? null : parsed;
+  const num = Number(value);
+  if (Number.isFinite(num)) {
+    const parsedNum = new Date(num);
+    return isNaN(parsedNum.getTime()) ? null : parsedNum;
+  }
+
+  const parsedStr = new Date(String(value));
+  return isNaN(parsedStr.getTime()) ? null : parsedStr;
 }
 
 function extractRequestedResourceCandidates(payload) {
@@ -1436,34 +1448,48 @@ function mergeWrittenRowsIntoResourcePayload(resourcePayload, resourceConfig, he
 }
 
 function collectWriteDeltaResources(auth, payload, resourceNames) {
-  var names = Array.isArray(resourceNames) ? resourceNames : [];
+  let names = Array.isArray(resourceNames) ? resourceNames : [];
   if (!names.length) {
     return {};
   }
 
-  var unique = [];
-  var seen = {};
+  let unique = [];
+  let seen = {};
   names.forEach(function (name) {
-    var normalized = (name || '').toString().trim();
+    let normalized = (name || '').toString().trim();
     if (!normalized) return;
-    var key = normalized.toLowerCase();
+    let key = normalized.toLowerCase();
     if (seen[key]) return;
     seen[key] = true;
     unique.push(normalized);
   });
 
-  var deltas = {};
+  let deltas = {};
   unique.forEach(function (resourceName) {
-    var readPayload = cloneWithResource(payload, resourceName);
+    let readPayload = cloneWithResource(payload, resourceName);
 
-    var cursor = resolveMultiResourceCursor(payload, resourceName);
+    let cursor = resolveMultiResourceCursor(payload, resourceName);
     if (cursor !== null && cursor !== undefined && cursor !== '') {
       readPayload.lastUpdatedAt = cursor;
     } else {
       delete readPayload.lastUpdatedAt;
     }
 
+    const plan = _activeBatchWritePlan;
+    let cacheKey = '';
+    if (plan) {
+      const config = getResourceConfig(resourceName);
+      const entry = Array.from(plan.sheets.values()).find(function(item) {
+        return item.fileId === config.fileId && item.sheetName === config.sheetName;
+      });
+      if (entry) cacheKey = JSON.stringify([resourceName, cursor, entry.version]);
+      if (cacheKey && plan.deltaReads.has(cacheKey)) {
+        deltas[resourceName] = plan.deltaReads.get(cacheKey);
+        return;
+      }
+    }
     deltas[resourceName] = handleResourceGetRecords(auth, readPayload);
+    if (cacheKey) plan.deltaReads.set(cacheKey, deltas[resourceName]);
   });
 
   return deltas;
@@ -1541,29 +1567,32 @@ function buildCompositeDirectWriteResources(parentResourceName, parentConfig, pa
 }
 
 function handleCompositeSave(auth, payload) {
-  var parentResourceName = (payload.resource || '').toString().trim();
+  let parentResourceName = (payload.resource || '').toString().trim();
   if (!parentResourceName) {
     return { success: false, message: 'Resource is required for composite save' };
   }
 
-  var isEdit = !!(payload.code && payload.code.toString().trim());
-  var parentData = payload && typeof payload.data === 'object' && payload.data !== null ? payload.data : null;
-  if (!parentData) {
+  let isEdit = !!(payload.code && payload.code.toString().trim());
+  let parentData = payload && typeof payload.data === 'object' && payload.data !== null ? payload.data : null;
+  if (!parentData || Array.isArray(parentData)) {
     return { success: false, message: 'Composite save requires payload.data' };
   }
-  var childrenPayload = Array.isArray(payload.children) ? payload.children : [];
+  if (payload.children != null && !Array.isArray(payload.children)) {
+    return { success: false, message: 'Composite children must be an array' };
+  }
+  let childrenPayload = payload.children || [];
 
   // Phase 1: Validate everything
-  var validationErrors = [];
-  var compositeBatchContext = { configs: {}, rows: {}, nameToCodeMap: null };
-  var parentResource = openResourceSheet(parentResourceName);
-  var parentSchema = buildMasterSchemaFromResourceConfig(parentResource.config);
+  let validationErrors = [];
+  let compositeBatchContext = { configs: {}, rows: {}, nameToCodeMap: null };
+  let parentResource = openResourceSheet(parentResourceName);
+  let parentSchema = buildMasterSchemaFromResourceConfig(parentResource.config);
 
-  var parentSheet = parentResource.sheet;
-  var parentHeaders = getSheetHeadersByMeta(parentResource.config.fileId, parentResource.config.sheetName, parentSheet);
-  var parentIdx = getHeaderIndexMap(parentHeaders);
+  let parentSheet = parentResource.sheet;
+  let parentHeaders = getSheetHeadersByMeta(parentResource.config.fileId, parentResource.config.sheetName, parentSheet);
+  let parentIdx = getHeaderIndexMap(parentHeaders);
 
-  var parentMaxColIdx = parentIdx.Code !== undefined ? parentIdx.Code : 0;
+  let parentMaxColIdx = parentIdx.Code !== undefined ? parentIdx.Code : 0;
   (parentSchema.uniqueHeaders || []).forEach(function (h) {
     if (parentIdx[h] !== undefined && parentIdx[h] > parentMaxColIdx) parentMaxColIdx = parentIdx[h];
   });
@@ -1572,12 +1601,12 @@ function handleCompositeSave(auth, payload) {
       if (parentIdx[h] !== undefined && parentIdx[h] > parentMaxColIdx) parentMaxColIdx = parentIdx[h];
     });
   });
-  var parentMaxNeededCol = Math.min(parentHeaders.length, parentMaxColIdx + 1);
+  let parentMaxNeededCol = Math.min(parentHeaders.length, parentMaxColIdx + 1);
   if (parentMaxNeededCol < 1) parentMaxNeededCol = 1;
 
-  var parentLastRow = parentSheet.getLastRow();
+  let parentLastRow = parentSheet.getLastRow();
 
-  var parentValues;
+  let parentValues;
   if (parentLastRow > 1) {
     parentValues = parentSheet.getRange(1, 1, parentLastRow, parentMaxNeededCol).getValues();
   } else {
@@ -1585,25 +1614,27 @@ function handleCompositeSave(auth, payload) {
   }
 
   // Build parent row
-  var providedParentCode = resolveCodeValue({ record: parentData });
-  var parentProvidedValues = {};
+  let providedParentCode = resolveCodeValue({ record: parentData });
+  let parentProvidedValues = {};
   Object.keys(parentData).forEach(function(key) {
     if (key === 'Code' || isAuditHeader(key)) return;
     parentProvidedValues[key] = parentData[key];
   });
 
-  var parentCode;
-  var parentRowData;
-  var parentRowNumber = -1;
+  let parentCode;
+  let parentRowData;
+  let parentRowNumber = -1;
 
-  var parentTimestamp = 0;
+  let parentTimestamp = 0;
   if (isEdit) {
     parentCode = payload.code.toString().trim();
-    parentRowNumber = findRowByValue(parentSheet, parentIdx.Code, parentCode, 2, true);
+    parentRowNumber = findRowByValue(parentSheet, parentIdx.Code, parentCode, 2, true, parentValues);
     if (parentRowNumber === -1) {
       return { success: false, message: parentResourceName + ' record not found: ' + parentCode };
     }
-    var existingRow = parentSheet.getRange(parentRowNumber, 1, 1, parentHeaders.length).getValues()[0];
+    let existingRow = parentMaxNeededCol === parentHeaders.length
+      ? parentValues[parentRowNumber - 1].slice()
+      : parentSheet.getRange(parentRowNumber, 1, 1, parentHeaders.length).getValues()[0];
     enforceRecordLevelAccess(auth, parentResource.config, parentHeaders, existingRow);
     parentRowData = mergeMasterRow(existingRow, parentIdx, parentProvidedValues, parentSchema);
     parentRowData[parentIdx.Code] = parentCode;
@@ -1611,11 +1642,11 @@ function handleCompositeSave(auth, payload) {
   } else {
     parentCode = providedParentCode;
     if (!parentCode) {
-      var codePrefix = (parentResource.config.codePrefix || '').toString().trim();
+      let codePrefix = (parentResource.config.codePrefix || '').toString().trim();
       if (!codePrefix) {
         return { success: false, message: 'CodePrefix is missing for resource: ' + parentResourceName };
       }
-      var seqLength = parentResource.config.codeSequenceLength || 6;
+      let seqLength = parentResource.config.codeSequenceLength || 6;
       parentCode = parentResource.config.scope === 'operation'
         ? generateNextYearScopedCode(parentValues, parentIdx, codePrefix, seqLength)
         : generateNextCode(parentValues, parentIdx, codePrefix, seqLength);
@@ -1635,25 +1666,35 @@ function handleCompositeSave(auth, payload) {
   }
 
   // Phase 1b: Validate all children
-  var childWriteOps = [];
+  let childWriteOps = [];
+  const childResourceNames = new Set();
 
-  for (var c = 0; c < childrenPayload.length; c++) {
-    var childGroup = childrenPayload[c];
-    var childResourceName = (childGroup.resource || '').toString().trim();
-    if (!childResourceName) continue;
-
-    var childRecords = Array.isArray(childGroup.records) ? childGroup.records : [];
+  for (let c = 0; c < childrenPayload.length; c++) {
+    let childGroup = childrenPayload[c];
+    let childResourceName = childGroup && (childGroup.resource || '').toString().trim();
+    if (!childResourceName || childResourceName === parentResourceName ||
+        !Array.isArray(childGroup.records) || childResourceNames.has(childResourceName)) {
+      validationErrors.push({ resource: childResourceName || parentResourceName, message: 'Each child resource needs one records array' });
+      continue;
+    }
+    childResourceNames.add(childResourceName);
+    let childRecords = childGroup.records;
     if (!childRecords.length) continue;
 
-    var childResource = openResourceSheet(childResourceName);
-    var childSchema = buildMasterSchemaFromResourceConfig(childResource.config);
-    var childSheet = childResource.sheet;
-    var childHeaders = getSheetHeadersByMeta(childResource.config.fileId, childResource.config.sheetName, childSheet);
-    var childIdx = getHeaderIndexMap(childHeaders);
-    var childCodePrefix = (childResource.config.codePrefix || '').toString().trim();
-    var childSeqLength = childResource.config.codeSequenceLength || 6;
+    let childResource = openResourceSheet(childResourceName);
+    let childSchema = buildMasterSchemaFromResourceConfig(childResource.config);
+    let childSheet = childResource.sheet;
+    let childHeaders = getSheetHeadersByMeta(childResource.config.fileId, childResource.config.sheetName, childSheet);
+    let childIdx = getHeaderIndexMap(childHeaders);
+    const parentCodeField = resolveParentCodeField(childHeaders, parentResourceName);
+    if (!parentCodeField) {
+      validationErrors.push({ resource: childResourceName, message: 'Child parent-code column is missing' });
+      continue;
+    }
+    let childCodePrefix = (childResource.config.codePrefix || '').toString().trim();
+    let childSeqLength = childResource.config.codeSequenceLength || 6;
 
-    var childMaxColIdx = childIdx.Code !== undefined ? childIdx.Code : 0;
+    let childMaxColIdx = childIdx.Code !== undefined ? childIdx.Code : 0;
     (childSchema.uniqueHeaders || []).forEach(function (h) {
       if (childIdx[h] !== undefined && childIdx[h] > childMaxColIdx) childMaxColIdx = childIdx[h];
     });
@@ -1662,78 +1703,112 @@ function handleCompositeSave(auth, payload) {
         if (childIdx[h] !== undefined && childIdx[h] > childMaxColIdx) childMaxColIdx = childIdx[h];
       });
     });
-    var childMaxNeededCol = Math.min(childHeaders.length, childMaxColIdx + 1);
+    let childMaxNeededCol = Math.min(childHeaders.length, childMaxColIdx + 1);
     if (childMaxNeededCol < 1) childMaxNeededCol = 1;
 
-    var childLastRow = childSheet.getLastRow();
+    let childLastRow = childSheet.getLastRow();
+    const existingChildren = childRecords.filter(function(record) {
+      return record && (record._action === 'update' || record._action === 'deactivate');
+    });
+    if (existingChildren.length >= Math.max(2, Math.ceil((childLastRow - 1) / 4))) {
+      childMaxNeededCol = childHeaders.length;
+    }
 
-    var childValues;
+    let childValues;
     if (childLastRow > 1) {
       childValues = childSheet.getRange(1, 1, childLastRow, childMaxNeededCol).getValues();
     } else {
       childValues = [childHeaders.slice(0, childMaxNeededCol)];
     }
-    var childCurrentValues = childValues.slice();
+    if (_activeBatchWritePlan && childMaxNeededCol < childHeaders.length && existingChildren.length) {
+      const rowNumbers = existingChildren.map(function(record) {
+        const code = (record._originalCode || (record.data && record.data.Code) || '').toString().trim();
+        return findRowByValue(childSheet, childIdx.Code, code, 2, true, childValues);
+      });
+      getBatchSheetView(_activeBatchWritePlan, childSheet, null, { rows: rowNumbers, width: childHeaders.length });
+    }
+    let childCurrentValues = childValues.slice();
+    const childUniquenessIndex = {};
+    const childCodes = new Set();
 
-    var childOps = { resourceName: childResourceName, config: childResource.config, sheet: childSheet, headers: childHeaders, newRows: [], updateOps: [], maxTimestamp: 0, lastRow: childLastRow };
+    const childOps = {
+      resourceName: childResourceName, config: childResource.config, sheet: childSheet, headers: childHeaders,
+      newRows: [], updateOps: [], maxTimestamp: 0, lastRow: childLastRow
+    };
 
-    for (var r = 0; r < childRecords.length; r++) {
-      var rec = childRecords[r];
-      var recData = rec.data || {};
-      var recAction = rec._action || 'create';
-
+    for (let r = 0; r < childRecords.length; r++) {
+      let rec = childRecords[r];
       try {
-        var childProvidedValues = {};
+        if (!rec || !rec.data || typeof rec.data !== 'object' || Array.isArray(rec.data)) {
+          throw new Error('Child data must be an object');
+        }
+        let recData = rec.data;
+        let recAction = rec._action || 'create';
+        if (['create', 'update', 'deactivate'].indexOf(recAction) === -1) throw new Error('Invalid child action: ' + recAction);
+        let childProvidedValues = {};
         Object.keys(recData).forEach(function(key) {
           if (key === 'Code' || isAuditHeader(key)) return;
           childProvidedValues[key] = recData[key];
         });
 
-        // Inject parent code into child (find the right field)
-        var parentCodeField = resolveParentCodeField(childHeaders, parentResourceName);
-        if (parentCodeField) {
-          childProvidedValues[parentCodeField] = parentCode;
-        }
+        childProvidedValues[parentCodeField] = parentCode;
 
-        var originalCode = (rec._originalCode || recData.Code || '').toString().trim();
-        var nextCode = (recData.Code || originalCode || '').toString().trim();
+        let originalCode = (rec._originalCode || recData.Code || '').toString().trim();
+        let nextCode = (recData.Code || originalCode || '').toString().trim();
+        if (recAction !== 'create' && !originalCode) throw new Error('Child code is required for ' + recAction);
+        if (originalCode && childCodes.has(originalCode)) throw new Error('Duplicate child code: ' + originalCode);
+        if (originalCode) childCodes.add(originalCode);
 
         if (recAction === 'deactivate' && originalCode) {
-          var deactivateRowNum = findRowByValue(childSheet, childIdx.Code, originalCode, 2, true);
-          if (deactivateRowNum !== -1) {
-            var deactivateRow = childSheet.getRange(deactivateRowNum, 1, 1, childHeaders.length).getValues()[0];
-            deactivateRow[childIdx.Status] = 'Inactive';
-            var deactivateTs = applyAuditFields(deactivateRow, childIdx, auth, childResource.config, false);
-            if (deactivateTs > childOps.maxTimestamp) childOps.maxTimestamp = deactivateTs;
-            childOps.updateOps.push({ rowNumber: deactivateRowNum, rowData: deactivateRow });
+          let deactivateRowNum = findRowByValue(childSheet, childIdx.Code, originalCode, 2, true, childValues);
+          if (deactivateRowNum === -1) throw new Error('Record not found: ' + originalCode);
+          if (childIdx.Status === undefined) throw new Error('Status column is required for deactivate');
+          let deactivateRow = childMaxNeededCol === childHeaders.length
+            ? childValues[deactivateRowNum - 1].slice()
+            : childSheet.getRange(deactivateRowNum, 1, 1, childHeaders.length).getValues()[0];
+          enforceRecordLevelAccess(auth, childResource.config, childHeaders, deactivateRow);
+          if (parentCodeField && String(deactivateRow[childIdx[parentCodeField]] || '').trim() !== parentCode) {
+            throw new Error('Child belongs to another parent: ' + originalCode);
           }
+          deactivateRow[childIdx.Status] = 'Inactive';
+          let deactivateTs = applyAuditFields(deactivateRow, childIdx, auth, childResource.config, false);
+          if (deactivateTs > childOps.maxTimestamp) childOps.maxTimestamp = deactivateTs;
+          childOps.updateOps.push({ rowNumber: deactivateRowNum, rowData: deactivateRow });
         } else if (recAction === 'update' && originalCode) {
-          var updateRowNum = findRowByValue(childSheet, childIdx.Code, originalCode, 2, true);
+          let updateRowNum = findRowByValue(childSheet, childIdx.Code, originalCode, 2, true, childValues);
           if (updateRowNum === -1) {
             validationErrors.push({ resource: childResourceName, index: r, message: 'Record not found: ' + originalCode });
             continue;
           }
-          var existingChildRow = childSheet.getRange(updateRowNum, 1, 1, childHeaders.length).getValues()[0];
-          var mergedChild = mergeMasterRow(existingChildRow, childIdx, childProvidedValues, childSchema);
+          let existingChildRow = childMaxNeededCol === childHeaders.length
+            ? childValues[updateRowNum - 1].slice()
+            : childSheet.getRange(updateRowNum, 1, 1, childHeaders.length).getValues()[0];
+          enforceRecordLevelAccess(auth, childResource.config, childHeaders, existingChildRow);
+          if (parentCodeField && String(existingChildRow[childIdx[parentCodeField]] || '').trim() !== parentCode) {
+            throw new Error('Child belongs to another parent: ' + originalCode);
+          }
+          let mergedChild = mergeMasterRow(existingChildRow, childIdx, childProvidedValues, childSchema);
           mergedChild[childIdx.Code] = nextCode;
-          var mergedChildTs = applyAuditFields(mergedChild, childIdx, auth, childResource.config, false);
+          let mergedChildTs = applyAuditFields(mergedChild, childIdx, auth, childResource.config, false);
           if (mergedChildTs > childOps.maxTimestamp) childOps.maxTimestamp = mergedChildTs;
           validateRequiredFields(mergedChild, childIdx, childSchema.requiredHeaders, childResourceName);
-          validateMasterUniqueness(childCurrentValues, childIdx, mergedChild, childSchema, updateRowNum, childResourceName);
+          validateMasterUniqueness(childCurrentValues, childIdx, mergedChild, childSchema, updateRowNum, childResourceName, childUniquenessIndex);
           childOps.updateOps.push({ rowNumber: updateRowNum, rowData: mergedChild });
           childCurrentValues[updateRowNum - 1] = mergedChild;
+          childUniquenessIndex.changedRows.push(updateRowNum - 1);
+          if (nextCode !== originalCode) _code_sequence_cache.delete(childCurrentValues);
         } else {
           // create
-          var newChildCode = nextCode || (childResource.config.scope === 'operation'
+          let newChildCode = nextCode || (childResource.config.scope === 'operation'
             ? generateNextYearScopedCode(childCurrentValues, childIdx, childCodePrefix, childSeqLength)
             : generateNextCode(childCurrentValues, childIdx, childCodePrefix, childSeqLength));
-          var newChildRow = buildNewResourceRow(childHeaders, childIdx, childProvidedValues, childSchema);
+          let newChildRow = buildNewResourceRow(childHeaders, childIdx, childProvidedValues, childSchema);
           newChildRow[childIdx.Code] = newChildCode;
           applyAccessRegionOnWrite(newChildRow, childIdx, auth, childResource.config, compositeBatchContext);
-          var newChildTs = applyAuditFields(newChildRow, childIdx, auth, childResource.config, true);
+          let newChildTs = applyAuditFields(newChildRow, childIdx, auth, childResource.config, true);
           if (newChildTs > childOps.maxTimestamp) childOps.maxTimestamp = newChildTs;
           validateRequiredFields(newChildRow, childIdx, childSchema.requiredHeaders, childResourceName);
-          validateMasterUniqueness(childCurrentValues, childIdx, newChildRow, childSchema, -1, childResourceName);
+          validateMasterUniqueness(childCurrentValues, childIdx, newChildRow, childSchema, -1, childResourceName, childUniquenessIndex);
           childOps.newRows.push(newChildRow);
           childCurrentValues.push(newChildRow);
         }
@@ -1759,35 +1834,35 @@ function handleCompositeSave(auth, payload) {
   if (isEdit) {
     parentSheet.getRange(parentRowNumber, 1, 1, parentHeaders.length).setValues([parentRowData]);
   } else {
-    var parentTargetRow = parentLastRow + 1;
+    let parentTargetRow = parentLastRow + 1;
     parentSheet.getRange(parentTargetRow, 1, 1, parentHeaders.length).setValues([parentRowData]);
   }
   updateResourceSyncCursor(parentResourceName, parentTimestamp);
 
   // Write children
-  for (var w = 0; w < childWriteOps.length; w++) {
-    var ops = childWriteOps[w];
+  for (let w = 0; w < childWriteOps.length; w++) {
+    let ops = childWriteOps[w];
     if (ops.newRows.length) {
-      var startRow = ops.lastRow + 1;
+      let startRow = ops.lastRow + 1;
       ops.sheet.getRange(startRow, 1, ops.newRows.length, ops.headers.length).setValues(ops.newRows);
     }
-    for (var u = 0; u < ops.updateOps.length; u++) {
+    for (let u = 0; u < ops.updateOps.length; u++) {
       ops.sheet.getRange(ops.updateOps[u].rowNumber, 1, 1, ops.headers.length).setValues([ops.updateOps[u].rowData]);
     }
     updateResourceSyncCursor(ops.resourceName, ops.maxTimestamp);
   }
 
-  var childResourceResults = childWriteOps.map(function(ops) {
+  let childResourceResults = childWriteOps.map(function(ops) {
     return {
       resourceName: ops.resourceName,
       createdRecords: ops.newRows.map(function(row) { return rowArrayToObject(ops.headers, row); }),
       updatedRecords: ops.updateOps.map(function(op) { return rowArrayToObject(ops.headers, op.rowData); })
     };
   });
-  var directResources = buildCompositeDirectWriteResources(
+  let directResources = buildCompositeDirectWriteResources(
     parentResourceName, parentResource.config, parentHeaders, parentRowData, childWriteOps, auth, parentTimestamp
   );
-  var result = {
+  let result = {
     success: true,
     message: parentResourceName + ' saved successfully',
     data: mergeDeltaResourcesIntoResult(
@@ -1865,9 +1940,6 @@ function handleExecuteAction(auth, payload) {
     idx: idx
   });
 
-  // A resource-level action owns no row yet — it CREATES the record it then stamps. The
-  // whole create path is reused, so the Code, the sheet defaults, AccessRegion, the audit
-  // columns and the required/unique checks are the same ones a normal create gets.
   if (!code) {
     if (!actionConfig || actionConfig.resourceLevel !== true) {
       return { success: false, message: 'Record code is required' };
@@ -1876,7 +1948,7 @@ function handleExecuteAction(auth, payload) {
     if (!created.success) return created;
     code = (created.data && created.data.code ? created.data.code : '').toString().trim();
     if (!code) return { success: false, message: 'Could not create the ' + resourceName + ' record for ' + actionName };
-    SpreadsheetApp.flush();
+    if (!_activeBatchWritePlan) SpreadsheetApp.flush();
   }
 
   var rowNumber = findRowByValue(sheet, idx.Code, code, 2, true);
@@ -1888,13 +1960,6 @@ function handleExecuteAction(auth, payload) {
   var previousRecord = rowArrayToObject(headers, existingRow);
   enforceRecordLevelAccess(auth, resource.config, headers, existingRow);
 
-  // Multi-record targets (actionTargets.gs). The target list comes from the
-  // trusted APP.Resources config, never the client — that is what authorizes a
-  // target write under THIS action's permission on the source resource.
-  //
-  // Targets run BEFORE the source row is stamped: they validate as a set, so if
-  // one fails nothing is written and the record keeps its current state rather
-  // than flipping to an outcome whose follow-up records never materialized.
   var targetOutcome = executeActionTargets(auth, actionConfig && actionConfig.targets, {
     auth: auth,
     record: previousRecord,
@@ -1910,27 +1975,13 @@ function handleExecuteAction(auth, payload) {
     existingRow[idx[column]] = columnValue;
   }
 
-  // Set auto-fill fields: {column}{PascalCase(value)}At and {column}{PascalCase(value)}By
-  // `At` is a readable 24-hour string and `By` the user's display name, because
-  // both are surfaced verbatim in the UI, in sheet views and in printed reports.
   var atField = column + stampSuffix + 'At';
   var byField = column + stampSuffix + 'By';
   if (idx[atField] !== undefined) existingRow[idx[atField]] = formatDateTime24();
   if (idx[byField] !== undefined) existingRow[idx[byField]] = auth.user.Name || auth.user.UserID;
 
-  // RespondDate is a by-convention column, in the same spirit as the audit
-  // columns: any resource whose sheet declares it gets it stamped on every
-  // action, whatever the outcome. That is the point of it — Complete, Postpone
-  // and Cancel each write their own ProgressXxxAt, but one column answers "when
-  // was this responded to" without a three-way coalesce in every view, report and
-  // filter. Resources without the column are untouched, so nothing is hardcoded
-  // to a resource name here. Set before user fields so an editable field of the
-  // same name still wins.
   if (idx.RespondDate !== undefined) existingRow[idx.RespondDate] = formatDateTime24();
 
-  // Set the action's own fields. `sourceFields` is the config-resolved set, so a hidden
-  // `from`/`value` field lands here too; anything the client sent that the config does
-  // not declare still applies, which is the older contract.
   var writeFields = {};
   Object.keys(userFields).forEach(function (fieldName) { writeFields[fieldName] = userFields[fieldName]; });
   Object.keys(sourceFields).forEach(function (fieldName) { writeFields[fieldName] = sourceFields[fieldName]; });
@@ -1949,10 +2000,6 @@ function handleExecuteAction(auth, payload) {
 
   var savedRecord = rowArrayToObject(headers, existingRow);
 
-  // Direct-write payloads for every resource this action touched. Rows written
-  // by a target land in the response alongside the source record, so the store
-  // hydrates them without a follow-up fetch. A target writing back to the
-  // SOURCE resource merges into one payload rather than clobbering it.
   var directWriteResources = {};
   directWriteResources[resourceName] = buildDirectWriteResourcePayload(resourceName, resource.config, headers, [existingRow], auth, recordTimestamp);
 
@@ -1977,6 +2024,10 @@ function handleExecuteAction(auth, payload) {
       directWriteResources
     )
   };
+  var sideEffectResources = [];
+  if (resourceName === 'WarehouseTransfers') {
+    sideEffectResources.push('WarehouseTransferItems', 'StockMovements', 'WarehouseStorages');
+  }
   dispatchPostActionHook(resource.config, payload, result, auth, 'executeAction', {
     headers: headers,
     previousRecord: previousRecord,
@@ -1984,11 +2035,6 @@ function handleExecuteAction(auth, payload) {
     actionName: actionName
   }, resourceName);
 
-  // Safe boundary for side-effects (Bucket B)
-  var sideEffectResources = [];
-  if (resourceName === 'WarehouseTransfers') {
-    sideEffectResources.push('WarehouseTransferItems', 'StockMovements', 'WarehouseStorages');
-  }
   if (sideEffectResources.length) {
     var deltaPayloads = collectWriteDeltaResources(auth, payload, sideEffectResources);
     result.data = mergeDeltaResourcesIntoResult(result.data, deltaPayloads);
@@ -1997,25 +2043,25 @@ function handleExecuteAction(auth, payload) {
 }
 
 function handleResourceBulkUpsertRecords(auth, payload) {
-  var targetResourceName = (payload.targetResource || '').toString().trim();
+  let targetResourceName = (payload.targetResource || '').toString().trim();
   if (!targetResourceName) {
     return { success: false, message: 'targetResource is required for bulk upload' };
   }
 
-  var records = Array.isArray(payload.records) ? payload.records : [];
+  let records = Array.isArray(payload.records) ? payload.records : [];
   if (!records.length) {
     return { success: false, message: 'No records provided' };
   }
 
-  var resource = openResourceSheet(targetResourceName);
-  var schema = buildMasterSchemaFromResourceConfig(resource.config);
-  var sheet = resource.sheet;
-  var headers = getSheetHeadersByMeta(resource.config.fileId, resource.config.sheetName, sheet);
-  var idx = getHeaderIndexMap(headers);
-  var codePrefix = (resource.config.codePrefix || '').toString().trim();
-  var seqLength = resource.config.codeSequenceLength || 6;
+  let resource = openResourceSheet(targetResourceName);
+  let schema = buildMasterSchemaFromResourceConfig(resource.config);
+  let sheet = resource.sheet;
+  let headers = getSheetHeadersByMeta(resource.config.fileId, resource.config.sheetName, sheet);
+  let idx = getHeaderIndexMap(headers);
+  let codePrefix = (resource.config.codePrefix || '').toString().trim();
+  let seqLength = resource.config.codeSequenceLength || 6;
 
-  var maxColIdx = idx.Code !== undefined ? idx.Code : 0;
+  let maxColIdx = idx.Code !== undefined ? idx.Code : 0;
   (schema.uniqueHeaders || []).forEach(function (h) {
     if (idx[h] !== undefined && idx[h] > maxColIdx) maxColIdx = idx[h];
   });
@@ -2024,49 +2070,50 @@ function handleResourceBulkUpsertRecords(auth, payload) {
       if (idx[h] !== undefined && idx[h] > maxColIdx) maxColIdx = idx[h];
     });
   });
-  var maxNeededCol = Math.min(headers.length, maxColIdx + 1);
+  let maxNeededCol = Math.min(headers.length, maxColIdx + 1);
   if (maxNeededCol < 1) maxNeededCol = 1;
 
-  var lastRow = sheet.getLastRow();
+  let lastRow = sheet.getLastRow();
+  const providedCodes = records.map(function(record) { return resolveCodeValue({ record: record }); }).filter(Boolean);
+  if (providedCodes.length >= Math.max(2, Math.ceil((lastRow - 1) / 4))) maxNeededCol = headers.length;
 
-  var currentValues;
+  let currentValues;
   if (lastRow > 1) {
     currentValues = sheet.getRange(1, 1, lastRow, maxNeededCol).getValues();
   } else {
     currentValues = [headers.slice(0, maxNeededCol)];
   }
 
-  var results = { created: 0, updated: 0, skipped: 0, errors: [] };
-  var createdRecords = [];
-  var updatedRecords = [];
+  const lookupValues = currentValues.slice();
+  if (_activeBatchWritePlan && maxNeededCol < headers.length && providedCodes.length) {
+    const rowNumbers = providedCodes.map(function(code) { return findRowByValue(sheet, idx.Code, code, 2, true, lookupValues); });
+    getBatchSheetView(_activeBatchWritePlan, sheet, null, { rows: rowNumbers, width: headers.length });
+  }
+  const uniquenessIndex = {};
+  let results = { created: 0, updated: 0, skipped: 0, errors: [] };
+  let createdRecords = [];
+  let updatedRecords = [];
 
-  var newRows = [];       // Array of rowData arrays to append
-  var updateOps = [];     // Array of {rowNumber, rowData} to write back
-  // Newest audit timestamp stamped in this batch; drives the sync cursor.
-  // Tracked with a single-pass max (never Math.max(...array) — bulk batches can
-  // be large enough to blow the call stack on a spread).
-  var maxRecordTimestamp = 0;
+  let newRows = [];       // Array of rowData arrays to append
+  let updateOps = [];     // Array of {rowNumber, rowData} to write back
+  let maxRecordTimestamp = 0;
 
-  // Track Codes seen within this batch. When the same Code appears more than
-  // once (e.g., allocation split), subsequent occurrences force a new INSERT
-  // with an auto-generated Code instead of double-writing the same sheet row.
-  var seenCodesInBatch = {};
-  var bulkBatchContext = { configs: {}, rows: {}, nameToCodeMap: null };
+  let seenCodesInBatch = {};
+  let bulkBatchContext = { configs: {}, rows: {}, nameToCodeMap: null };
 
   records.forEach(function (recordData, index) {
     try {
-      var code = resolveCodeValue({ record: recordData });
-      var isDuplicateInBatch = code && !!seenCodesInBatch[code];
+      let code = resolveCodeValue({ record: recordData });
+      let isDuplicateInBatch = code && !!seenCodesInBatch[code];
       if (code) seenCodesInBatch[code] = true;
 
-      var rowNumber = (!isDuplicateInBatch && code) ? findRowByValue(sheet, idx.Code, code, 2, true) : -1;
+      let rowNumber = (!isDuplicateInBatch && code) ? findRowByValue(sheet, idx.Code, code, 2, true, lookupValues) : -1;
 
-      var providedValues = extractProvidedHeaderValues(headers, { record: recordData });
-      var rowData;
+      let providedValues = extractProvidedHeaderValues(headers, { record: recordData });
+      let rowData;
 
       if (rowNumber === -1) {
-        // --- INSERT (collect for batch) ---
-        var newCode = code && !isDuplicateInBatch
+        let newCode = code && !isDuplicateInBatch
           ? code
           : (resource.config.scope === 'operation'
             ? generateNextYearScopedCode(currentValues, idx, codePrefix, seqLength)
@@ -2074,28 +2121,30 @@ function handleResourceBulkUpsertRecords(auth, payload) {
         rowData = buildNewResourceRow(headers, idx, providedValues, schema);
         rowData[idx.Code] = newCode;
         applyAccessRegionOnWrite(rowData, idx, auth, resource.config, bulkBatchContext);
-        var createdAtTs = applyAuditFields(rowData, idx, auth, resource.config, true);
+        let createdAtTs = applyAuditFields(rowData, idx, auth, resource.config, true);
         if (createdAtTs > maxRecordTimestamp) maxRecordTimestamp = createdAtTs;
         validateRequiredFields(rowData, idx, schema.requiredHeaders, targetResourceName);
-        validateMasterUniqueness(currentValues, idx, rowData, schema, -1, targetResourceName);
+        validateMasterUniqueness(currentValues, idx, rowData, schema, -1, targetResourceName, uniquenessIndex);
 
         newRows.push(rowData);
         currentValues.push(rowData);
         createdRecords.push(rowArrayToObject(headers, rowData));
         results.created++;
       } else {
-        // --- UPDATE (collect for batch) ---
-        var existingRow = sheet.getRange(rowNumber, 1, 1, headers.length).getValues()[0];
+        let existingRow = maxNeededCol === headers.length
+          ? lookupValues[rowNumber - 1].slice()
+          : sheet.getRange(rowNumber, 1, 1, headers.length).getValues()[0];
         enforceRecordLevelAccess(auth, resource.config, headers, existingRow);
         rowData = mergeMasterRow(existingRow, idx, providedValues, schema);
         rowData[idx.Code] = code;
-        var updatedAtTs = applyAuditFields(rowData, idx, auth, resource.config, false);
+        let updatedAtTs = applyAuditFields(rowData, idx, auth, resource.config, false);
         if (updatedAtTs > maxRecordTimestamp) maxRecordTimestamp = updatedAtTs;
         validateRequiredFields(rowData, idx, schema.requiredHeaders, targetResourceName);
-        validateMasterUniqueness(currentValues, idx, rowData, schema, rowNumber, targetResourceName);
+        validateMasterUniqueness(currentValues, idx, rowData, schema, rowNumber, targetResourceName, uniquenessIndex);
 
         updateOps.push({ rowNumber: rowNumber, rowData: rowData });
         currentValues[rowNumber - 1] = rowData;
+        uniquenessIndex.changedRows.push(rowNumber - 1);
         updatedRecords.push(rowArrayToObject(headers, rowData));
         results.updated++;
       }
@@ -2106,26 +2155,26 @@ function handleResourceBulkUpsertRecords(auth, payload) {
 
   // Batch write: new rows as a single block append
   if (newRows.length) {
-    var startRow = lastRow + 1;
+    let startRow = lastRow + 1;
     sheet.getRange(startRow, 1, newRows.length, headers.length).setValues(newRows);
   }
 
   // Batch write: updates (individual rows — scattered positions prevent single setValues)
-  for (var u = 0; u < updateOps.length; u++) {
+  for (let u = 0; u < updateOps.length; u++) {
     sheet.getRange(updateOps[u].rowNumber, 1, 1, headers.length).setValues([updateOps[u].rowData]);
   }
 
   updateResourceSyncCursor(targetResourceName, maxRecordTimestamp);
-  var allFailed = results.errors.length >= records.length;
-  var hasErrors = results.errors.length > 0;
-  var bulkMessage = buildBulkUpsertResultMessage(targetResourceName, results, records.length);
+  let allFailed = results.errors.length >= records.length;
+  let hasErrors = results.errors.length > 0;
+  let bulkMessage = buildBulkUpsertResultMessage(targetResourceName, results, records.length);
 
-  var allRows = newRows.concat(updateOps.map(function (op) { return op.rowData; }));
-  var directPayload = buildDirectWriteResourcePayload(targetResourceName, resource.config, headers, allRows, auth, maxRecordTimestamp);
-  var directResources = {};
+  let allRows = newRows.concat(updateOps.map(function (op) { return op.rowData; }));
+  let directPayload = buildDirectWriteResourcePayload(targetResourceName, resource.config, headers, allRows, auth, maxRecordTimestamp);
+  let directResources = {};
   directResources[targetResourceName] = directPayload;
 
-  var result = {
+  let result = {
     success: !allFailed,
     message: bulkMessage,
     error: hasErrors ? bulkMessage : null,
@@ -2139,6 +2188,12 @@ function handleResourceBulkUpsertRecords(auth, payload) {
       directResources
     )
   };
+  let sideEffectResources = [];
+  if (targetResourceName === 'OutletMovements') {
+    sideEffectResources.push('OutletStorages');
+  } else if (targetResourceName === 'StockMovements') {
+    sideEffectResources.push('WarehouseStorages');
+  }
   dispatchPostActionHook(resource.config, payload, result, auth, 'bulk', {
     headers: headers,
     targetResource: targetResourceName,
@@ -2153,15 +2208,8 @@ function handleResourceBulkUpsertRecords(auth, payload) {
     }
   }, targetResourceName);
 
-  // Safe boundary for side-effect hooks (Bucket B)
-  var sideEffectResources = [];
-  if (targetResourceName === 'OutletMovements') {
-    sideEffectResources.push('OutletStorages');
-  } else if (targetResourceName === 'StockMovements') {
-    sideEffectResources.push('WarehouseStorages');
-  }
   if (sideEffectResources.length) {
-    var deltaPayloads = collectWriteDeltaResources(auth, payload, sideEffectResources);
+    let deltaPayloads = collectWriteDeltaResources(auth, payload, sideEffectResources);
     result.data = mergeDeltaResourcesIntoResult(result.data, deltaPayloads);
   }
   return result;
@@ -2192,4 +2240,3 @@ function formatBulkErrorMessage(errorEntry) {
   message = message.replace(/^Error:\s*/i, '');
   return 'row ' + rowNumber + ': ' + message;
 }
-

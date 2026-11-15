@@ -1,19 +1,16 @@
-/**
- * ============================================================
- * AQL - Sheet Helpers
- * ============================================================
- * Shared helper functions for header/index/row access patterns.
- */
-
 var _appSpreadsheetCache = null;
+var _appSpreadsheetIdCache = '';
 var _sheet_headers_cache = {};
 var _openedSpreadsheetsCache = {};
 var _config_map_cache = null;
+const _row_lookup_cache = new WeakMap();
 
-/**
- * Safely opens a spreadsheet by ID, caching the reference in memory
- * for the duration of the execution context to avoid redundant openById calls.
- */
+function getAppSpreadsheetId() {
+  if (_appSpreadsheetIdCache) return _appSpreadsheetIdCache;
+  _appSpreadsheetIdCache = getAppSpreadsheet().getId();
+  return _appSpreadsheetIdCache;
+}
+
 function openSpreadsheetById(fileId) {
   if (!fileId) return null;
   if (_openedSpreadsheetsCache[fileId]) return _openedSpreadsheetsCache[fileId];
@@ -181,9 +178,6 @@ function getSheetHeadersByMeta(fileId, sheetName, sheetObject, options) {
   return headers;
 }
 
-// Batched header resolution: one getAll, one putAll, one grouped metadata write.
-// The per-resource path costs a TextFinder-backed sheet write EACH, and login asks
-// for all ~49 at once. Writes the same HEADERS_<fileId>_<sheetName> keys.
 function getSheetHeadersBatch(entries, options) {
   var out = {};
   var list = Array.isArray(entries) ? entries : [];
@@ -352,18 +346,6 @@ function clearSheetHeaderCaches() {
   return keys.length;
 }
 
-/**
- * Formats a value as the canonical AQL workflow date-time string:
- * `YYYY-MM-DD HH:mm:ss`, 24-hour, in the script's timezone.
- *
- * This is the on-sheet shape for every `...At` workflow stamp column (and for
- * `RespondDate`). Epoch milliseconds were the previous shape; they are still
- * accepted as INPUT here so historical rows re-stamped by a later action come
- * back out in the readable form rather than staying numeric.
- *
- * @param {Date|number|string} [value] - defaults to now
- * @returns {string}
- */
 function formatDateTime24(value) {
   var date;
   if (value instanceof Date) {
@@ -385,12 +367,32 @@ function getHeaderIndexMap(headers) {
   return map;
 }
 
-function findRowByValue(sheet, colIndex, value, startRow, matchCase) {
+function findRowByValue(sheet, colIndex, value, startRow, matchCase, snapshot) {
   if (colIndex === undefined || colIndex < 0 || value === undefined || value === null || value === '') {
     return -1;
   }
 
   const rowStart = startRow || 2;
+  if (snapshot) {
+    let indexes = _row_lookup_cache.get(snapshot);
+    if (!indexes) {
+      indexes = new Map();
+      _row_lookup_cache.set(snapshot, indexes);
+    }
+    const key = [colIndex, rowStart, matchCase === true].join(':');
+    let index = indexes.get(key);
+    if (!index) {
+      index = new Map();
+      for (let row = rowStart - 1; row < snapshot.length; row++) {
+        const cell = snapshot[row][colIndex];
+        const text = matchCase === true ? String(cell) : String(cell).toLowerCase();
+        if (!index.has(text)) index.set(text, row + 1);
+      }
+      indexes.set(key, index);
+    }
+    const target = matchCase === true ? String(value) : String(value).toLowerCase();
+    return index.has(target) ? index.get(target) : -1;
+  }
   const totalRows = sheet.getLastRow();
   if (totalRows < rowStart) return -1;
 
@@ -414,11 +416,6 @@ function getRowAsObject(sheet, rowNumber, headers) {
   return rowObj;
 }
 
-/**
- * Resolves the APP spreadsheet safely for both bound and web app execution contexts.
- * Fallback: ScriptProperties.APP_FILE_ID when getActiveSpreadsheet() is unavailable.
- * Uses a global variable to cache the result for the duration of the request.
- */
 function getAppSpreadsheet() {
   if (_appSpreadsheetCache) return _appSpreadsheetCache;
 
@@ -438,10 +435,6 @@ function getAppSpreadsheet() {
     throw new Error('Failed to open APP spreadsheet using ScriptProperties.APP_FILE_ID. Please re-run setup and store the APP file ID.');
   }
 }
-/**
- * Stores the current APP spreadsheet ID in ScriptProperties.APP_FILE_ID.
- * Safe to call repeatedly; no-op when value already matches.
- */
 function setAppFileId() {
   var active = SpreadsheetApp.getActiveSpreadsheet();
   if (!active) {
@@ -457,10 +450,6 @@ function setAppFileId() {
 
 // ── APP.Config Helpers ──────────────────────────────────────
 
-/**
- * Returns the full config map from APP.Config sheet as {Key: Value}.
- * Uses CacheService (6-hour TTL) since config rarely changes.
- */
 function getConfigMap() {
   // Memo: resolveFileIdForScope calls this twice per resource row, so a config
   // rebuild otherwise issues ~100 blocking CacheService round-trips.
@@ -493,19 +482,13 @@ function getConfigMap() {
   return map;
 }
 
-/**
- * Clears the cached APP.Config map so next read fetches fresh data.
- * Call after any write to the Config sheet.
- */
 function clearConfigCache() {
   _config_map_cache = null;
+  if (typeof clearLoginAppConfigCache === 'function') clearLoginAppConfigCache();
   var cache = CacheService.getScriptCache();
-  cache.remove('APP_CONFIG_MAP_V2_' + getAppSpreadsheet().getId());
+  cache.remove('APP_CONFIG_MAP_V2_' + getAppSpreadsheetId());
 }
 
-/**
- * Returns a single config value by key from APP.Config sheet.
- */
 function getAppConfigValue(key) {
   var map = getConfigMap();
   return map[(key || '').toString().toLowerCase()] || '';
@@ -515,10 +498,6 @@ function getConfiguredScopes() {
   return ['master', 'operation', 'accounts', 'report', 'view'];
 }
 
-/**
- * Resolves a file ID for a given resource scope using the fallback chain:
- * Resource.FileID (if present) -> Config[{Scope}FileID] -> ss.getId()
- */
 function resolveFileIdForScope(scope, resourceFileId) {
   if (resourceFileId) return resourceFileId;
 
@@ -541,10 +520,6 @@ function resolveFileIdForScope(scope, resourceFileId) {
   return getAppSpreadsheet().getId();
 }
 
-/**
- * Diagnostics: logs resolved file IDs per resource for troubleshooting.
- * Non-public utility — call from Script Editor > Run.
- */
 function diagLogResolvedFileIds() {
   var ss = getAppSpreadsheet();
   var sheet = ss.getSheetByName(CONFIG.SHEETS.RESOURCES);
@@ -566,9 +541,6 @@ function diagLogResolvedFileIds() {
   }
   Logger.log(lines.join('\n'));
 }
-/**
- * Gets the metadata context from the APP file.
- */
 var _metadata_cache = null;
 function getMetadataContext() {
   if (_metadata_cache) return _metadata_cache;
@@ -597,17 +569,11 @@ function getMetadataContext() {
   return _metadata_cache;
 }
 
-/**
- * Gets a value from the permanent Metadata sheet.
- */
 function getPermanentMetadata(key) {
   var ctx = getMetadataContext();
   return ctx.map[key];
 }
 
-/**
- * Saves a value to the permanent Metadata sheet.
- */
 function setPermanentMetadata(key, value) {
   var ctx = getMetadataContext();
   if (!ctx.sheet) {
@@ -760,10 +726,6 @@ function clearPermanentMetadataChunks(key) {
   }
 }
 
-/**
- * Clears permanent metadata rows from the APP Metadata sheet.
- * Returns a summary so menu wrappers and manual script runs can verify the target.
- */
 function clearPermanentMetadataCache() {
   var ss = getAppSpreadsheet();
   var metaSheet = ss.getSheetByName(CONFIG.SHEETS.METADATA);
@@ -794,16 +756,13 @@ function clearPermanentMetadataCache() {
   return summary;
 }
 
-/**
- * Clears all in-memory and CacheService caches.
- * Call from setup/sync operation that modify APP sheets.
- */
 function clearAllAppCaches() {
   // First, while the config map is still readable — the key names come from it.
   var headerKeysCleared = clearSheetHeaderCaches();
 
   // In-memory: spreadsheet cache
   _appSpreadsheetCache = null;
+  _appSpreadsheetIdCache = '';
   _sheet_headers_cache = {};
   _metadata_cache = null;
   _openedSpreadsheetsCache = {};
@@ -817,16 +776,13 @@ function clearAllAppCaches() {
   if (typeof clearResourceConfigCache === 'function') clearResourceConfigCache();
   if (typeof clearRolePermissionsCache === 'function') clearRolePermissionsCache();
   if (typeof clearRolesCache === 'function') clearRolesCache();
+  if (typeof clearDesignationsCache === 'function') clearDesignationsCache();
   if (typeof clearUsersCache === 'function') clearUsersCache();
   if (typeof clearAccessRegionsCache === 'function') clearAccessRegionsCache();
 
   return metadataSummary;
 }
 
-/**
- * Clears and immediately rebuilds the critical APP runtime caches.
- * Intended for the Google Sheet admin menu when sheet-backed config changed.
- */
 function regenerateAllAppCaches() {
   var summary = clearAllAppCaches();
   var rebuilt = [];
@@ -845,6 +801,8 @@ function regenerateAllAppCaches() {
   warmCache('APP.Resources', 'getResourceConfigMap');
   warmCache('APP.RolePermissions', 'getRolePermissionsContext');
   warmCache('APP.Roles', 'getRolesCache');
+  warmCache('APP.Designations', 'getDesignationsCache');
+  warmCache('APP.AccessRegions', 'getAccessRegionContext');
 
   var headerSummary = warmResourceHeaderCaches();
 
@@ -858,9 +816,6 @@ function regenerateAllAppCaches() {
   return summary;
 }
 
-/**
- * Warms sheet header metadata so login does not pay the first cross-file reads.
- */
 function warmResourceHeaderCaches() {
   var result = { rebuilt: 0, skipped: 0, persisted: 0, failures: [] };
 
@@ -975,10 +930,6 @@ function diagResourceHeaders(resourceName) {
   return report;
 }
 
-// Ops check: confirms the config map actually persists across executions.
-// Run from the Apps Script editor (never as a cell formula - custom functions
-// cannot write, so the purge silently no-ops and the result is meaningless).
-// warmSource 'cache' + healthy true is the pass condition.
 function diagCacheHealth() {
   var report = {};
   var scopedKey = RESOURCE_CONFIG_CACHE_KEY + '_' + getAppSpreadsheet().getId();

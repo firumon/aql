@@ -1,13 +1,3 @@
-/**
- * ============================================================
- * AQL - Access Region Helpers
- * ============================================================
- * Access Region is a hierarchical data-access boundary.
- * - User with empty AccessRegion => universe access
- * - User with AccessRegion=X => access X + all descendants
- * - Record with empty AccessRegion => universe record
- */
-
 let __accessRegionContextCache = null;
 let __universeNameToCodeMemoryCache = null;
 
@@ -15,8 +5,9 @@ function clearAccessRegionsCache() {
   __accessRegionContextCache = null;
   __universeNameToCodeMemoryCache = null;
   try {
-    var ssId = getAppSpreadsheet().getId();
+    var ssId = typeof getAppSpreadsheetId === 'function' ? getAppSpreadsheetId() : getAppSpreadsheet().getId();
     removeChunkedCache('AQL_UNIVERSE_NAME_TO_REGION_' + ssId);
+    removeChunkedCache('AQL_ACCESS_REGIONS_CTX_V1_' + ssId);
   } catch (e) { /* non-fatal */ }
 }
 
@@ -24,6 +15,16 @@ function getAccessRegionContext() {
   if (__accessRegionContextCache) {
     return __accessRegionContextCache;
   }
+
+  var ssId = '';
+  try {
+    ssId = typeof getAppSpreadsheetId === 'function' ? getAppSpreadsheetId() : getAppSpreadsheet().getId();
+    var cachedJson = getChunkedCache('AQL_ACCESS_REGIONS_CTX_V1_' + ssId);
+    if (cachedJson) {
+      __accessRegionContextCache = JSON.parse(cachedJson);
+      return __accessRegionContextCache;
+    }
+  } catch (e) { /* fall through */ }
 
   const sheet = getAppSpreadsheet().getSheetByName(CONFIG.SHEETS.ACCESS_REGIONS);
   if (!sheet) {
@@ -67,6 +68,12 @@ function getAccessRegionContext() {
     byCode: byCode,
     childMap: childMap
   };
+
+  if (ssId) {
+    try {
+      putChunkedCache('AQL_ACCESS_REGIONS_CTX_V1_' + ssId, JSON.stringify(__accessRegionContextCache), CACHE_TTL_SEC);
+    } catch (e) { /* non-fatal */ }
+  }
 
   return __accessRegionContextCache;
 }

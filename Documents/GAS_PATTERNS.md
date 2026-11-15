@@ -9,6 +9,7 @@ Read this file when you are changing GAS implementation, not for every task.
 ---
 
 ## Core Rule
+- Keep business calculations and workflow choices in the frontend. GAS handles data access, code generation, access checks and write validation. Use pre/post hooks only when the work cannot be handled safely in the frontend.
 - Prefer extending existing GAS files and existing patterns first.
 - Create a new GAS file only when the current structure cannot support the task cleanly or safely.
 - If a new pattern or file is needed, plan it first and document the reason.
@@ -20,12 +21,12 @@ Read this file when you are changing GAS implementation, not for every task.
 | # | Pattern | When to use |
 |---|---------|-------------|
 | 1 | **Pure CRUD via resource metadata** | Standard create/read/update on a single resource |
-| 2 | **PostAction hook** (`PostAction_after<Action>` or base fallback) | Non-blocking side-effects after supported write actions |
-| 3 | **Bulk array write** (`bulk` / `dispatchBulkCreateRecords`) | Multi-record create/update in one call; returns fresh snapshot |
+| 2 | **Bulk array write** (`bulk` / `dispatchBulkCreateRecords`) | Multi-record create/update in one call; returns fresh snapshot |
+| 3 | **Composite save** (`compositeSave`) | Parent + children with all-or-nothing validation |
 | 4 | **Additional actions** (`executeAction`) | Workflow transitions (Approve, Reject, Submit, etc.) |
-| 5 | **Composite save** (`compositeSave`) | Atomic parent + children write with all-or-nothing validation |
+| 5 | **Batch envelope** (`batch`) | Ordered preparation, then one atomic write per spreadsheet file, including explicit `$ref` dependencies |
 | 6 | **Record fetch** (`record`) | Exact multi-resource, multi-code record lookup with canonical resource hydration |
-| 7 | **Batch envelope** (`batch`) | Ordered preparation, then one atomic write per spreadsheet file, including explicit `$ref` dependencies |
+| 7 | **PostAction hook** (`PostAction_after<Action>` or base fallback) | Existing required side-effects or work that cannot be handled safely in the frontend |
 | 8 | **Propose a new generic pattern** | Only if none of the above fit |
 
 ---
@@ -57,7 +58,8 @@ Use `batch` when you need to write data and immediately get fresh rows back, or 
 - Use normal text helpers only for values that cannot be batch refs. Use `textOrRef(value)` for fields such as `code`, `ParentCode`, `ReferenceCode`, `SourceCode`, `TargetCode`, and same-batch foreign-key fields.
 - **List / Multi-Code columns (`$append`)**: When a field stores a delimited list combining a pending batch-generated code with existing codes, use `batchRefList(path, existingCodes, separator)`. This emits `{ "$ref": "...", "$append": [...], "$separator": "," }` which GAS resolves, prepends, de-duplicates, and joins.
 - Do not embed `$ref` values inside comments or other freeform sentence strings. Either omit the same-batch generated code from the comment, write the comment after the code is known, or add an explicit backend template feature before using refs inside strings.
-- `latest` means the latest successful output for that resource in the current batch.
+- `latest` means the latest successful output for that resource in the current batch. It does not select a matching SKU or a matching child row.
+- For movements linked to several new returns, use `OutletReturns.records.N.Code`, where `N` is the zero-based position in the return bulk result. Put the return create step before the movement step. Keep later updates to older returns in a separate request after their invoice has been prepared.
 - `byCode` is deterministic access for loaded or written records.
 - Unresolved `$ref` paths fail the current sub-request. GAS does not infer missing fields.
 - Do not use `__PENDING__` placeholders.
@@ -75,7 +77,7 @@ Use `batch` when you need to write data and immediately get fresh rows back, or 
 
 ### Batch write plan and retry rules
 
-The local GAS source prepares batch records in memory. Later steps read those prepared rows, so generated codes, uniqueness checks and `$ref` values use the same draft. No record rows are written if preparation fails.
+The local GAS source prepares batch records in memory. Later steps read those prepared rows, so generated codes, uniqueness checks and `$ref` values use the same draft. No record rows are written if preparation fails. Any row error in a bulk step rejects the whole explicit batch. A standalone bulk request keeps its existing partial-success behavior.
 
 After all steps pass, `commitBatchWritePlan` sends all changed tabs in each file in one `spreadsheets.batchUpdate` call. Grid growth, row values and hooks join that call. Google documents this call as atomic within one file: [Sheets batchUpdate](https://developers.google.com/workspace/sheets/api/reference/rest/v4/spreadsheets/batchUpdate).
 
@@ -134,7 +136,9 @@ Use when a parent record and its children must be written or rejected together.
 
 - Validation phase runs first across all records. If anything fails, nothing is written.
 - Child records use `_action`: `"create"` | `"update"` | `"deactivate"`.
-- `_originalCode` identifies existing child rows for update/deactivate.
+- `_originalCode` or `data.Code` identifies existing child rows for update/deactivate. A missing code, missing row, unknown action, repeated child code or repeated child group rejects the save.
+- Each child group needs one `records` array. Each child needs a `data` object. Child resources must have a parent-code column and cannot be the parent resource itself.
+- Existing child rows must belong to this parent and pass their row access policy. GAS does not move a child from another parent during a composite save.
 - Parent code is auto-injected into children (convention: `{SingularParentName}Code` or `ParentCode`).
 - Response returns `{ parentCode }` plus delta resource payloads for directly affected parent/child resources.
 
@@ -192,7 +196,7 @@ Rules:
 - Keep hook functions in the resource's dedicated hook file (for example `stockMovements.gs`, `procurement.gs`).
 - Use the base hook name only in resource config; never store suffixes in `PostAction`.
 - Treat `meta` as helper context, not as the public API contract.
-- Hook failures are logged but never fail the write response.
+- Standalone hook failures are logged without failing the write response. Hook failures inside an explicit batch stop preparation and prevent its record writes.
 - Do not hardcode resource-specific logic into `resourceApi.gs`.
 
 ---

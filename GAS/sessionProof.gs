@@ -1,11 +1,3 @@
-/**
- * ============================================================
- * AQL - Dynamic Session Proof
- * ============================================================
- * Every protected request carries { token, sessionKey }. The key is a rolling
- * value derived from the session UUID, so a stolen token alone is not enough.
- */
-
 const SESSION_GEN_WINDOW_BACK = 2;
 const SESSION_GEN_WINDOW_AHEAD = 30;
 
@@ -44,6 +36,7 @@ function getSessionAuthVersion() {
 }
 
 function bumpSessionAuthVersion() {
+  if (typeof clearDesignationsCache === 'function') clearDesignationsCache();
   const key = buildSessionAuthVersionKey();
   const next = String(Date.now());
   _session_auth_version = next;
@@ -159,10 +152,6 @@ function clearSessionProofState(token) {
   } catch (e) { /* non-fatal */ }
 }
 
-/**
- * Returns { ok: true, generation } or { ok: false, message, resync? }.
- * A cache miss is a cold start, not a failure: the first generation seen wins.
- */
 function verifySessionProof(token, sessionKey) {
   const params = deriveSessionParams(token);
   if (!params) {
@@ -190,6 +179,7 @@ function verifySessionProof(token, sessionKey) {
       user: authContext.user,
       roleIds: authContext.roleIds,
       accessRegionScope: authContext.accessRegionScope,
+      designationScope: authContext.designationScope,
       regions: authContext.regions,
       rowNumber: authContext.rowNumber
     };
@@ -206,6 +196,9 @@ function verifySessionProof(token, sessionKey) {
 
   state.uuid_code = expectedUuidCode;
   state.generation = Math.max(stored, clientGen);
+  if (!state.designationScope && typeof buildUserDesignationScope === 'function') {
+    state.designationScope = buildUserDesignationScope(state.user);
+  }
   writeSessionProofState(token, state);
 
   return {
@@ -216,7 +209,7 @@ function verifySessionProof(token, sessionKey) {
       user: state.user,
       roleIds: state.roleIds,
       accessRegionScope: state.accessRegionScope,
-      designationScope: state.designationScope || (typeof buildUserDesignationScope === 'function' ? buildUserDesignationScope(state.user) : null),
+      designationScope: state.designationScope || null,
       regions: state.regions,
       sessionGeneration: clientGen
     }
@@ -231,10 +224,6 @@ const SESSION_AUTH_LEVEL_KEYS = {
   rowNumber: true
 };
 
-/**
- * Patches the live session so a profile edit is visible on the very next
- * request. Unknown keys are treated as user-row columns.
- */
 function updateSessionAuth(token, patch) {
   if (!token || !patch) return null;
 

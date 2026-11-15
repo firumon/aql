@@ -26,9 +26,6 @@ function getCatalogGeneration() {
     var cache = CacheService.getScriptCache();
     var current = cache.get(key);
     if (!current) {
-      // Minting a fresh token orphans every catalog cached under the old one.
-      // A uuid, not a timestamp: two mints in the same millisecond would collide
-      // and make pre-bump catalogs readable again.
       current = Utilities.getUuid().replace(/-/g, '').substring(0, 12);
       cache.put(key, current, CACHE_TTL_SEC);
     }
@@ -64,7 +61,8 @@ var RESOURCE_CONFIG_LEGACY_CACHE_KEYS = ['AQL_RESOURCE_CONFIG_MAP_V2'];
 function getResourceRegistryContext() {
   if (_resource_registry_context_cache) return _resource_registry_context_cache;
 
-  const appSheet = getAppSpreadsheet().getSheetByName(CONFIG.SHEETS.RESOURCES);
+  const appSs = getAppSpreadsheet();
+  const appSheet = appSs.getSheetByName(CONFIG.SHEETS.RESOURCES);
   if (!appSheet) {
     throw new Error('Resources sheet not found in APP file');
   }
@@ -76,7 +74,8 @@ function getResourceRegistryContext() {
 
   const headers = values[0];
   const idx = getHeaderIndexMap(headers);
-  _resource_registry_context_cache = { appSheet, values, headers, idx };
+  const fileId = typeof getAppSpreadsheetId === 'function' ? getAppSpreadsheetId() : appSs.getId();
+  _resource_registry_context_cache = { appSheet, fileId, values, headers, idx };
   return _resource_registry_context_cache;
 }
 
@@ -326,7 +325,8 @@ var _resource_cursor_cache = {};
 var _pending_cursor_writes = {};
 
 function buildResourceCursorCacheKey(resourceName) {
-  return CURSOR_CACHE_PREFIX + getAppSpreadsheet().getId() + '_' + resourceName;
+  const fileId = typeof getAppSpreadsheetId === 'function' ? getAppSpreadsheetId() : getAppSpreadsheet().getId();
+  return CURSOR_CACHE_PREFIX + fileId + '_' + resourceName;
 }
 
 function getResourceSyncCursors(resourceNames) {
@@ -406,9 +406,6 @@ function getResourceSyncCursors(resourceNames) {
     console.warn('getResourceSyncCursors: sheet fallback failed: ' + e.message);
   }
 
-  // Memoize genuine misses as 0. Without this, a resource absent from both
-  // CacheService and APP.Resources re-issued a getAll on every subsequent
-  // lookup within the same execution.
   for (var z = 0; z < missing.length; z++) {
     if (_resource_cursor_cache[missing[z]] === undefined) {
       _resource_cursor_cache[missing[z]] = 0;
@@ -435,12 +432,6 @@ function bumpResourceSyncCursorCache(resourceName, timestamp) {
   var ts = Number(timestamp) || 0;
   if (!name || !ts) return 0;
 
-  // In-memory compare only. The previous version called getResourceSyncCursors()
-  // on a memory miss, so every first read of a resource cost a CacheService
-  // round-trip AND a put — 2 blocking RPCs per resource on every multi-get.
-  // A bump that loses a race is harmless: the durable cursor in APP.Resources is
-  // owned by the write path (updateResourceSyncCursor), and this is a
-  // best-effort correction for rows changed outside it.
   var current = _resource_cursor_cache[name] || 0;
   if (ts <= current) return current;
 
@@ -459,10 +450,6 @@ function flushPendingCursorWrites() {
   try {
     var cache = CacheService.getScriptCache();
 
-    // Monotonic guard. bumpResourceSyncCursorCache compares against memory only,
-    // which reads as 0 for a resource this execution never loaded — so verify
-    // against the stored value before overwriting. One getAll for the whole
-    // batch, not one per resource.
     var stored = cache.getAll(keys) || {};
     var toWrite = {};
     var writeCount = 0;
@@ -500,8 +487,9 @@ function updateResourceSyncCursor(resourceName, timestamp) {
 
     if (_activeBatchWritePlan) {
       const plan = _activeBatchWritePlan;
-      getBatchSheetView(plan, registry.appSheet).getRange(i + 1, registry.idx.LastDataUpdatedAt + 1).setValue(now);
-      plan.cursorFileId = registry.appSheet.getParent().getId();
+      getBatchSheetView(plan, registry.appSheet, registry.values).getRange(i + 1, registry.idx.LastDataUpdatedAt + 1).setValue(now);
+      row[registry.idx.LastDataUpdatedAt] = now;
+      plan.cursorFileId = registry.fileId || (typeof getAppSpreadsheetId === 'function' ? getAppSpreadsheetId() : getAppSpreadsheet().getId());
       plan.cursors[name] = now;
       _resource_cursor_cache[name] = now;
       return;
@@ -541,6 +529,8 @@ function updateMultipleResourceSyncCursors(cursorMap) {
   var toCache = {};
   var updatedNames = [];
   var hasChanges = false;
+  var plan = _activeBatchWritePlan;
+  var planView = plan ? getBatchSheetView(plan, registry.appSheet, registry.values) : null;
 
   for (var i = 1; i < registry.values.length; i++) {
     var row = registry.values[i];
@@ -549,16 +539,27 @@ function updateMultipleResourceSyncCursors(cursorMap) {
 
     var ts = Number(cursorMap[rowName]) || 0;
     row[registry.idx.LastDataUpdatedAt] = ts;
-
     _resource_cursor_cache[rowName] = ts;
-    toCache[buildResourceCursorCacheKey(rowName)] = String(ts);
 
-    if (_resource_config_map_cache && _resource_config_map_cache[rowName]) {
-      _resource_config_map_cache[rowName].lastDataUpdatedAt = ts;
+    if (plan) {
+      planView.getRange(i + 1, registry.idx.LastDataUpdatedAt + 1).setValue(ts);
+      plan.cursors[rowName] = ts;
+    } else {
+      toCache[buildResourceCursorCacheKey(rowName)] = String(ts);
+      if (_resource_config_map_cache && _resource_config_map_cache[rowName]) {
+        _resource_config_map_cache[rowName].lastDataUpdatedAt = ts;
+      }
     }
 
     updatedNames.push(rowName);
     hasChanges = true;
+  }
+
+  if (plan) {
+    if (hasChanges) {
+      plan.cursorFileId = registry.fileId || (typeof getAppSpreadsheetId === 'function' ? getAppSpreadsheetId() : getAppSpreadsheet().getId());
+    }
+    return { updated: updatedNames.length, resources: updatedNames };
   }
 
   if (hasChanges && registry.values.length > 1) {
@@ -1366,4 +1367,3 @@ function getAllResourcesConfigs(options) {
 
   return result;
 }
-
