@@ -4,9 +4,20 @@
 This document describes the procurement-related sheet families used for purchasing workflow.
 
 ## Purchase Requisition fields
-- `PurchaseRequisitions.Username` stores the creator's name. Layer 2 sets it when creating a PR. Editing a PR keeps this name.
-- `PurchaseRequisitionItems.Status` uses `Active` and `Inactive`. Edit keeps saved item codes and deactivates removed items through the composite save.
-- Apply both columns through the operation schema refactor. Older rows may have a blank `Username`; do not replace it with the name of an editor.
+
+- `PurchaseRequisitions`: `Code, PRDate, RequiredDate, Username, Remarks, Progress, ProgressCancelledAt, ProgressCancelledBy, ProgressCancelledComment, Status, AccessRegion, CreatedAt, UpdatedAt, Revision, CreatedBy, UpdatedBy`.
+- Parent progress: `Open`, `Partially Quoted`, `Fully Quoted`, `Closed`, `Cancelled`. The default is `Open`.
+- Cancel saves the time in `ProgressCancelledAt` (`datetime`), the user in `ProgressCancelledBy` (`text`), and the required reason in `ProgressCancelledComment` (`textarea`). Closed and Cancelled PRs cannot be edited.
+- `PurchaseRequisitionItems`: `Code, PurchaseRequisitionCode, SKU, Quantity, QuotedQuantity, RFQCodes, Progress, Status, CreatedAt, UpdatedAt, Revision, CreatedBy, UpdatedBy`.
+- Item progress: `Open`, `Partially Quoted`, `Fully Quoted`. Defaults: `Quantity: 1`, `QuotedQuantity: 0`, `RFQCodes: ''`, `Progress: 'Open'`, `Status: 'Active'`.
+- `Username` stores the creator's name. Editing a PR keeps that name. Older blank names stay blank.
+- Item status uses `Active` and `Inactive`. A saved item keeps its code. Removing it queues deactivation in the composite save.
+- The parent no longer has procurement, warehouse, type, priority, or approval stamp fields. Items no longer have description or UOM fields.
+- `Remarks` is a textarea. Add and owner edits do not need it. A non-owner edit needs non-blank remarks. View shows saved remarks with line breaks.
+- The six PR list keys are `MyOpen`, `AllOpen`, `PartiallyQuoted`, `FullyQuoted`, `Closed`, and `Cancelled`. `MyOpen` is the default and has no view permission gate. `AllOpen` needs `RFQs:create`.
+- PRs and PR items seed `AccessPolicy: '77333'`. The PR region source uses `AccessRegion` and the saving user's region. PR items have no region column, so their blank region source gives no row region check.
+- These seeds do not bypass PR read/update rights or region limits. See [PR visibility and access](WORKFLOW_PROCUREMENT.md#pr-visibility-and-access).
+- See [PR states and form](WORKFLOW_PROCUREMENT.md#purchase-requisition-states-and-form) for the live node rules and known caller gaps.
 
 ## Current Procurement Resources
 - `Procurements`

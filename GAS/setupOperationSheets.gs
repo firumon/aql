@@ -15,28 +15,24 @@ function setup_getOperationSchemas() {
         },
         {
             resourceName: CONFIG.OPERATION_SHEETS.PURCHASE_REQUISITIONS,
-            headers: ['Code', 'ProcurementCode', 'PRDate', 'Username', 'Type', 'Priority', 'RequiredDate', 'WarehouseCode', 'TypeReferenceCode', 'Progress',
-                      'ProgressRevisionRequiredAt', 'ProgressRevisionRequiredBy', 'ProgressRevisionRequiredComment',
-                      'ProgressApprovedAt', 'ProgressApprovedBy', 'ProgressApprovedComment',
-                      'ProgressRejectedAt', 'ProgressRejectedBy', 'ProgressRejectedComment',
-                      'Status', 'AccessRegion'].concat(commonAuditColumns),
+            headers: ['Code', 'PRDate', 'RequiredDate', 'Username', 'Remarks', 'Progress',
+                'ProgressCancelledAt', 'ProgressCancelledBy', 'ProgressCancelledComment', 'Status', 'AccessRegion'].concat(commonAuditColumns),
             statusDefault: 'Active',
-            defaults: { Status: 'Active', Progress: 'Draft' },
+            defaults: { Status: 'Active', Progress: 'Open' },
             columnWidths: {
-                Code: 150, ProcurementCode: 150, PRDate: 130, Username: 170, Type: 100, Priority: 100,
-                RequiredDate: 130, WarehouseCode: 140, TypeReferenceCode: 160, Progress: 130,
-                ProgressRevisionRequiredAt: 160, ProgressRevisionRequiredBy: 150, ProgressRevisionRequiredComment: 200,
-                ProgressApprovedAt: 160, ProgressApprovedBy: 150, ProgressApprovedComment: 200,
-                ProgressRejectedAt: 160, ProgressRejectedBy: 150, ProgressRejectedComment: 200,
-                Status: 100, AccessRegion: 130
+                Code: 150, PRDate: 130, RequiredDate: 130, Username: 170, Remarks: 300, Progress: 160,
+                ProgressCancelledAt: 160, ProgressCancelledBy: 170, ProgressCancelledComment: 300, Status: 100, AccessRegion: 130
             }
         },
         {
             resourceName: CONFIG.OPERATION_SHEETS.PURCHASE_REQUISITION_ITEMS,
-            headers: ['Code', 'PurchaseRequisitionCode', 'SKU', 'UOM', 'Quantity', 'Status', 'Description'],
+            headers: ['Code', 'PurchaseRequisitionCode', 'SKU', 'Quantity', 'QuotedQuantity', 'RFQCodes', 'Progress', 'Status'].concat(commonAuditColumns),
             statusDefault: 'Active',
-            defaults: { Quantity: 1, Status: 'Active' },
-            columnWidths: { Code: 150, PurchaseRequisitionCode: 200, SKU: 150, UOM: 100, Quantity: 100, Status: 100, Description: 240 }
+            defaults: { Status: 'Active', Quantity: 1, QuotedQuantity: 0, RFQCodes: '', Progress: 'Open' },
+            columnWidths: {
+                Code: 150, PurchaseRequisitionCode: 200, SKU: 150, Quantity: 100,
+                QuotedQuantity: 130, RFQCodes: 240, Progress: 160, Status: 100
+            }
         },
         {
             resourceName: CONFIG.OPERATION_SHEETS.RFQS,

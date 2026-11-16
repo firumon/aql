@@ -613,39 +613,38 @@ function initAppResourcesCodeConfig() {
         CodeSequenceLength: 6,
         LastDataUpdatedAt: 0,
         Audit: 'TRUE',
-        RequiredHeaders: 'Type,Priority',
+        RequiredHeaders: 'Code,PRDate,RequiredDate,Username',
         UniqueHeaders: '',
         UniqueCompositeHeaders: '',
-        DefaultValues: '{"Status":"Active","Progress":"Draft","Type":"STOCK","Priority":"Medium"}',
-        AccessRegionSource: '{"subject":[{"column":"WarehouseCode","resource":"Warehouses","empty":"next","fail":"user"},{"column":"ProcurementCode","resource":"Procurements","empty":"next","fail":"user"},{"user":true}]}',
+        DefaultValues: '{"Status":"Active","Progress":"Open"}',
+        AccessPolicy: '77333',
+        AccessRegionSource: '{"self":{"column":"AccessRegion","resolve":false},"subject":[{"user":true}]}',
         OwnerUserField: 'CreatedBy',
         AdditionalActions: JSON.stringify([
-            {"action":"Review","label":"Review Requisition","icon":"rate_review","color":"primary","kind":"navigate","navigate":{"target":"action","pageSlug":"review"},"visibleWhen":{"column":"Progress","op":"eq","value":"Pending Approval"}},
-            {"action":"Revise","label":"Revise Requisition","icon":"rate_review","color":"warning","kind":"navigate","navigate":{"target":"resource","pageSlug":"revisions"},"visibleWhen":{"column":"Progress","op":"eq","value":"Revision Required"}}
+            {
+                action: 'Cancel', label: 'Cancel Requisition', title: 'Cancel Requisition', subtitle: '{Code}',
+                icon: 'cancel', color: 'negative', kind: 'mutate', confirm: false,
+                column: 'Progress', columnValue: 'Cancelled', columnValueOptions: [],
+                fields: [{ name: 'Comment', label: 'Cancellation Reason', type: 'textarea', required: true }],
+                visibleWhen: { column: 'Progress', op: 'eq', value: 'Open' }
+            }
         ]),
         Menu: JSON.stringify([
-            {"group":["Purchase"],"order":2,"label":"Requisitions","icon":"request_quote","route":"/operation/purchase-requisitions","pageTitle":"Purchase Requisitions","pageDescription":"Internal requests for purchase","show":true},
-            {"group":["Purchase"],"order":3,"label":"Revise Purchase Requisition","icon":"rate_review","route":"/operation/purchase-requisitions/revisions","pageTitle":"Revise Purchase Requisition","pageDescription":"Revise requisitions requested for changes","show":true,"menuAccess":{"require":"canWrite"}}
+            {
+                group: ['Purchase'], order: 2, label: 'Requisitions', icon: 'request_quote',
+                route: '/operation/purchase-requisitions', pageTitle: 'Purchase Requisitions',
+                pageDescription: 'Internal requests for purchase', show: true
+            }
         ]),
         UIFields: JSON.stringify([
-            { header: 'ProcurementCode', label: 'Procurement Code', type: 'text' },
-            { header: 'PRDate', label: 'PR Date', type: 'date' },
-            { header: 'Username', label: 'Created by', type: 'text' },
-            { header: 'Type', label: 'Type', type: 'select' },
-            { header: 'Priority', label: 'Priority', type: 'select' },
-            { header: 'RequiredDate', label: 'Required Date', type: 'date' },
-            { header: 'WarehouseCode', label: 'Warehouse Code', type: 'text' },
-            { header: 'TypeReferenceCode', label: 'Type Reference Code', type: 'text' },
+            { header: 'PRDate', label: 'PR Date', type: 'date', required: true },
+            { header: 'RequiredDate', label: 'Required Date', type: 'date', required: true },
+            { header: 'Username', label: 'Created by', type: 'text', required: true },
+            { header: 'Remarks', label: 'Remarks', type: 'textarea' },
             { header: 'Progress', label: 'Progress', type: 'status' },
-            { header: 'ProgressRevisionRequiredAt', label: 'Revision Required At', type: 'datetime' },
-            { header: 'ProgressRevisionRequiredBy', label: 'Revision Required By', type: 'text' },
-            { header: 'ProgressRevisionRequiredComment', label: 'Revision Required Comment', type: 'textarea' },
-            { header: 'ProgressApprovedAt', label: 'Approved At', type: 'datetime' },
-            { header: 'ProgressApprovedBy', label: 'Approved By', type: 'text' },
-            { header: 'ProgressApprovedComment', label: 'Approved Comment', type: 'textarea' },
-            { header: 'ProgressRejectedAt', label: 'Rejected At', type: 'datetime' },
-            { header: 'ProgressRejectedBy', label: 'Rejected By', type: 'text' },
-            { header: 'ProgressRejectedComment', label: 'Rejected Comment', type: 'textarea' },
+            { header: 'ProgressCancelledAt', label: 'Cancelled At', type: 'datetime' },
+            { header: 'ProgressCancelledBy', label: 'Cancelled By', type: 'text' },
+            { header: 'ProgressCancelledComment', label: 'Cancellation Reason', type: 'textarea' },
             { header: 'Status', label: 'Status', type: 'status' },
             { header: 'AccessRegion', label: 'Access Region', type: 'text' }
         ]),
@@ -656,20 +655,16 @@ function initAppResourcesCodeConfig() {
         Reports: '',
         CustomUIName: '',
         ListViews: JSON.stringify([
-            {"name":"Drafts","item":{"layout":"caption,label,caption","labels":["{Code}"],"captions":["{PRDate} | {Username}","{Type} | {Priority}"],"metaChip":"Required: {RequiredDate}","chipColor":"grey-7"},"label":"My Drafts","icon":"edit_note","color":"grey-7","permission":"create"},
-            {"name":"PendingApproval","item":{"layout":"caption,label,caption","labels":["{Code}"],"captions":["{PRDate} | {Username}","{Type} | {Priority}"],"metaChip":"Required: {RequiredDate}","chipColor":"warning"},"label":"Awaiting Approval","icon":"hourglass_top","color":"warning"},
-            {"name":"NeedsRevision","item":{"layout":"caption,label,caption","labels":["{Code}"],"captions":["{PRDate} | {Username}","{Type} | {Priority}"],"metaChip":"Required: {RequiredDate}","chipColor":"orange"},"label":"Needs Revision","icon":"rate_review","color":"orange","permission":"create"},
-            {"name":"Approved","item":{"layout":"caption,label,caption","labels":["{Code}"],"captions":["{PRDate} | {Username}","{Type} | {Priority}"],"metaChip":"Required: {RequiredDate}","chipColor":"primary"},"icon":"task_alt"},
-            {"name":"RfqProcessed","item":{"layout":"caption,label,caption","labels":["{Code}"],"captions":["{PRDate} | {Username}","{Type} | {Priority}"],"metaChip":"Required: {RequiredDate}","chipColor":"positive"},"label":"RFQ Processed","icon":"request_quote","color":"positive"},
-            {"name":"Rejected","item":{"layout":"caption,label,caption","labels":["{Code}"],"captions":["{PRDate} | {Username}","{Type} | {Priority}"],"metaChip":"Required: {RequiredDate}","chipColor":"negative"},"icon":"block","color":"negative"}
+            { name: 'MyOpen', actions: false, label: 'My Open', icon: 'hourglass_top', color: 'warning', default: true, item: { layout: 'caption,label', labels: ['{Code}'], captions: ['{PRDate}'], metaChip: '{RequiredDate}', chipColor: 'warning', "chipOutline":true } },
+            { name: 'AllOpen', actions: false, label: 'All Open', icon: 'hourglass_top', color: 'warning', permission: { RFQs: ['create'] }, item: { layout: 'caption,label', labels: ['{Code}'], captions: ['{PRDate} | {Username}'], metaChip: '{RequiredDate}', "chipOutline":true, chipColor: 'warning' } },
+            { name: 'PartiallyQuoted', actions: false, label: 'Partially Quoted', icon: 'incomplete_circle', color: 'orange', item: { layout: 'caption,label', labels: ['{Code}'], captions: ['{PRDate} | {Username}'], metaChip: '{RequiredDate}', "chipOutline":true, chipColor: 'orange' } },
+            { name: 'FullyQuoted', actions: false, label: 'Fully Quoted', icon: 'task_alt', color: 'positive', item: { layout: 'caption,label', labels: ['{Code}'], captions: ['{PRDate} | {Username}'], metaChip: '{RequiredDate}', "chipOutline":true, chipColor: 'positive' } },
+            { name: 'Closed', actions: false, label: 'Closed', icon: 'lock', color: 'grey-7', item: { layout: 'caption,label', labels: ['{Code}'], captions: ['{PRDate} | {Username}'], metaChip: '{RequiredDate}', "chipOutline":true, chipColor: 'grey-7' } },
+            { name: 'Cancelled', actions: false, label: 'Cancelled', icon: 'cancel', color: 'negative', item: { layout: 'caption,label,caption', labels: ['{Code}'], captions: ['{PRDate} | {Username}', '{ProgressCancelledComment}'], metaLabel: '{ProgressCancelledBy}', metaCaption:'{ProgressCancelledAt}' } }
         ]),
-        Relations: JSON.stringify({
-            WarehouseCode: CONFIG.MASTER_SHEETS.WAREHOUSES
-        }),
+        Relations: '',
         Options: JSON.stringify({
-            Type: ['STOCK', 'PROJECT', 'SALES', 'ASSET'],
-            Priority: ['Low', 'Medium', 'High', 'Urgent'],
-            Progress: ['Draft', 'Pending Approval', 'Revision Required', 'Approved', 'Rejected', 'RFQ Processed']
+            Progress: ['Open', 'Partially Quoted', 'Fully Quoted', 'Closed', 'Cancelled']
         })
     },
     {
@@ -681,11 +676,12 @@ function initAppResourcesCodeConfig() {
         CodePrefix: 'PRI',
         CodeSequenceLength: 7,
         LastDataUpdatedAt: 0,
-        Audit: 'FALSE',
-        RequiredHeaders: 'Code,PurchaseRequisitionCode,SKU,UOM,Quantity',
+        Audit: 'TRUE',
+        RequiredHeaders: 'Code,PurchaseRequisitionCode,SKU,Quantity',
         UniqueHeaders: 'Code',
         UniqueCompositeHeaders: '',
-        DefaultValues: '{"Status":"Active","UOM":"PCS","Quantity":1}',
+        DefaultValues: '{"Status":"Active","Quantity":1,"QuotedQuantity":0,"RFQCodes":"","Progress":"Open"}',
+        AccessPolicy: '77333',
         AccessRegionSource: '',
         OwnerUserField: 'CreatedBy',
         AdditionalActions: '',
@@ -693,9 +689,10 @@ function initAppResourcesCodeConfig() {
         UIFields: JSON.stringify([
             { header: 'PurchaseRequisitionCode', label: 'Purchase Requisition Code', type: 'text' },
             { header: 'SKU', label: 'SKU', type: 'text' },
-            { header: 'Description', label: 'Description', type: 'textarea' },
-            { header: 'UOM', label: 'Unit of Measure', type: 'text' },
             { header: 'Quantity', label: 'Quantity', type: 'number' },
+            { header: 'QuotedQuantity', label: 'Quoted Quantity', type: 'number' },
+            { header: 'RFQCodes', label: 'RFQ Codes', type: 'textarea' },
+            { header: 'Progress', label: 'Progress', type: 'status' },
             { header: 'Status', label: 'Status', type: 'status' }
         ]),
         IncludeInAuthorizationPayload: 'TRUE',
@@ -707,7 +704,10 @@ function initAppResourcesCodeConfig() {
         ListViews: '',
         Relations: JSON.stringify({
             SKU: { resource: CONFIG.MASTER_SHEETS.SKUS, targetHeader: 'Code', labelHeader: '$product.Name' },
-            UOM: CONFIG.MASTER_SHEETS.UOMS
+            RFQCodes: CONFIG.OPERATION_SHEETS.RFQS
+        }),
+        Options: JSON.stringify({
+            Progress: ['Open', 'Partially Quoted', 'Fully Quoted']
         })
     },
     {
