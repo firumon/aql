@@ -3,40 +3,23 @@ import { sortByDate } from 'src/utils/sortHelpers'
 
 export { sortByDate }
 
-// The sheet stores these in Title Case (GAS/syncAppResources.gs DefaultValues).
-export const DRAFT = 'Draft'
-export const PENDING_APPROVAL = 'Pending Approval'
-export const REVISION_REQUIRED = 'Revision Required'
-export const APPROVED = 'Approved'
-export const REJECTED = 'Rejected'
-export const RFQ_PROCESSED = 'RFQ Processed'
+export const OPEN = 'Open'
+export const PARTIALLY_QUOTED = 'Partially Quoted'
+export const FULLY_QUOTED = 'Fully Quoted'
+export const CLOSED = 'Closed'
+export const CANCELLED = 'Cancelled'
 
-export const REVIEW_ACTIONS = {
-  [APPROVED]: 'approve',
-  [REVISION_REQUIRED]: 'sendBack',
-  [REJECTED]: 'reject'
-}
-
-export const WORKFLOW_STATES = [
-  DRAFT,
-  PENDING_APPROVAL,
-  REVISION_REQUIRED,
-  APPROVED,
-  RFQ_PROCESSED,
-  REJECTED
-]
-
-export const EDITABLE_STATES = [DRAFT, REVISION_REQUIRED]
-export const TERMINAL_STATES = [RFQ_PROCESSED, REJECTED]
+export const WORKFLOW_STATES = [OPEN, PARTIALLY_QUOTED, FULLY_QUOTED, CLOSED, CANCELLED]
+export const EDITABLE_STATES = [OPEN, PARTIALLY_QUOTED, FULLY_QUOTED]
+export const TERMINAL_STATES = [CLOSED, CANCELLED]
 export const IN_FLIGHT_STATES = WORKFLOW_STATES.filter((state) => !TERMINAL_STATES.includes(state))
 
 export const PROGRESS_META = {
-  [DRAFT]: { label: 'Draft', color: 'grey-7', icon: 'edit_note' },
-  [PENDING_APPROVAL]: { label: 'Pending Approval', color: 'warning', icon: 'schedule' },
-  [REVISION_REQUIRED]: { label: 'Revision Required', color: 'orange', icon: 'undo' },
-  [APPROVED]: { label: 'Approved', color: 'primary', icon: 'check_circle' },
-  [RFQ_PROCESSED]: { label: 'RFQ Processed', color: 'positive', icon: 'request_quote' },
-  [REJECTED]: { label: 'Rejected', color: 'negative', icon: 'cancel' }
+  [OPEN]: { label: OPEN, color: 'warning', icon: 'hourglass_top' },
+  [PARTIALLY_QUOTED]: { label: PARTIALLY_QUOTED, color: 'orange', icon: 'incomplete_circle' },
+  [FULLY_QUOTED]: { label: FULLY_QUOTED, color: 'positive', icon: 'task_alt' },
+  [CLOSED]: { label: CLOSED, color: 'grey-7', icon: 'lock' },
+  [CANCELLED]: { label: CANCELLED, color: 'negative', icon: 'cancel' }
 }
 
 export const FALLBACK_META = { label: '—', color: 'grey-6', icon: 'help_outline' }
@@ -48,49 +31,9 @@ export const PROGRESS_ICONS = Object.fromEntries(
 export const PROGRESS_LABELS = Object.fromEntries(
   Object.entries(PROGRESS_META).map(([state, meta]) => [state, meta.label]))
 
-export const TYPE_META = {
-  STOCK: { label: 'Stock', icon: 'inventory_2', color: 'primary' },
-  PROJECT: { label: 'Project', icon: 'architecture', color: 'info' },
-  SALES: { label: 'Sales', icon: 'storefront', color: 'positive' },
-  ASSET: { label: 'Asset', icon: 'build_circle', color: 'warning' }
-}
-
-export const PRIORITY_META = {
-  Low: { label: 'Low', icon: 'arrow_downward', color: 'positive' },
-  Medium: { label: 'Medium', icon: 'remove', color: 'warning' },
-  High: { label: 'High', icon: 'arrow_upward', color: 'negative' },
-  Urgent: { label: 'Urgent', icon: 'priority_high', color: 'purple' }
-}
-
-export const TYPE_OPTIONS = Object.keys(TYPE_META).map((key) => ({
-  label: TYPE_META[key].label,
-  value: key
-}))
-
-export const PRIORITY_OPTIONS = Object.keys(PRIORITY_META).map((key) => ({
-  label: PRIORITY_META[key].label,
-  value: key
-}))
-
-// A PROJECT or SALES requisition must name the job it is buying for.
-export const TYPES_NEEDING_REFERENCE = ['PROJECT', 'SALES']
-
-export const PROGRESS_STAMP_PREFIX = {
-  [REVISION_REQUIRED]: 'ProgressRevisionRequired',
-  [APPROVED]: 'ProgressApproved',
-  [REJECTED]: 'ProgressRejected'
-}
-
-export const WORKFLOW_STAMPS = [
-  { state: REVISION_REQUIRED, prefix: 'ProgressRevisionRequired', title: 'Sent Back for Revision' },
-  { state: APPROVED, prefix: 'ProgressApproved', title: 'Approved' },
-  { state: REJECTED, prefix: 'ProgressRejected', title: 'Rejected' }
-]
-
 const text = (value) => String(value ?? '').trim()
 const asRow = (value) => (value && typeof value === 'object' ? value : {})
 
-// Sheet values are Title Case; a row written by an older path may not be.
 export function progressOf (row) {
   const raw = text(row?.Progress)
   const match = WORKFLOW_STATES.find((state) => state.toUpperCase() === raw.toUpperCase())
@@ -110,42 +53,22 @@ export function progressLabel (state) {
   return PROGRESS_META[normalized]?.label || normalized || FALLBACK_META.label
 }
 
-export function typeMeta (value) {
-  return TYPE_META[text(value).toUpperCase()] || { label: text(value), icon: 'category', color: 'grey-7' }
-}
-
-export function priorityMeta (value) {
-  return PRIORITY_META[text(value)] || { label: text(value), icon: 'remove', color: 'grey-7' }
-}
-
-export function needsTypeReference (type) {
-  return TYPES_NEEDING_REFERENCE.includes(text(type).toUpperCase())
-}
-
 export function isActiveRow (row) {
-  return text(asRow(row).Status || 'Active') === 'Active'
+  return text(asRow(row).Status) === 'Active'
 }
 
-export function isDraft (row) { return progressOf(row) === DRAFT }
-export function isPendingApproval (row) { return progressOf(row) === PENDING_APPROVAL }
-export function isRevisionRequired (row) { return progressOf(row) === REVISION_REQUIRED }
-export function isApproved (row) { return progressOf(row) === APPROVED }
-export function isRejected (row) { return progressOf(row) === REJECTED }
-export function isRfqProcessed (row) { return progressOf(row) === RFQ_PROCESSED }
 export function isTerminal (row) { return TERMINAL_STATES.includes(progressOf(row)) }
 
-// Takes a PROGRESS VALUE, not a row — the FAB gate and the edit form both call it that way.
 export function requisitionEditableProgress (progress) {
   return EDITABLE_STATES.includes(progressOf({ Progress: progress }))
 }
 
 export function isEditable (row) {
-  return requisitionEditableProgress(row?.Progress)
+  return isActiveRow(row) && !isTerminal(row)
 }
 
-// Approved and still active — the requisition is available to source an RFQ from.
 export function isRfqEligible (row) {
-  return isApproved(row) && isActiveRow(row)
+  return isActiveRow(row) && [OPEN, PARTIALLY_QUOTED].includes(progressOf(row))
 }
 
 export function isOwnedBy (row, userId) {
@@ -154,12 +77,17 @@ export function isOwnedBy (row, userId) {
   return text(row?.CreatedBy) === me
 }
 
-export function isForeignDraft (row, userId) {
-  return isDraft(row) && !isOwnedBy(row, userId)
+export function canEditRequisition (row, userId, { updateAllowed = false, rfqCreateAllowed = false } = {}) {
+  return isEditable(row) && updateAllowed === true && (isOwnedBy(row, userId) || rfqCreateAllowed === true)
 }
 
-export function countsForUser (row, userId) {
-  return !!row && isActiveRow(row) && !isForeignDraft(row, userId)
+export function canCancelRequisition (row, userId, { cancelAllowed = false, rfqCreateAllowed = false } = {}) {
+  return isActiveRow(row) && progressOf(row) === OPEN && cancelAllowed === true &&
+    (isOwnedBy(row, userId) || rfqCreateAllowed === true)
+}
+
+export function countsForUser (row) {
+  return !!row && isActiveRow(row)
 }
 
 export function stampOf (row, prefix) {
@@ -172,12 +100,8 @@ export function stampOf (row, prefix) {
   }
 }
 
-// Pending Approval writes no stamp of its own, so a pending row ages from the day it
-// was raised rather than sinking to the end of an age-sorted queue.
 export function settledAt (row) {
-  const progress = progressOf(row)
-  const stamp = stampOf(row, PROGRESS_STAMP_PREFIX[progress === RFQ_PROCESSED ? APPROVED : progress])
-  return stamp.at || row?.CreatedAt || text(row?.PRDate) || text(row?.RequiredDate) || ''
+  return row?.CreatedAt || text(row?.PRDate) || text(row?.RequiredDate) || ''
 }
 
 export function daysSince (stampValue) {
@@ -191,28 +115,6 @@ export function daysToRequired (row) {
 export function isOverdue (row) {
   const days = daysToRequired(row)
   return Number.isFinite(days) && days < 0 && !isTerminal(row)
-}
-
-export function workflowStamps (record) {
-  const row = asRow(record)
-  return WORKFLOW_STAMPS
-    .map((stamp) => {
-      const at = text(row[`${stamp.prefix}At`])
-      const parsed = parseAnyDate(at)
-      return {
-        state: stamp.state,
-        title: stamp.title,
-        by: text(row[`${stamp.prefix}By`]),
-        at,
-        comment: text(row[`${stamp.prefix}Comment`]),
-        icon: progressIcon(stamp.state),
-        color: progressColor(stamp.state),
-        label: progressLabel(stamp.state),
-        timestamp: parsed
-      }
-    })
-    .filter((event) => event.by || event.at)
-    .sort((a, b) => (a.timestamp?.getTime() ?? Infinity) - (b.timestamp?.getTime() ?? Infinity))
 }
 
 export const AGE_BANDS = [
@@ -229,4 +131,47 @@ export function ageBandOf (days) {
 
 export function ageColor (days) {
   return ageBandOf(days)?.color || FALLBACK_META.color
+}
+
+export function rfqCodesOf (row) {
+  return [...new Set(text(row?.RFQCodes).split(',').map(text).filter(Boolean))]
+}
+
+export function requisitionWorkflowEvents (requisition, lines = [], rfqMap = new Map()) {
+  if (!requisition?.Code) return []
+  const state = progressOf(requisition)
+  const activeLines = lines.filter(line => isActiveRow(line) && line._action !== 'deactivate')
+  const events = [{
+    state: OPEN, ...PROGRESS_META[OPEN], title: 'Requisition Created',
+    by: text(requisition.Username), at: requisition.CreatedAt || text(requisition.PRDate), comment: text(requisition.Remarks)
+  }]
+  if ([PARTIALLY_QUOTED, FULLY_QUOTED].includes(state) ||
+    activeLines.some(line => (Number(line.QuotedQuantity) || 0) > 0 || rfqCodesOf(line).length > 0)) {
+    const fullyQuoted = state === FULLY_QUOTED || (activeLines.length > 0 && activeLines.every(line =>
+      Number(line.Quantity) > 0 && Number(line.QuotedQuantity) >= Number(line.Quantity)))
+    const quotedState = fullyQuoted ? FULLY_QUOTED : PARTIALLY_QUOTED
+    const codes = [...new Set(activeLines.flatMap(rfqCodesOf))]
+    const linkedRfqs = codes.map(code => rfqMap.get(code)).filter(Boolean)
+    const latest = sortByDate(linkedRfqs, row => row.RFQDate || row.CreatedAt, 'desc')[0]
+    const latestAt = latest?.RFQDate || latest?.CreatedAt
+    events.push({
+      state: quotedState, ...PROGRESS_META[quotedState], title: 'Requisition Quoted',
+      by: [...new Set(linkedRfqs.map(row => text(row.User)).filter(Boolean))].join(', '),
+      at: parseAnyDate(latestAt) ? latestAt : requisition.UpdatedAt,
+      rfqCodes: codes.map(code => {
+        const rfq = rfqMap.get(code)
+        return { code, date: rfq?.RFQDate || rfq?.CreatedAt || '', progress: text(rfq?.Progress) }
+      })
+    })
+  }
+  if (state === CLOSED) events.push({
+    state: CLOSED, ...PROGRESS_META[CLOSED], title: 'Requisition Closed',
+    by: text(requisition.UpdatedBy), at: requisition.UpdatedAt
+  })
+  if (state === CANCELLED) events.push({
+    state: CANCELLED, ...PROGRESS_META[CANCELLED], title: 'Requisition Cancelled',
+    by: text(requisition.ProgressCancelledBy), at: requisition.ProgressCancelledAt || requisition.UpdatedAt,
+    comment: text(requisition.ProgressCancelledComment)
+  })
+  return events
 }

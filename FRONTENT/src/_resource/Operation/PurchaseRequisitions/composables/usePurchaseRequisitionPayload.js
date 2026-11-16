@@ -1,37 +1,12 @@
-import { textOrRef, batchRef, isBatchRef } from 'src/utils/appHelpers'
+import { batchRefList, isBatchRef, textOrRef } from 'src/utils/appHelpers'
+import { addDays, toDateOnly } from 'src/utils/dateHelpers'
+import { resourceRow } from 'src/composables/resources/useResourceConfig'
 import {
-  buildProcurementCreateNode,
-  buildProcurementProgressNode,
-  buildProcurementCancelNode,
-  PROCUREMENT_REF_PATH
-} from 'src/_resource/Operation/Procurements/composables/useProcurementPayload'
-import {
-  PR_APPROVED,
-  PR_CREATED,
-  INITIATED
-} from 'src/_resource/Operation/Procurements/composables/useProcurementProgress'
-import {
-  DRAFT,
-  PENDING_APPROVAL,
-  REVISION_REQUIRED,
-  APPROVED,
-  REJECTED,
-  RFQ_PROCESSED,
-  REVIEW_ACTIONS,
-  PROGRESS_STAMP_PREFIX,
-  progressOf,
-  isPendingApproval,
-  isEditable,
-  isActiveRow
+  OPEN, PARTIALLY_QUOTED, FULLY_QUOTED, progressOf, isEditable, isActiveRow, isTerminal, isOwnedBy, rfqCodesOf
 } from './usePurchaseRequisitionProgress'
 
-import { stampFields } from 'src/utils/workflowStamp'
-import { addDays, toDateOnly } from 'src/utils/dateHelpers'
-import { useProcurementResource } from 'src/_resource/Operation/Procurements/composables/useProcurementResource'
-import { resourceRow, useResourceConfig } from 'src/composables/resources/useResourceConfig'
 const RESOURCE_NAME = 'PurchaseRequisitions'
 const ITEMS_RESOURCE = 'PurchaseRequisitionItems'
-const REFRESH_RESOURCES = ['Procurements']
 
 export { RESOURCE_NAME, ITEMS_RESOURCE }
 
@@ -42,15 +17,6 @@ const num = (value) => {
 }
 const asRow = (value) => (value && typeof value === 'object' ? value : {})
 
-export function isLiteralProcurementCode (value) {
-  if (!value) return false
-  if (isBatchRef(value)) return false
-  const str = text(value)
-  if (!str) return false
-  if (str.startsWith('$ref:') || str.startsWith('[object')) return false
-  return true
-}
-
 export function todayDashed () {
   return toDateOnly(new Date())
 }
@@ -60,56 +26,53 @@ export function defaultRequiredDate () {
 }
 
 export function requisitionItemRow (child = {}, extra = {}) {
-  return resourceRow(ITEMS_RESOURCE, child, extra)
+  return resourceRow(ITEMS_RESOURCE, {
+    Quantity: 1, QuotedQuantity: 0, RFQCodes: '', Progress: OPEN, Status: 'Active'
+  }, child, extra)
 }
 
 export function syncRequisitionItems (pageState, selectedSkus = [], selectedCodes) {
   if (!pageState) return
-  const selected = new Set(Array.isArray(selectedCodes) ? selectedCodes : selectedSkus.map((row) => row.Code))
+  const selected = new Set((Array.isArray(selectedCodes) ? selectedCodes : selectedSkus.map((row) => row.Code)).map(text))
   const rows = pageState.getChildRows(ITEMS_RESOURCE, RESOURCE_NAME)
   for (let index = rows.length - 1; index >= 0; index--) {
     const row = rows[index]
-    if (row._action === 'deactivate' || !row.SKU || selected.has(row.SKU)) continue
+    if (row._action === 'deactivate' || selected.has(text(row.SKU))) continue
     if (row.Code) pageState.setChildAction(ITEMS_RESOURCE, index, 'deactivate', RESOURCE_NAME)
     else pageState.removeChild(ITEMS_RESOURCE, index, RESOURCE_NAME)
   }
   const bySku = new Map()
-  rows.forEach((row, index) => {
-    if (!bySku.has(row.SKU) || row._action !== 'deactivate') bySku.set(row.SKU, { row, index })
+  pageState.getChildRows(ITEMS_RESOURCE, RESOURCE_NAME).forEach((row, index) => {
+    const key = text(row.SKU)
+    if (!bySku.has(key) || (isActiveRow(row) && row._action !== 'deactivate')) bySku.set(key, { row, index })
   })
   for (const sku of selectedSkus) {
-    if (!sku?.Code) continue
-    const existing = bySku.get(sku.Code)
+    const code = text(sku?.Code)
+    if (!code || !selected.has(code)) continue
+    const existing = bySku.get(code)
     if (existing) {
-      if (existing.row._action === 'deactivate') {
-        pageState.setChildAction(ITEMS_RESOURCE, existing.index, 'update', RESOURCE_NAME)
+      if (existing.row._action === 'deactivate' || !isActiveRow(existing.row)) {
+        pageState.setChildAction(ITEMS_RESOURCE, existing.index, existing.row.Code ? 'update' : 'create', RESOURCE_NAME)
+        pageState.updateChild(ITEMS_RESOURCE, existing.index, { Status: 'Active' }, RESOURCE_NAME)
       }
       continue
     }
-    const index = pageState.addChild(ITEMS_RESOURCE, requisitionItemRow({
-      SKU: sku.Code, ...(text(sku.UOM) ? { UOM: sku.UOM } : {})
-    }), RESOURCE_NAME)
-    bySku.set(sku.Code, { row: rows[index], index })
+    const index = pageState.addChild(ITEMS_RESOURCE, requisitionItemRow({ SKU: code }), RESOURCE_NAME)
+    bySku.set(code, { row: pageState.getChildRows(ITEMS_RESOURCE, RESOURCE_NAME)[index], index })
   }
 }
 
-export function validateRequisitionDraft ({ form = {}, items = [], source = null, action = '', comment = '', headerOnly = false } = {}) {
+export function validateRequisitionDraft ({ form = {}, items = [], source = null, userId = '', headerOnly = false } = {}) {
   const record = asRow(form)
-  if (action) {
-    if (!source?.Code || !isPendingApproval(source)) return 'This requisition is no longer awaiting approval.'
-    if (!['approve', 'sendBack', 'reject'].includes(action)) return 'Please choose a review decision.'
-    if (action !== 'approve' && !text(comment)) return 'Please enter a reason for this decision.'
-    return null
-  }
-  if (source?.Code && !isEditable(source)) return 'Only a draft or returned requisition can be edited.'
-  if (!unwrap(record.Type)) return 'Please select a requisition type.'
-  if (!unwrap(record.Priority)) return 'Please select a priority.'
+  if (source?.Code && !isEditable(source)) return 'This requisition cannot be edited.'
+  if (source?.Code && !isOwnedBy(source, userId) && !text(record.Remarks)) return 'Please add remarks for this edit.'
   if (!text(record.RequiredDate)) return 'Please select a required date.'
-  if (!unwrap(record.WarehouseCode)) return 'Please select a destination warehouse.'
   if (headerOnly) return null
-  const lines = items.filter((entry) => entry._action !== 'deactivate' && isActiveRow(entry))
+  const lines = items.filter((entry) => entry && entry._action !== 'deactivate' && isActiveRow(entry))
   if (!lines.length) return 'Please add at least one product.'
-  if (lines.some((entry) => !text(entry.SKU) || !Number.isFinite(Number(entry.Quantity)) || Number(entry.Quantity) < 1)) {
+  if (lines.some((entry) => typeof entry.SKU !== 'string' || !text(entry.SKU))) return 'Every product must have a valid SKU.'
+  if (lines.some((entry) => !['number', 'string'].includes(typeof entry.Quantity) ||
+    !Number.isFinite(Number(entry.Quantity)) || Number(entry.Quantity) < 1)) {
     return 'Every product must have a quantity of at least 1.'
   }
   if (new Set(lines.map((entry) => text(entry.SKU))).size !== lines.length) return 'Each product may appear only once.'
@@ -117,85 +80,42 @@ export function validateRequisitionDraft ({ form = {}, items = [], source = null
 }
 
 export function buildRequisitionInitNodes (options = {}) {
-  const { form = null, items = [], mode = 'add', actorName = '', actorRole = '', canApprove = false } = options
+  const { form = null, items = [], mode = 'add', actorName = '', overrides = {} } = options
   const code = text(form?.Code)
+  if (mode === 'descriptions') {
+    const records = items.filter((row) => text(row?.Code) && text(row?.PurchaseRequisitionCode) === code && isActiveRow(row))
+      .map((row) => requisitionItemRow(row, { _action: 'update' }))
+    return records.length ? [{
+      resource: ITEMS_RESOURCE, many: true, merge: true, records,
+      permissions: { update: 'You are not allowed to update purchase requisition items.' }
+    }] : []
+  }
   if (mode === 'items') {
     const current = options.currentItems || []
     const bySku = new Map(current.map((row) => [row.SKU, row]))
     const incoming = dedupeItemLines(items).filter(isActiveRow)
     const sourceSkus = new Set(incoming.map((row) => row.SKU))
-    const rows = incoming.map((row) => ({
-      ...row, ...bySku.get(row.SKU), Code: row.Code,
+    const rows = incoming.map((row) => requisitionItemRow(row, {
+      ...bySku.get(row.SKU), Code: row.Code,
       _action: bySku.get(row.SKU)?._action === 'deactivate' ? 'deactivate' : 'update'
     })).concat(current.filter((row) => !sourceSkus.has(row.SKU)))
-    return [{
-      resource: RESOURCE_NAME, code, merge: true,
-      children: [{ resource: ITEMS_RESOURCE, records: rows }]
-    }]
+    return [{ resource: RESOURCE_NAME, code, merge: true, children: [{ resource: ITEMS_RESOURCE, records: rows }] }]
   }
-  if (mode === 'review') {
-    const { allowed } = useResourceConfig(RESOURCE_NAME)
-    const progress = allowed('review', RESOURCE_NAME, form) ? APPROVED : ''
-    const parent = {
-      resource: RESOURCE_NAME, code, record: { Code: code, Progress: progress },
-      permissions: { review: 'You are not allowed to review this requisition.' }
-    }
-    parent.controls = { submissionError: '', formMode: mode }
-    parent.derive = ['Progress', ...Object.values(PROGRESS_STAMP_PREFIX).map((prefix) => `${prefix}Comment`)]
-      .map((record) => ({
-        key: `review:${record}`, on: { resource: RESOURCE_NAME, record }, immediate: record === 'Progress' && !!progress,
-        handler: (value, api) => syncRequisitionSubmissionNodes(api, { mode, actorName, actorRole, source: form })
-      }))
-    return [parent]
+  const record = code ? form : {
+    PRDate: todayDashed(), RequiredDate: defaultRequiredDate(), ...overrides,
+    Username: actorName, Progress: OPEN, Status: 'Active'
   }
-  const draft = code ? progressOf(form) === DRAFT : options.isDraft === true
-  const approved = !code && !draft && canApprove
-  const record = code ? resourceRow(RESOURCE_NAME, form) : resourceRow(RESOURCE_NAME, {
-    PRDate: todayDashed(), RequiredDate: defaultRequiredDate(), ...options.overrides, Username: actorName
-  })
-  const nodes = buildRequisitionSaveChainNodes({
-    code, form: record, items, draft, approved, actorName, actorRole, validate: false
-  })
-  const parent = nodes.find((node) => node.resource === RESOURCE_NAME)
-  parent.controls = {
-    isDraft: draft, isApproved: approved, entryProgress: progressOf(form) || DRAFT,
-    selectedCode: code, responseComment: '', submissionError: '', formMode: mode
-  }
-  parent.derive = ['isDraft', 'isApproved', 'responseComment'].map((control) => ({
-    key: `requisition:${control}`, on: { resource: RESOURCE_NAME, control }, immediate: false,
-    handler: (value, api) => {
-      if (control === 'isDraft') {
-        const { allowed } = useResourceConfig(RESOURCE_NAME)
-        api.setControls('isApproved', value !== true && allowed('review', RESOURCE_NAME, form), RESOURCE_NAME)
-      } else if (control === 'isApproved' && api.getControls('isDraft', false, RESOURCE_NAME)) {
-        api.setControls('isApproved', false, RESOURCE_NAME)
-      }
-      syncRequisitionSubmissionNodes(api, { actorName, actorRole, source: form })
-    }
-  }))
-  return nodes
-}
-
-// A `_fields` select hands back `{ label, value }`; a plain input hands back a string.
-function unwrap (value) {
-  if (value && typeof value === 'object' && 'value' in value) return text(value.value)
-  return text(value)
+  return buildRequisitionCompositeNode({ code, form: record, items })
 }
 
 export function buildRequisitionFormData (form = {}, { targetProgress = '', extraFields = {} } = {}) {
-  const record = resourceRow(RESOURCE_NAME, asRow(form))
-  return {
-    ...record,
-    Type: unwrap(record.Type),
-    Priority: unwrap(record.Priority),
-    WarehouseCode: unwrap(record.WarehouseCode),
+  const record = { ...asRow(form), ...extraFields }
+  return resourceRow(RESOURCE_NAME, record, {
     PRDate: text(record.PRDate) || todayDashed(),
-    RequiredDate: text(record.RequiredDate) || defaultRequiredDate(),
-    TypeReferenceCode: text(record.TypeReferenceCode),
-    Progress: text(targetProgress) || progressOf(record) || DRAFT,
-    Status: text(record.Status),
-    ...extraFields
-  }
+    RequiredDate: text(record.RequiredDate),
+    Progress: text(targetProgress) || progressOf(record) || OPEN,
+    Status: text(record.Status) || 'Active'
+  })
 }
 
 export function dedupeItemLines (items = []) {
@@ -212,223 +132,117 @@ export function dedupeItemLines (items = []) {
 
 export function buildRequisitionItemRecords (items = [], deactivatedCodes = []) {
   const source = Array.isArray(items) ? items : []
-  const lines = dedupeItemLines(source.filter((entry) => entry?._action !== 'deactivate' && isActiveRow(entry)))
+  const lines = source.filter((entry) => entry && entry._action !== 'deactivate' && isActiveRow(entry))
     .map((entry) => requisitionItemRow(entry, {
       _action: text(entry.Code) ? 'update' : 'create',
-      SKU: text(entry.SKU), Quantity: num(entry.Quantity ?? entry.requiredQuantity)
+      SKU: text(entry.SKU), Quantity: num(entry.Quantity)
     }))
   const removals = [...new Set([
-    ...(Array.isArray(deactivatedCodes) ? deactivatedCodes : []),
+    ...deactivatedCodes,
     ...source.filter((entry) => entry?._action === 'deactivate').map((entry) => entry.Code)
   ].map(text).filter(Boolean))].map((code) => ({ _action: 'deactivate', Code: code, Status: 'Inactive' }))
-
   return [...lines, ...removals]
 }
 
 export function buildRequisitionCompositeNode ({
   code = '', form = {}, targetProgress = '', extraFields = {}, items = [], deactivatedCodes = []
 } = {}) {
-  const isDraftProgress = targetProgress === DRAFT || (!targetProgress && progressOf(form) === DRAFT)
+  const key = textOrRef(code)
   return {
     resource: RESOURCE_NAME,
-    ...(text(code) ? { code: text(code) } : {}),
+    ...(key ? { code: key } : {}),
     record: buildRequisitionFormData(form, { targetProgress, extraFields }),
     children: [{ resource: ITEMS_RESOURCE, records: buildRequisitionItemRecords(items, deactivatedCodes) }],
-    successMsg: isDraftProgress ? 'Requisition saved as draft.' : 'Requisition submitted for approval.'
+    permissions: { [key ? 'update' : 'create']: 'You are not allowed to save this requisition.' },
+    successMsg: 'Requisition saved.'
   }
 }
 
-export function syncRequisitionSubmissionNodes (pageState, { mode = '', actorName = '', actorRole = '', source = null } = {}) {
-  if (!pageState) return
-  const form = pageState.getRecord(null, RESOURCE_NAME) || {}
-  const draft = pageState.getControls('isDraft', false, RESOURCE_NAME) === true
-  const approved = !draft && pageState.getControls('isApproved', false, RESOURCE_NAME) === true
-  const reviewAction = REVIEW_ACTIONS[form.Progress] || ''
-  if (mode === 'review' && !reviewAction) {
-    pageState.setControls('submissionError', 'Please choose a review progress.', RESOURCE_NAME)
-    return
-  }
-  const nodes = mode === 'review' ? buildRequisitionReviewChainNodes({
-    requisition: source, form, action: reviewAction,
-    comment: form[`${PROGRESS_STAMP_PREFIX[form.Progress]}Comment`] || '', preview: true, actorName, actorRole,
-    procurement: useProcurementResource().getProcurement(source?.ProcurementCode)
-  }) : buildRequisitionSaveChainNodes({
-    code: text(source?.Code), form, draft, approved, actorName, actorRole, validate: false,
-    responseComment: pageState.getControls('responseComment', '', RESOURCE_NAME),
-    revisionComment: text(source?.ProgressRevisionRequiredComment)
+export function buildRequisitionRfqAllocationNodes ({ allocations = [], ...options } = {}) {
+  if (!Array.isArray(allocations)) return [{ valid: false, message: 'Quote allocations must be a list.' }]
+  return buildRequisitionRfqQuoteEditNodes({
+    ...options, allocations: allocations.map((entry) => ({ ...entry, previousQuantity: 0 }))
   })
-  const parent = nodes.find((node) => node.resource === RESOURCE_NAME)
-  if (parent && mode === 'review') {
-    parent.merge = true
-    for (const [progress, prefix] of Object.entries(PROGRESS_STAMP_PREFIX)) {
-      if (progress === form.Progress) continue
-      parent.record[`${prefix}At`] = source?.[`${prefix}At`] || ''
-      parent.record[`${prefix}By`] = source?.[`${prefix}By`] || ''
-      parent.record[`${prefix}Comment`] = source?.[`${prefix}Comment`] || ''
-    }
-  }
-  if (parent && mode !== 'review') {
-    parent.merge = true
-    delete parent.children
-  }
-  const applied = pageState.applyNodes(nodes)
-  pageState.setControls('submissionError', applied.valid === false ? applied.message : '', RESOURCE_NAME)
-  if (applied.valid !== false && !nodes.some((node) => node.resource === 'Procurements')) pageState.removeNode('Procurements')
-  return applied
 }
 
-export function buildRequisitionSaveChainNodes ({
-  code = '',
-  form = {},
-  items = [],
-  deactivatedCodes = [],
-  draft = false,
-  approved = false,
-  procurement = null,
-  actorName = '',
-  actorRole = '',
-  validate = true,
-  responseComment = '',
-  revisionComment = ''
-} = {}) {
-  const validationError = validate ? validateRequisitionDraft({ form, items }) : null
-  if (validationError) {
-    return [{ valid: false, message: validationError }]
+export function buildRequisitionRfqQuoteEditNodes ({ rfqCode, requisitions, items, allocations = [] } = {}) {
+  if (!Array.isArray(requisitions) || !Array.isArray(items) || !Array.isArray(allocations)) {
+    return [{ valid: false, message: 'Pass the parent requisitions, all sibling items, and quote allocations.' }]
   }
-
-  const isApproved = !draft && approved
-  const targetProgress = draft ? DRAFT : (isApproved ? APPROVED : PENDING_APPROVAL)
-  const stamp = isApproved ? (progressOf(form) === APPROVED && text(form.ProgressApprovedAt) ? {
-    ProgressApprovedAt: form.ProgressApprovedAt,
-    ProgressApprovedBy: form.ProgressApprovedBy,
-    ProgressApprovedComment: form.ProgressApprovedComment || ''
-  } : stampFields('ProgressApproved', actorName, '')) : {
-    ProgressApprovedAt: '', ProgressApprovedBy: '', ProgressApprovedComment: ''
+  if (!allocations.length) return []
+  const key = textOrRef(rfqCode)
+  const refPath = isBatchRef(key) ? text(key.$ref) : (key.startsWith('$ref:') ? key.slice(5).trim() : '')
+  if ((typeof key === 'string' && key.startsWith('$ref:') && !refPath) ||
+    (!refPath && (typeof rfqCode !== 'string' || !key || key.includes(','))) || (isBatchRef(key) && !refPath)) {
+    return [{ valid: false, message: 'A valid RFQ code is required.' }]
   }
-  const rawProcVal = asRow(procurement).Code || asRow(form).ProcurementCode
-  const hasLiteralProc = isLiteralProcurementCode(rawProcVal)
-  const rawProc = hasLiteralProc ? text(rawProcVal) : ''
-
-  const linked = procurement || (rawProc ? useProcurementResource().getProcurement(rawProc) : null)
-  const nodes = []
-
-  if (!draft) {
-    if (!hasLiteralProc) {
-      nodes.push(buildProcurementCreateNode({
-        progress: isApproved ? PR_APPROVED : PR_CREATED,
-        actorName,
-        actorRole
-      }))
-    } else {
-      const advance = buildProcurementProgressNode(
-        linked || { Code: rawProc, Progress: INITIATED },
-        isApproved ? PR_APPROVED : PR_CREATED
-      )
-      if (advance) nodes.push(advance)
+  const parents = new Map(requisitions.filter(Boolean).map((row) => [text(row.Code), row]))
+  const byCode = new Map()
+  const byParent = new Map()
+  for (const row of items) {
+    if (!row || !text(row.Code)) return [{ valid: false, message: 'Every requisition item needs a code.' }]
+    const code = text(row.Code)
+    if (byCode.has(code)) return [{ valid: false, message: 'Each requisition item must be passed only once.' }]
+    byCode.set(code, row)
+    if (!isActiveRow(row) || row._action === 'deactivate') continue
+    const parentCode = text(row.PurchaseRequisitionCode)
+    if (!byParent.has(parentCode)) byParent.set(parentCode, [])
+    byParent.get(parentCode).push(row)
+  }
+  const updates = new Map()
+  const affected = new Set()
+  for (const entry of allocations) {
+    const code = text(entry?.itemCode)
+    const row = byCode.get(code)
+    if (!row || !isActiveRow(row) || row._action === 'deactivate') {
+      return [{ valid: false, message: 'Every selected requisition item must exist and be active.' }]
     }
-  }
-
-  nodes.push(buildRequisitionCompositeNode({
-    code,
-    form,
-    extraFields: {
-      ...(!text(code) ? { Username: actorName } : {}),
-      ProcurementCode: hasLiteralProc ? rawProc : (draft ? '' : batchRef(PROCUREMENT_REF_PATH)),
-      ...stamp,
-      ...(!draft && (revisionComment || responseComment) ? {
-        ProgressRevisionRequiredComment: [revisionComment, responseComment ? `${actorName}: ${text(responseComment)}` : '']
-          .filter(Boolean).join('\n\n')
-      } : {})
-    },
-    targetProgress,
-    items,
-    deactivatedCodes
-  }))
-
-  const parent = nodes.find((node) => node.resource === RESOURCE_NAME)
-  parent.permissions = {
-    [text(code) ? 'update' : 'create']: 'You are not allowed to save this requisition.',
-    ...(isApproved ? { review: 'You are not allowed to approve this requisition.' } : {})
-  }
-  nodes.push({ resource: '$batch', reload: REFRESH_RESOURCES })
-
-  return nodes
-}
-
-export function buildRequisitionReviewChainNodes ({
-  requisition = null,
-  form = {},
-  action = '',
-  comment = '',
-  actorName = '',
-  actorRole = '',
-  procurement = null,
-  preview = false
-} = {}) {
-  const record = asRow(requisition)
-  const code = text(record.Code)
-  const verdict = text(action)
-  const note = text(comment)
-
-  if (!code) {
-    return [{ valid: false, message: 'No requisition loaded.' }]
-  }
-  if (!isPendingApproval(record)) {
-    return [{ valid: false, message: 'This requisition is no longer awaiting approval.' }]
-  }
-
-  const nextProgress = Object.keys(REVIEW_ACTIONS).find((progress) => REVIEW_ACTIONS[progress] === verdict)
-  if (!nextProgress) return [{ valid: false, message: 'Unsupported review action.' }]
-  if (!preview) {
-    const problem = validateRequisitionDraft({ source: record, action: verdict, comment: note })
-    if (problem) return [{ valid: false, message: problem }]
-  }
-  const prefix = PROGRESS_STAMP_PREFIX[nextProgress]
-  const keepStamp = text(form[`${prefix}At`]) && form[`${prefix}At`] !== record[`${prefix}At`]
-  const stamp = keepStamp ? {
-    [`${prefix}At`]: form[`${prefix}At`], [`${prefix}By`]: form[`${prefix}By`], [`${prefix}Comment`]: note
-  } : stampFields(prefix, actorName, note)
-
-  const rawProcVal = asRow(procurement).Code || record.ProcurementCode
-  const hasLiteralProc = isLiteralProcurementCode(rawProcVal)
-  const existingProcurementCode = hasLiteralProc ? text(rawProcVal) : ''
-  const nodes = []
-  const parent = {
-    resource: RESOURCE_NAME, code: textOrRef(code), record: { Progress: nextProgress, ...stamp },
-    permissions: { review: 'You are not allowed to review this requisition.' }
-  }
-
-  if (verdict === 'approve') {
-    if (!existingProcurementCode) {
-      nodes.push(buildProcurementCreateNode({
-        progress: PR_APPROVED,
-        actorName,
-        actorRole
-      }))
-      parent.record.ProcurementCode = batchRef(PROCUREMENT_REF_PATH)
-    } else {
-      const chained = buildProcurementProgressNode(
-        asRow(procurement).Code ? procurement : { Code: existingProcurementCode, Progress: INITIATED },
-        PR_APPROVED
-      )
-      if (chained) nodes.push(chained)
+    if (updates.has(code)) return [{ valid: false, message: 'Each item may have only one quote allocation.' }]
+    const parentCode = text(row.PurchaseRequisitionCode)
+    const parent = parents.get(parentCode)
+    if (!parentCode || !parent || !isActiveRow(parent) || isTerminal(parent)) {
+      return [{ valid: false, message: 'Every parent requisition must exist, be active, and not be closed.' }]
     }
-  } else if (verdict === 'reject') {
-    if (existingProcurementCode) {
-      const chained = buildProcurementCancelNode(
-        asRow(procurement).Code ? procurement : { Code: existingProcurementCode }
-      )
-      if (chained) nodes.push(chained)
+    const quantities = [entry.previousQuantity, entry.quantity, row.Quantity, row.QuotedQuantity ?? 0]
+    if (quantities.some((value) => !['number', 'string'].includes(typeof value) ||
+      text(value) === '' || !Number.isFinite(Number(value)) || Number(value) < 0) || Number(row.Quantity) <= 0) {
+      return [{ valid: false, message: 'Quote quantities must be valid numbers. Requested quantity must be above zero.' }]
     }
+    const previous = Number(entry.previousQuantity)
+    const quantity = Number(entry.quantity)
+    if (refPath && previous > 0) return [{ valid: false, message: 'Use a saved RFQ code to edit or reverse a quote.' }]
+    const quoted = Math.max(0, Number(row.QuotedQuantity ?? 0) + quantity - previous)
+    if (!Number.isFinite(quoted)) return [{ valid: false, message: 'The total quote quantity is too large.' }]
+    const codes = rfqCodesOf(row)
+    const rfqCodes = quantity > 0
+      ? (refPath ? batchRefList(refPath, codes) : [...new Set([...codes, key])].join(','))
+      : codes.filter((code) => code !== key).join(',')
+    updates.set(code, {
+      Code: code, QuotedQuantity: quoted, RFQCodes: rfqCodes,
+      Progress: quoted <= 0 ? OPEN : (quoted >= Number(row.Quantity) ? FULLY_QUOTED : PARTIALLY_QUOTED)
+    })
+    affected.add(parentCode)
   }
-
-  nodes.push(parent, { resource: '$batch', reload: REFRESH_RESOURCES })
-
-  return nodes
-}
-
-export function buildRequisitionRfqProcessedNode (requisitionCode) {
-  const code = text(requisitionCode)
-  if (!code) return null
-  return { resource: RESOURCE_NAME, code: textOrRef(code), record: { Progress: RFQ_PROCESSED } }
+  const parentUpdates = []
+  for (const code of affected) {
+    let allOpen = true
+    let allFull = true
+    for (const row of byParent.get(code)) {
+      const quantity = Number(row.Quantity)
+      const quoted = Number(updates.get(text(row.Code))?.QuotedQuantity ?? row.QuotedQuantity ?? 0)
+      if (!Number.isFinite(quantity) || quantity <= 0 || !Number.isFinite(quoted) || quoted < 0) {
+        return [{ valid: false, message: 'Every active sibling item must have valid quantities.' }]
+      }
+      allOpen &&= quoted <= 0
+      allFull &&= quoted >= quantity
+    }
+    parentUpdates.push({ Code: code, Progress: allFull ? FULLY_QUOTED : (allOpen ? OPEN : PARTIALLY_QUOTED) })
+  }
+  return [{
+    resource: ITEMS_RESOURCE, role: 'rfqAllocation', many: true, records: [...updates.values()],
+    permissions: { update: 'You are not allowed to update purchase requisition items.' }
+  }, {
+    resource: RESOURCE_NAME, role: 'rfqAllocation', many: true, records: parentUpdates,
+    permissions: { update: 'You are not allowed to update purchase requisitions.' }
+  }]
 }

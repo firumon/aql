@@ -1,5 +1,5 @@
 import { computed } from 'vue'
-import { isRevisionRequired, isActiveRow } from './usePurchaseRequisitionProgress'
+import { isActiveRow, rfqCodesOf } from './usePurchaseRequisitionProgress'
 import { useRecord } from 'src/composables/resources/useRecord'
 import { useSkuResource } from 'src/_resource/Master/SKUs/composables/useSkuResource'
 
@@ -14,6 +14,7 @@ export function requisitionItemSummary (rows = []) {
   return {
     items, lines: items.length,
     quantity: items.reduce((sum, row) => sum + (Number(row.Quantity) || 0), 0),
+    quotedQuantity: items.reduce((sum, row) => sum + (Number(row.QuotedQuantity) || 0), 0),
     codes: items.map((row) => row.SKU).filter(Boolean)
   }
 }
@@ -32,13 +33,12 @@ export function usePurchaseRequisitionResource () {
         const label = skuLabelOf(text(row.SKU))
         return Object.assign(Object.create(row), {
           ...row, _raw: row, skuRecord: getSku(row.SKU), code: text(row.Code), sku: text(row.SKU),
-          primary: label.primary, secondary: label.secondary, uom: text(row.UOM) || label.uom,
-          quantity: Number(row.Quantity) || 0
+          primary: label.primary, secondary: label.secondary, uom: label.uom,
+          quantity: Number(row.Quantity) || 0, quotedQuantity: Number(row.QuotedQuantity) || 0, rfqCodes: rfqCodesOf(row)
         })
       })
     ])))
     return {
-      revisionRequired: computed(() => record.enriched(RESOURCE_NAME).filter((row) => isActiveRow(row) && isRevisionRequired(row))),
       itemsByRequisition, linesByRequisition,
       itemSummary: (rows) => {
         if (!summaries.has(rows)) summaries.set(rows, computed(() => requisitionItemSummary(rows)))
