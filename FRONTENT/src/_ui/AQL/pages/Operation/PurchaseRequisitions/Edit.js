@@ -1,9 +1,12 @@
+import { useRequisitionFormSeed } from 'src/_ui/AQL/composables/Operation/PurchaseRequisitions/useRequisitionFormContext'
+
 export default {
-  sections: ['PageHeader', 'EditLockBanner'],
-  contents: ['RequisitionBasic', 'RequisitionItems', 'RequisitionReview', 'SubmitOptions'],
+  sections: ['PageHeader'],
+  contents: ['RequisitionBasic', 'RequisitionItems'],
   PropsPageHeader: { title: 'Edit Purchase Requisition', reload: false },
-  PropsRequisitionBasic: { step: 1 },
-  PropsRequisitionItems: { step: 2 },
-  PropsRequisitionReview: { step: 3 },
-  PropsSubmitOptions: { step: 3 }
+  PropsContent: (pageProps) => ({ gutter: pageProps.gutter }),
+  ready (ctx) {
+    ctx.pageState.resetForResource('PurchaseRequisitions')
+    useRequisitionFormSeed(ctx, 'edit')
+  }
 }

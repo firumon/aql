@@ -1,11 +1,6 @@
 export default {
-  sections: [
-    'PageHeader',
-    'QueueCards',
-    'SourcingCards',
-    'ApprovalAgeing',
-    'FilterInput',
-    'ListSwitcher'
-  ],
-  contents: ['List']
+  sections: ['PageHeader', 'RequisitionMetrics', 'UserSummary', 'FilterInput', 'ListSwitcher'],
+  contents: ['List'],
+  PropsPageHeader: { title: 'Purchase Requisitions' },
+  PropsSection: (pageProps) => ({ gutter: pageProps.gutter })
 }

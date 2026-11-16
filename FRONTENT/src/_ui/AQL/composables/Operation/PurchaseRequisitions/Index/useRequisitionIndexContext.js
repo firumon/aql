@@ -3,42 +3,29 @@ import { useProcurementIndexContext } from 'src/_ui/AQL/composables/Operation/us
 import { useAQLConfig } from 'src/_ui/AQL/composables/useAQLConfig'
 import useRequisitionQueueData from 'src/_resource/Operation/PurchaseRequisitions/Data/useRequisitionQueueData'
 import {
-  PENDING_APPROVAL, REVISION_REQUIRED, APPROVED, RFQ_PROCESSED, AGE_BANDS, progressColor,
-  progressOf, isDraft, isOwnedBy
+  OPEN, PARTIALLY_QUOTED, FULLY_QUOTED, progressColor
 } from 'src/_resource/Operation/PurchaseRequisitions/composables/usePurchaseRequisitionProgress'
 
 export function useRequisitionIndexContext () {
   const resourceConfig = inject('resourceConfig', null)
-  const { nav, user } = useProcurementIndexContext()
-  const { counts, overdue, approvalAgeing } = useRequisitionQueueData()
-  const canReview = computed(() => resourceConfig?.allowed('review', 'PurchaseRequisitions') === true)
-  const queueCards = computed(() => {
+  const { user } = useProcurementIndexContext()
+  const { counts, overdue, userSummary } = useRequisitionQueueData()
+  const metricCards = computed(() => {
     const cards = [
-      { label: 'Pending Approval', number: counts.value[PENDING_APPROVAL] || 0, color: progressColor(PENDING_APPROVAL) },
-      { label: 'Needs Revision', number: counts.value[REVISION_REQUIRED] || 0, color: progressColor(REVISION_REQUIRED) },
-      { label: 'Past Required Date', number: overdue.value, color: 'negative' }
+      { label: 'Open', number: counts.value[OPEN] || 0, color: progressColor(OPEN) },
+      { label: 'Partially Quoted', number: counts.value[PARTIALLY_QUOTED] || 0, color: progressColor(PARTIALLY_QUOTED) },
+      { label: 'Past Required Date', number: overdue.value || 0, color: 'negative' },
+      { label: 'Fully Quoted', number: counts.value[FULLY_QUOTED] || 0, color: progressColor(FULLY_QUOTED) }
     ]
     return cards.some((card) => card.number) ? cards : []
   })
-  const sourcingCards = computed(() => {
-    const cards = [
-      { label: 'Ready for RFQ', number: counts.value[APPROVED] || 0, color: progressColor(APPROVED) },
-      { label: 'RFQ Processed', number: counts.value[RFQ_PROCESSED] || 0, color: progressColor(RFQ_PROCESSED) }
-    ]
-    return cards.some((card) => card.number) ? cards : []
-  })
-  const buckets = computed(() => !canReview.value || !counts.value[PENDING_APPROVAL] ? [] : AGE_BANDS.map((band, index) => ({
-    label: band.label, caption: band.caption, color: band.color, count: approvalAgeing.value[index]
-  })))
+  const userSummarySeries = [
+    { key: 'open', label: 'Open', color: progressColor(OPEN) },
+    { key: 'partiallyQuoted', label: 'Partially Quoted', color: progressColor(PARTIALLY_QUOTED) },
+    { key: 'fullyQuoted', label: 'Fully Quoted', color: progressColor(FULLY_QUOTED) }
+  ]
   return {
-    nav, user, resourceConfig, ui: useAQLConfig(), queueCards, sourcingCards, buckets,
-    canEdit: (row) => isDraft(row) && isOwnedBy(row, user.value?.id) &&
-      resourceConfig?.allowed('update', 'PurchaseRequisitions', row) === true,
-    rowActions: (row) => {
-      const state = progressOf(row)
-      if (state === PENDING_APPROVAL && resourceConfig?.allowed('review', 'PurchaseRequisitions', row)) return ['Review']
-      if (state === REVISION_REQUIRED && resourceConfig?.allowed('update', 'PurchaseRequisitions', row)) return ['Revise']
-      return []
-    }
+    user, resourceConfig, ui: useAQLConfig(), metricCards,
+    userSummary: computed(() => userSummary.value), userSummarySeries
   }
 }

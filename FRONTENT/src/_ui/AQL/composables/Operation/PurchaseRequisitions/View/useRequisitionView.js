@@ -1,28 +1,19 @@
-import { computed } from 'vue'
+import { computed, onMounted } from 'vue'
+import { decorateRow } from 'src/utils/appHelpers'
+import { usePageRecord } from 'src/composables/resources/usePageRecord'
+import { useResourceConfig } from 'src/composables/resources/useResourceConfig'
+import { useResourceNav } from 'src/composables/resources/useResourceNav'
 import { parseAnyDate } from 'src/utils/dateHelpers'
 import { usePurchaseRequisitionResource } from 'src/_resource/Operation/PurchaseRequisitions/composables/usePurchaseRequisitionResource'
-import { useProcurementResource } from 'src/_resource/Operation/Procurements/composables/useProcurementResource'
-import { useWarehouseResource } from 'src/_resource/Master/Warehouses/composables/useWarehouseResource'
 import {
-  progressLabel,
-  progressColor,
-  progressIcon,
-  typeMeta,
-  priorityMeta,
-  needsTypeReference,
-  isRevisionRequired,
-  isRejected,
-  stampOf,
-  workflowStamps
+  progressLabel, progressColor, progressIcon, isOverdue, requisitionWorkflowEvents
 } from 'src/_resource/Operation/PurchaseRequisitions/composables/usePurchaseRequisitionProgress'
-import {
-  progressLabel as procurementLabel, progressColor as procurementColor, progressIcon as procurementIcon
-} from 'src/_resource/Operation/Procurements/composables/useProcurementProgress'
 import { useRequisitionViewContext } from './useRequisitionViewContext'
 
 const text = (value) => String(value ?? '').trim()
+const views = new WeakMap()
 
-export { progressLabel, progressColor, progressIcon, typeMeta, priorityMeta, workflowStamps }
+export { progressLabel, progressColor, progressIcon }
 
 export function formatStampDate (value) {
   const raw = text(value)
@@ -36,71 +27,38 @@ export function formatStampDate (value) {
 
 export function useRequisitionView () {
   const { resourceRecord } = useRequisitionViewContext()
-
-  const { linesByRequisition, itemSummary } = usePurchaseRequisitionResource()
-  const { getProcurement } = useProcurementResource()
-
-  const { getWarehouse } = useWarehouseResource()
-
+  if (resourceRecord && views.has(resourceRecord)) return views.get(resourceRecord)
+  const rfqConfig = useResourceConfig('RFQs')
+  const canOpenRfq = computed(() => rfqConfig.allowed('read') === true)
+  const rfqs = usePageRecord('RFQs')
+  const nav = useResourceNav()
+  onMounted(() => {
+    if (canOpenRfq.value && !rfqs.items.value.length && !rfqs.loading.value) rfqs.reload()
+  })
+  const rfqByCode = computed(() => new Map(canOpenRfq.value
+    ? rfqs.items.value.map(row => [text(row.Code), row]) : []))
+  const { linesByRequisition, itemSummary, loading: resourceLoading } = usePurchaseRequisitionResource()
   const requisition = computed(() => resourceRecord?.record?.value || null)
-  const loading = computed(() => resourceRecord?.loading?.value === true)
+  const loading = computed(() => resourceRecord?.loading?.value === true || resourceLoading.value)
   const pending = computed(() => !requisition.value && loading.value)
-
-  const warehouseName = computed(() => {
-    const code = text(requisition.value?.WarehouseCode)
-    if (!code) return ''
-    return text(getWarehouse(code)?.name) || code
-  })
-
-  const lines = computed(() => linesByRequisition.value.get(text(requisition.value?.Code)) || [])
-  const totals = computed(() => itemSummary(lines.value))
-
-  const procurement = computed(() => {
-    const code = text(requisition.value?.ProcurementCode)
-    if (!code) return null
-    return getProcurement(code)
-  })
-
-  const procurementStage = computed(() => {
-    const row = procurement.value
-    if (!row) return null
-    return Object.assign(Object.create(row), {
-      ...row, _raw: row,
-      code: text(row.Code),
-      label: procurementLabel(row.Progress),
-      color: procurementColor(row.Progress),
-      icon: procurementIcon(row.Progress),
-      initiatedDate: text(row.InitiatedDate)
-    })
-  })
-
-  const revisionNote = computed(() => stampOf(requisition.value, 'ProgressRevisionRequired').comment)
-  const rejectionNote = computed(() => stampOf(requisition.value, 'ProgressRejected').comment)
-  const needsRevision = computed(() => isRevisionRequired(requisition.value))
-  const rejected = computed(() => isRejected(requisition.value))
-  const referenceRequired = computed(() => needsTypeReference(requisition.value?.Type))
-  const events = computed(() => workflowStamps(requisition.value))
-
-  return {
-    requisition,
-    loading,
-    pending,
-    warehouseName,
-    lines,
-    totals,
-    procurement,
-    procurementStage,
-    revisionNote,
-    rejectionNote,
-    needsRevision,
-    rejected,
-    referenceRequired,
-    events,
-    progressLabel,
-    progressColor,
-    progressIcon,
-    typeMeta,
-    priorityMeta,
-    formatStampDate
+  const lines = computed(() => (linesByRequisition.value.get(text(requisition.value?.Code)) || []).map(row =>
+    decorateRow(row, {
+      rfqLinks: row.rfqCodes.map(code => {
+        const rfq = rfqByCode.value.get(code)
+        return { code, date: rfq?.RFQDate || rfq?.CreatedAt || '', progress: text(rfq?.Progress) }
+      })
+    })))
+  const events = computed(() => requisitionWorkflowEvents(requisition.value, lines.value, rfqByCode.value))
+  const openRfq = (code) => {
+    const key = text(code)
+    if (canOpenRfq.value && key) nav.goTo('view', { scope: 'operation', resourceSlug: 'rfqs', code: key })
   }
+  const totals = computed(() => itemSummary(lines.value))
+  const overdue = computed(() => isOverdue(requisition.value))
+  const view = {
+    requisition, loading, pending, lines, totals, overdue, events, canOpenRfq, openRfq,
+    progressLabel, progressColor, progressIcon, formatStampDate
+  }
+  if (resourceRecord) views.set(resourceRecord, view)
+  return view
 }

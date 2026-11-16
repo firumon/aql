@@ -1,14 +1,11 @@
 import { useAuth } from 'src/composables/core/useAuth'
-import { requisitionEditableProgress } from 'src/_resource/Operation/PurchaseRequisitions/composables/usePurchaseRequisitionProgress'
-
-const text = (value) => String(value ?? '').trim()
+import { useResourceConfig } from 'src/composables/resources/useResourceConfig'
+import { canEditRequisition } from 'src/_resource/Operation/PurchaseRequisitions/composables/usePurchaseRequisitionProgress'
 
 export default {
-  show: (record) => {
-    if (!requisitionEditableProgress(record?.Progress)) return false
-    const owner = text(record?.CreatedBy)
-    const me = text(useAuth().user.value?.id)
-    return !!owner && !!me && owner === me
-  },
+  show: (record) => canEditRequisition(record, useAuth().user.value?.id, {
+    updateAllowed: useResourceConfig('PurchaseRequisitions').allowed('update', 'PurchaseRequisitions', record),
+    rfqCreateAllowed: useResourceConfig('RFQs').allowed('create')
+  }),
   label: 'Edit Requisition'
 }

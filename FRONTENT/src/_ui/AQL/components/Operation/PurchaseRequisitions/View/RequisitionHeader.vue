@@ -1,5 +1,5 @@
 <template>
-  <div>
+  <div :class="[attrs.class, gutterClass]">
     <SectionDividerLabel :label="finalTitle" />
 
     <q-card flat bordered :class="ui.cardClass">
@@ -33,7 +33,8 @@
           >
             <span :class="ui.detailKeyClass">{{ line.label }}</span>
             <span class="col overflow-hidden flex justify-end items-center" :class="ui.detailValClass">
-              {{ line.value }}
+              <FieldRemarksView v-if="line.label === 'Remarks'" :model-value="line.value" header="Remarks" />
+              <template v-else>{{ line.value }}</template>
             </span>
           </div>
         </div>
@@ -43,12 +44,14 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, useAttrs } from 'vue'
+import { resolveFieldComponent } from 'src/_fields/useFieldResolver'
 import SectionDividerLabel from 'components/shared/SectionDividerLabel.vue'
 import { useRequisitionView } from 'src/_ui/AQL/composables/Operation/PurchaseRequisitions/View/useRequisitionView'
 import { useRequisitionViewContext } from 'src/_ui/AQL/composables/Operation/PurchaseRequisitions/View/useRequisitionViewContext'
 
 defineOptions({ name: 'PurchaseRequisitionsViewRequisitionHeader', inheritAttrs: false })
+const FieldRemarksView = resolveFieldComponent('textarea', 'view')
 
 const props = defineProps({
   title: { type: [String, Function], default: 'Requisition Details' },
@@ -59,35 +62,29 @@ const { evaluate, ui } = useRequisitionViewContext()
 const {
   requisition,
   pending,
-  warehouseName,
-  referenceRequired,
+  overdue,
   progressColor,
   progressIcon,
-  progressLabel,
-  typeMeta,
-  priorityMeta
+  progressLabel
 } = useRequisitionView()
 
+const attrs = useAttrs()
+const gutterClass = computed(() => `q-gutter-y-${attrs.gutter || 'sm'}`)
 const finalTitle = computed(() => evaluate(props.title))
 
 const statusColor = computed(() => evaluate(props.color) || progressColor(requisition.value?.Progress))
 const statusIcon = computed(() => progressIcon(requisition.value?.Progress))
 const statusLabel = computed(() => progressLabel(requisition.value?.Progress))
 
-// Blank rows are dropped rather than padded. Type and date identify the record, so
-// they are shown even when unresolved.
 const lines = computed(() => {
   const record = requisition.value
   if (!record) return []
   return [
-    { label: 'Type', value: typeMeta(record.Type).label || '—' },
-    { label: 'Priority', value: priorityMeta(record.Priority).label },
-    { label: 'PR Date', value: record.PRDate || '—' },
-    { label: 'User', value: record.Username || '—' },
-    { label: 'Required By', value: record.RequiredDate },
-    { label: 'Warehouse', value: warehouseName.value },
-    ...(referenceRequired.value ? [{ label: 'Reference', value: record.TypeReferenceCode }] : []),
-    { label: 'Procurement', value: record.ProcurementCode }
+    { label: 'Code', value: record.Code },
+    { label: 'PR Date', value: record.PRDate },
+    { label: 'Required By', value: [record.RequiredDate, overdue.value ? 'Past required date' : ''].filter(Boolean).join(' • ') },
+    { label: 'Requested By', value: record.Username },
+    { label: 'Remarks', value: record.Remarks }
   ].filter((line) => String(line.value ?? '').trim())
 })
 

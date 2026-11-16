@@ -13,7 +13,7 @@
             :items="items"
             item-key="SKU"
             :label="(item) => skuLabelText(item.SKU) || item.SKU"
-            caption="SKU"
+            :caption="(item) => [item.SKU, Number(item.QuotedQuantity) > 0 ? `Quoted: ${item.QuotedQuantity}` : ''].filter(Boolean).join(' • ')"
             :input="true"
             input-value="Quantity"
             :input-props="{ type: 'number', min: 1, label: 'Qty', style: 'width: 120px;' }"
@@ -37,10 +37,6 @@ import { useRequisitionFormContext } from 'src/_ui/AQL/composables/Operation/Pur
 
 defineOptions({ name: 'PurchaseRequisitionsAddRequisitionItems', inheritAttrs: false })
 
-const props = defineProps({
-  step: { type: [Number, String], default: null }
-})
-
 const attrs = useAttrs()
 const gutterClass = computed(() => `q-gutter-y-${attrs.gutter || 'sm'}`)
 
@@ -48,16 +44,15 @@ const {
   ui,
   items,
   skuQuantities,
-  totalQuantity,
   updateItem,
   removeItem,
   childIndexes,
   addItems,
   skuLabelText,
-  currentStep, editable
+  editable
 } = useRequisitionFormContext()
 
-const visible = computed(() => editable.value && (props.step == null || Number(props.step) === currentStep.value))
+const visible = computed(() => editable.value)
 
 function onQtyChange ({ value, item }) {
   const qty = Number(value)

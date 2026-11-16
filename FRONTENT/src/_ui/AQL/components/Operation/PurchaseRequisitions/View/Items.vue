@@ -1,5 +1,5 @@
 <template>
-  <div>
+  <div :class="[attrs.class, gutterClass]">
     <SectionDividerLabel :label="finalTitle" />
 
     <q-card flat bordered :class="ui.cardClass">
@@ -15,26 +15,44 @@
       </q-card-section>
 
       <q-card-section v-else>
-        <AppList
-          label="primary" caption="secondary"
-          :items="listItems"
-          :metaLabel="(row) => `${row.quantity} ${row.uom}`"
-          itemClass="bg-transparent"
-          :itemBordered="false"
-          :separator="true"
-          dense
-        />
+        <div v-for="(line, index) in rows" :key="line.code" :class="ui.detailRowClass" :style="rowDelay(index)">
+          <div class="row items-start no-wrap q-mb-xs">
+            <div class="col" :class="ui.flexWrapTextClass">
+              <div class="text-body2 text-weight-medium">{{ line.primary }}</div>
+              <div v-if="line.secondary && line.secondary !== line.primary" class="text-caption text-grey-6">
+                {{ line.secondary }}
+              </div>
+              <div class="text-caption text-grey-7">Requested: {{ line.quantity }} {{ line.uom }}</div>
+              <div class="text-caption text-grey-7">Quoted: {{ line.quotedQuantity }} {{ line.uom }}</div>
+              <div v-if="line.rfqLinks?.length" class="row items-center">
+                <q-chip v-for="rfq in line.rfqLinks" :key="rfq.code" dense outline icon="request_quote"
+                  :clickable="canOpenRfq" :color="canOpenRfq ? 'primary' : 'grey-7'" @click="openRfq(rfq.code)">
+                  {{ rfq.code }}
+                </q-chip>
+              </div>
+            </div>
+            <div class="col-auto text-right">
+              <q-badge rounded outline :color="progressColor(line.Progress)" :label="progressLabel(line.Progress)" />
+            </div>
+          </div>
+          <q-separator v-if="index < rows.length - 1" class="q-mb-sm" />
+        </div>
+        <q-separator class="q-my-sm" />
+        <div class="row items-center justify-between text-weight-bold">
+          <span>{{ totals.lines }} lines</span>
+          <span>Requested: {{ totals.quantity }}</span>
+          <span>Quoted: {{ totals.quotedQuantity }}</span>
+        </div>
       </q-card-section>
     </q-card>
   </div>
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, useAttrs } from 'vue'
 import SectionDividerLabel from 'components/shared/SectionDividerLabel.vue'
 import { useRequisitionView } from 'src/_ui/AQL/composables/Operation/PurchaseRequisitions/View/useRequisitionView'
 import { useRequisitionViewContext } from 'src/_ui/AQL/composables/Operation/PurchaseRequisitions/View/useRequisitionViewContext'
-import AppList from 'components/app/AppList.vue'
 
 defineOptions({ name: 'PurchaseRequisitionsViewItems', inheritAttrs: false })
 
@@ -44,12 +62,11 @@ const props = defineProps({
 })
 
 const { evaluate, ui } = useRequisitionViewContext()
-const { lines, totals, pending } = useRequisitionView()
+const { lines, totals, pending, progressLabel, progressColor, canOpenRfq, openRfq } = useRequisitionView()
 
+const attrs = useAttrs()
+const gutterClass = computed(() => `q-gutter-y-${attrs.gutter || 'sm'}`)
 const finalTitle = computed(() => evaluate(props.title))
 const rows = computed(() => (props.items === null ? lines.value : props.items))
-const listItems = computed(() => [...rows.value, {
-  primary: `${totals.value.lines} lines`, secondary: null, quantity: totals.value.quantity, uom: 'units'
-}])
-
+const rowDelay = (index) => ({ animationDelay: `${index * ui.rowStaggerMs}ms` })
 </script>
