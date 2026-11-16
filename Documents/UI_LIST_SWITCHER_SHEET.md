@@ -100,6 +100,11 @@ including its fallback, the sheet only links the style key to that field. Do not
 that work with a map that sends each value to itself or a second fallback in the sheet.
 See [final style values](UI_LIST_VIEWS_ITEMS.md#final-style-values-from-the-frontend).
 
+When a view selects one fixed `Progress` or `Status`, such as Open or Closed, do not
+repeat `{Progress}` in `metaChip`, `metaLabel`, or captions. Show useful context,
+such as a required or due date, instead. See
+[Progress shown by the list name](UI_LIST_VIEWS_ITEMS.md#progress-shown-by-the-list-name).
+
 Pagination starts checked. Checked leaves out `paginate`; unchecked saves `paginate:false`.
 Rows per page and threshold start blank. Their placeholders show the frontend defaults:
 25 and 35. The Show only and Hide action menus suggest names from the selected resource's

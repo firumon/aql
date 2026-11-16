@@ -44,13 +44,19 @@ before the frontend is deployed without the old display overrides.
 
 ### PurchaseRequisitions and RFQs seed settings
 
-All six PurchaseRequisitions views and all four RFQs views have `item` settings in
-`GAS/syncAppResources.gs`. They use the existing source fields and add no display fields.
-Both use the same `caption,label,caption` main layout, with Code as the main label.
-Requisitions show PRDate, Username, Type, Priority, and RequiredDate.
-RFQs show RFQDate, User, PurchaseRequisitionCode, and QuotationSubmissionDeadline.
+PurchaseRequisitions has four views: `Open`, `PartiallyQuoted`, `FullyQuoted`, and `Closed`.
+Their `item` settings in `GAS/syncAppResources.gs` use `layout: 'caption,label'`,
+`labels: ['{Code}']`, and `captions: ['{PRDate} | {Username}']`.
+The side chip uses `metaChip: 'Required: {RequiredDate}'`. Each view keeps its own
+chip color: `warning`, `orange`, `positive`, or `grey-7`, in that order.
+The rows do not repeat `{Progress}` because the list name already shows it.
+
+All four RFQs views also have `item` settings in the same seed file.
+They use `caption,label,caption`, with Code as the main label. Their captions show
+RFQDate, User, PurchaseRequisitionCode, and QuotationSubmissionDeadline.
 Each view selects one progress value, so its rows do not repeat that value.
 The side area shows its one date value as a chip and keeps its progress color.
+Both resources use existing source fields and add no display fields.
 Row filtering and sorting stay in each resource's existing `Data/useList.js`.
 
 ### Other purchase list seed settings
