@@ -1,6 +1,6 @@
 <template>
   <!-- Strict hide rule: nothing renders unless one metric carries a number or a label. -->
-  <div v-if="items.length" class="aql-metrics">
+  <div v-if="items.length" class="aql-metrics" :class="gutterClass">
     <SectionDividerLabel v-if="resolvedTitle" :label="resolvedTitle" />
     <MetricCardsWidget :items="items" />
   </div>
@@ -16,6 +16,7 @@ defineOptions({ name: 'SectionsMetricCards', inheritAttrs: false })
 
 const props = defineProps({
   title: { type: [String, Function], default: '' },
+  gutter: { type: [String, Function], default: '' },
   // [{ label, number, unit, color }] — each field may itself be a closure.
   items: { type: [Array, Function], default: null },
   // Single-metric fallback, used only when `items` resolves empty.
@@ -31,6 +32,10 @@ const resourceRecord = inject('resourceRecord', null)
 const evaluate = (val) => evaluateProp(val, resourceRecord, resourceConfig)
 
 const resolvedTitle = computed(() => evaluate(props.title) || '')
+const gutterClass = computed(() => {
+  const gutter = evaluate(props.gutter)
+  return ['xs', 'sm', 'md'].includes(gutter) ? `aql-metrics--gutter-${gutter}` : ''
+})
 
 function resolve (raw) {
   return {

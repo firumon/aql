@@ -15,6 +15,7 @@
 | Prop | Type | Default | Purpose |
 |---|---|---|---|
 | `title` | `[String, Function]` | `''` | Divider label above the row, rendered via `shared/SectionDividerLabel.vue`. Omitted when empty. |
+| `gutter` | `[String, Function]` | `''` | Card gap token: `xs`, `sm`, or `md`. Functions use `evaluateProp`. Other values add no gutter class and keep the base gap. |
 | `items` | `[Array, Function]` | `null` | Metric array: `{ label, number, unit, color }`. **Each field may itself be a closure** and is evaluated with the same `(record, config)` signature. |
 | `label` | `[String, Function]` | `''` | Single-metric fallback (see below). |
 | `number` | `[Number, String, Function]` | `null` | Single-metric fallback. |
@@ -40,6 +41,12 @@
 | 6 or more | `col-4` throughout |
 
 **Styling.** All rules are `.aql-metrics*` in [custom.scss](file:///f:/AQL/FRONTENT/src/css/custom.scss) — the component carries no `<style>` block (ARCHITECTURE RULES §7). The row's gutter is its own (`--aql-metrics-gap`), and Quasar's `col-*` widths know nothing about it, so `.aql-metrics__row > .aql-metrics__card.col-6` / `.col-4` narrow each span by its share of the gap — without that, two `col-6` cards plus one gap exceed 100% and wrap onto separate lines. The label wraps to at most two lines (`line-clamp: 2`) instead of ellipsing, because a three-across row on a phone is ~104px and truncates most real labels. The hover lift honours `prefers-reduced-motion`.
+
+**Card gaps.** A supported `gutter` adds `aql-metrics--gutter-${token}` to the
+`.aql-metrics` wrapper, the direct parent of the widget's `.aql-metrics__row`.
+The existing CSS sets the row gap. Empty or unsupported values keep the base gap.
+`Page.vue` passes `pageProps.gutter` to each Section; the page default is `xs`.
+A custom section that wraps MetricCards must accept and forward `gutter`.
 
 **Spacing.** The row carries a horizontal inset (`q-px-sm`) only. Vertical rhythm belongs to `.aql-page-body`, which `Page.vue` renders with `q-gutter-y-{pageProps.gutter}` — so the section adds no `q-py-*` of its own and its root carries no `full-width`, letting it stack flush with neighbouring sections at the page's own gutter.
 
