@@ -8,10 +8,12 @@ function setup_getOperationSchemas() {
     return [
         {
             resourceName: CONFIG.OPERATION_SHEETS.PROCUREMENTS,
-            headers: ['Code', 'Progress', 'InitiatedDate', 'CreatedUser', 'CreatedRole', 'Status', 'AccessRegion'].concat(commonAuditColumns),
+            headers: ['Code', 'Progress', 'ProgressCancelledAt', 'ProgressCancelledBy', 'ProgressCancelledComment',
+                'InitiatedDate', 'CreatedUser', 'CreatedRole', 'Status', 'AccessRegion'].concat(commonAuditColumns),
             statusDefault: 'Active',
             defaults: { Status: 'Active', Progress: 'INITIATED' },
-            columnWidths: { Code: 150, Progress: 180, InitiatedDate: 150, CreatedUser: 150, CreatedRole: 150, Status: 100, AccessRegion: 130 }
+            columnWidths: { Code: 150, Progress: 180, ProgressCancelledAt: 160, ProgressCancelledBy: 170,
+                ProgressCancelledComment: 300, InitiatedDate: 150, CreatedUser: 150, CreatedRole: 150, Status: 100, AccessRegion: 130 }
         },
         {
             resourceName: CONFIG.OPERATION_SHEETS.PURCHASE_REQUISITIONS,
@@ -36,22 +38,42 @@ function setup_getOperationSchemas() {
         },
         {
             resourceName: CONFIG.OPERATION_SHEETS.RFQS,
-            headers: ['Code', 'ProcurementCode', 'PurchaseRequisitionCode', 'RFQDate', 'QuotationSubmissionDeadline', 'User',
-                'Progress', 'ProgressClosedComment', 'ProgressClosedAt', 'ProgressClosedBy',
-                'CriterionPrice', 'CriterionPackaging', 'CriterionPaymentTerms', 'CriterionCreditPeriod',
-                'CriterionShippingTerms', 'CriterionLeadTime', 'CriterionQuotationValidity',
-                'CriterionShipmentGrouping', 'CriterionExtraCharges', 'CriterionRefundableTaxAmount',
-                'CriterionItemAvailability', 'CriterionPartialOrderAcceptance',
-                'Status', 'AccessRegion'].concat(commonAuditColumns),
+            headers: [
+                'Code', 'ProcurementCode', 'PurchaseRequisitionCodes', 'RFQDate', 'QuotationSubmissionDeadline',
+                'RequiredBy',
+                'WarehouseCode', 'Type', 'TypeReferenceCode', 'Priority', 'Username', 'Remarks', 'Progress',
+                'ProgressClosedComment', 'ProgressClosedAt', 'ProgressClosedBy', 'ProgressCancelledAt',
+                'ProgressCancelledBy', 'ProgressCancelledComment', 'RequirementPrice', 'RequirementPackaging',
+                'RequirementPaymentTerms', 'RequirementCreditPeriod', 'RequirementShippingTerms', 'RequirementLeadTime',
+                'RequirementQuotationValidity', 'RequirementShipmentGrouping', 'RequirementExtraCharges',
+                'RequirementRefundableTaxAmount', 'RequirementItemAvailability', 'RequirementPartialOrderAcceptance', 'RequirementQuality',
+                'Status', 'AccessRegion'
+            ].concat(commonAuditColumns),
             statusDefault: 'Active',
-            defaults: { Status: 'Active', Progress: 'DRAFT' },
+            defaults: { Status: 'Active', Progress: 'DRAFT', Type: 'STOCK', Priority: 'Medium' },
             columnWidths: {
-                Code: 150, ProcurementCode: 150, PurchaseRequisitionCode: 180, RFQDate: 120, QuotationSubmissionDeadline: 200, User: 150,
-                Progress: 120, ProgressClosedComment: 220, ProgressClosedAt: 160, ProgressClosedBy: 150,
-                CriterionPrice: 200, CriterionPackaging: 200, CriterionPaymentTerms: 200, CriterionCreditPeriod: 200,
-                CriterionShippingTerms: 200, CriterionLeadTime: 200, CriterionQuotationValidity: 200,
-                CriterionShipmentGrouping: 200, CriterionExtraCharges: 200, CriterionRefundableTaxAmount: 220,
-                CriterionItemAvailability: 220, CriterionPartialOrderAcceptance: 220, Status: 100, AccessRegion: 130
+                Code: 150, ProcurementCode: 150, PurchaseRequisitionCodes: 200, RFQDate: 120,
+                QuotationSubmissionDeadline: 200, RequiredBy: 130, WarehouseCode: 150, Type: 120, TypeReferenceCode: 160, Priority: 120,
+                Username: 170, Remarks: 300, Progress: 120, ProgressClosedComment: 220, ProgressClosedAt: 160,
+                ProgressClosedBy: 150, ProgressCancelledAt: 160, ProgressCancelledBy: 170, ProgressCancelledComment: 300,
+                RequirementPrice: 200, RequirementPackaging: 200, RequirementPaymentTerms: 200,
+                RequirementCreditPeriod: 200, RequirementShippingTerms: 200, RequirementLeadTime: 200,
+                RequirementQuotationValidity: 200, RequirementShipmentGrouping: 200, RequirementExtraCharges: 200,
+                RequirementRefundableTaxAmount: 220, RequirementItemAvailability: 220,
+                RequirementPartialOrderAcceptance: 220, RequirementQuality: 200, Status: 100, AccessRegion: 130
+            }
+        },
+        {
+            resourceName: CONFIG.OPERATION_SHEETS.RFQ_ITEMS,
+            headers: [
+                'Code', 'RFQCode', 'PurchaseRequisitionItemCodes', 'SKU', 'Quantity', 'UOM', 'Description', 'Allocations',
+                'Status'
+            ].concat(commonAuditColumns),
+            statusDefault: 'Active',
+            defaults: { Status: 'Active', Quantity: 1 },
+            columnWidths: {
+                Code: 150, RFQCode: 150, PurchaseRequisitionItemCodes: 240, SKU: 150, Quantity: 100, UOM: 100,
+                Description: 260, Allocations: 260, Status: 100
             }
         },
         {

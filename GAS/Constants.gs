@@ -47,6 +47,7 @@ const CONFIG = {
     PURCHASE_REQUISITIONS: 'PurchaseRequisitions',
     PURCHASE_REQUISITION_ITEMS: 'PurchaseRequisitionItems',
     RFQS: 'RFQs',
+    RFQ_ITEMS: 'RFQItems',
     RFQ_SUPPLIERS: 'RFQSuppliers',
     SUPPLIER_QUOTATIONS: 'SupplierQuotations',
     SUPPLIER_QUOTATION_ITEMS: 'SupplierQuotationItems',
