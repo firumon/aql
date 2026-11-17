@@ -216,7 +216,7 @@ export function buildPurchaseOrderCancelChainNodes ({
 
   const nodes = [{ resource: RESOURCE_NAME, actions: [{ ...CANCEL_ACTION, code: textOrRef(code), data: { fields: stampFields('ProgressCancelled', actorName, comment) } }] , permissions: { cancel: 'You are not allowed to cancel this purchase order.' }, successMsg: 'Purchase order cancelled.'}]
 
-  const supplierRequests = buildSupplierCancelledNodes(asRow(rfq).Code, record.SupplierCode, rfqSupplierRows)
+  const supplierRequests = buildSupplierCancelledNodes(asRow(rfq).Code, record.SupplierCode, rfqSupplierRows, actorName, comment)
   if (supplierRequests.length) {
     nodes.push(...supplierRequests)
   }

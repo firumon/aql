@@ -1,5 +1,6 @@
 import { batchRefList, isBatchRef, textOrRef } from 'src/utils/appHelpers'
 import { addDays, toDateOnly } from 'src/utils/dateHelpers'
+import { sortRecords } from 'src/utils/sortHelpers'
 import { resourceRow } from 'src/composables/resources/useResourceConfig'
 import {
   OPEN, PARTIALLY_QUOTED, FULLY_QUOTED, progressOf, isEditable, isActiveRow, isTerminal, isOwnedBy, rfqCodesOf
@@ -245,4 +246,107 @@ export function buildRequisitionRfqQuoteEditNodes ({ rfqCode, requisitions, item
     resource: RESOURCE_NAME, role: 'rfqAllocation', many: true, records: parentUpdates,
     permissions: { update: 'You are not allowed to update purchase requisitions.' }
   }]
+}
+
+export function planRequisitionFifoAllocations ({ requisitions, items, itemRequests = [], prCodes } = {}) {
+  if (!Array.isArray(requisitions) || !Array.isArray(items) || !Array.isArray(itemRequests)) {
+    return { ok: false, message: 'Pass requisitions, items, and item requests as lists.' }
+  }
+  if (!itemRequests.length) return { ok: true, results: [], itemDeltas: [] }
+  const itemCodes = new Set()
+  for (const row of items) {
+    const code = text(row?.Code)
+    if (!code) return { ok: false, message: 'Every requisition item needs a code.' }
+    if (itemCodes.has(code)) return { ok: false, message: 'Each requisition item must be passed only once.' }
+    itemCodes.add(code)
+  }
+  const prevTotalByPri = new Map()
+  for (const entry of itemRequests) {
+    if (typeof entry?.sku !== 'string' || !text(entry.sku) ||
+      !Number.isFinite(entry.quantity) || entry.quantity < 0) {
+      return { ok: false, message: 'Every item request needs a SKU and a number at or above zero.' }
+    }
+    let previous = entry.previousAllocations ?? {}
+    if (typeof previous === 'string') {
+      try { previous = previous.trim() ? JSON.parse(previous) : {} } catch {
+        return { ok: false, message: 'Previous allocations must be valid JSON.' }
+      }
+    }
+    if (!previous || typeof previous !== 'object' || Array.isArray(previous)) {
+      return { ok: false, message: 'Previous allocations must be an object.' }
+    }
+    for (const [key, value] of Object.entries(previous)) {
+      const code = text(key)
+      const quantity = Number(value)
+      if (!code || code === 'excess' || !Number.isFinite(quantity) || quantity <= 0) continue
+      prevTotalByPri.set(code, (prevTotalByPri.get(code) || 0) + quantity)
+    }
+  }
+  const availableByPri = new Map()
+  const itemsBySku = new Map()
+  for (const row of items) {
+    if (!isActiveRow(row) || row._action === 'deactivate') continue
+    const code = text(row.Code)
+    const baseQuoted = Math.max(0, Number(row.QuotedQuantity ?? 0) - (prevTotalByPri.get(code) || 0))
+    availableByPri.set(code, Math.max(0, Number(row.Quantity) - baseQuoted))
+    const sku = text(row.SKU)
+    const parentCode = text(row.PurchaseRequisitionCode)
+    if (!itemsBySku.has(sku)) itemsBySku.set(sku, new Map())
+    const byParent = itemsBySku.get(sku)
+    if (!byParent.has(parentCode)) byParent.set(parentCode, [])
+    byParent.get(parentCode).push(row)
+  }
+  const fifo = sortRecords(requisitions.filter((row) => isActiveRow(row) && !isTerminal(row)), [
+    { column: 'PRDate', order: 'asc', type: 'date' },
+    { column: 'CreatedAt', order: 'asc', type: 'date' },
+    { column: 'Code', order: 'asc', type: 'text' }
+  ])
+  const results = []
+  const newTotalByPri = new Map()
+  for (const entry of itemRequests) {
+    const sku = text(entry.sku)
+    const selected = entry.prCodes ?? prCodes
+    const selectedCodes = new Set((Array.isArray(selected) ? selected : text(selected).split(',')).map(text).filter(Boolean))
+    const allocations = new Map()
+    let remaining = entry.quantity
+    if (remaining > 0 && selectedCodes.size) {
+      const byParent = itemsBySku.get(sku)
+      for (const parent of fifo) {
+        if (remaining <= 0) break
+        if (!selectedCodes.has(text(parent.Code))) continue
+        for (const row of byParent?.get(text(parent.Code)) || []) {
+          if (remaining <= 0) break
+          const code = text(row.Code)
+          const available = availableByPri.get(code)
+          const take = Math.min(remaining, available)
+          if (!(take > 0)) continue
+          allocations.set(code, (allocations.get(code) || 0) + take)
+          newTotalByPri.set(code, (newTotalByPri.get(code) || 0) + take)
+          availableByPri.set(code, available - take)
+          remaining -= take
+        }
+      }
+    }
+    const purchaseRequisitionItemCodes = [...allocations.keys()].join(',')
+    if (remaining > 0) allocations.set('excess', remaining)
+    const allocationsMap = Object.fromEntries(allocations)
+    results.push({
+      sku, quantity: entry.quantity, allocationsMap, allocationsJson: JSON.stringify(allocationsMap),
+      purchaseRequisitionItemCodes, excess: allocationsMap.excess || 0
+    })
+  }
+  const itemDeltas = []
+  for (const code of new Set([...prevTotalByPri.keys(), ...newTotalByPri.keys()])) {
+    const previousQuantity = prevTotalByPri.get(code) || 0
+    const quantity = newTotalByPri.get(code) || 0
+    if (quantity !== previousQuantity) itemDeltas.push({ itemCode: code, quantity, previousQuantity })
+  }
+  return { ok: true, results, itemDeltas }
+}
+
+export function buildRequisitionRfqFifoNodes ({ rfqCode, requisitions, items, itemRequests = [], prCodes } = {}) {
+  const plan = planRequisitionFifoAllocations({ requisitions, items, itemRequests, prCodes })
+  if (!plan.ok) return [{ valid: false, message: plan.message }]
+  if (!plan.itemDeltas.length) return []
+  return buildRequisitionRfqQuoteEditNodes({ rfqCode, requisitions, items, allocations: plan.itemDeltas })
 }

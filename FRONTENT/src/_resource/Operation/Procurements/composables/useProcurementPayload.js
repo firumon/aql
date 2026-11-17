@@ -1,5 +1,6 @@
 import { textOrRef, isBatchRef } from 'src/utils/appHelpers'
 import { toDateTime24 } from 'src/utils/dateHelpers'
+import { stampFields } from 'src/utils/workflowStamp'
 import { canAdvanceTo, progressOf, PR_CREATED, PR_APPROVED, COMPLETED, CANCELLED } from './useProcurementProgress'
 
 const RESOURCE_NAME = 'Procurements'
@@ -41,13 +42,17 @@ export function buildProcurementRollbackNode (procurement, previousProgress, rel
   return { resource: RESOURCE_NAME, code: textOrRef(code), record: { Progress: target }, permissions: MOVE, reload: reload }
 }
 
-export function buildProcurementCancelNode (procurement, reload = []) {
+export function buildProcurementCancelNode (procurement, optionsOrReload = []) {
+  const opts = Array.isArray(optionsOrReload) ? { reload: optionsOrReload } : asRow(optionsOrReload)
+  const reload = Array.isArray(opts.reload) ? opts.reload : []
   const row = asRow(procurement)
   const rawCode = row.Code
   if (!rawCode || isBatchRef(rawCode)) return null
   const code = text(rawCode)
   if (!code || code.startsWith('$ref:') || code.startsWith('[object') || progressOf(row) === CANCELLED || progressOf(row) === COMPLETED) return null
-  return { resource: RESOURCE_NAME, code: textOrRef(code), record: { Progress: CANCELLED }, permissions: MOVE, reload: reload }
+  const stamp = (text(opts.actorName) || text(opts.comment))
+    ? stampFields('ProgressCancelled', opts.actorName, opts.comment) : {}
+  return { resource: RESOURCE_NAME, code: textOrRef(code), record: { Progress: CANCELLED, ...stamp }, permissions: MOVE, reload }
 }
 
 export function buildProcurementCreateNode (options = {}, actorName = '', actorRole = '') {
