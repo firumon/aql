@@ -101,14 +101,16 @@ export const sortRecords = (records, rules) => {
   return records.map((row, index) => index).sort((a, b) => {
     const left = lists[a]
     const right = lists[b]
-    for (const l of left) {
-      for (const r of right) {
-        if (l.value === null && r.value === null) continue
-        if (l.value === null) return 1
-        if (r.value === null) return -1
-        const difference = compareValues(l.value, r.value)
-        if (difference) return difference * l.sign
-      }
+    for (let i = 0; i < Math.min(left.length, right.length); i++) {
+      const l = left[i]
+      const r = right[i]
+      if (l.value === null && r.value === null) continue
+      if (l.value === null) return 1
+      if (r.value === null) return -1
+      const difference = typeof l.value === typeof r.value
+        ? compareValues(l.value, r.value)
+        : collator.compare(String(l.value), String(r.value))
+      if (difference) return difference * l.sign
     }
     if (!left.length) return right.length ? 1 : 0
     if (!right.length) return -1

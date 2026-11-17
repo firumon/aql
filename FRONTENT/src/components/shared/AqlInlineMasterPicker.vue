@@ -1,16 +1,17 @@
 <template>
   <q-card :flat="flat" :class="$attrs.class" :style="$attrs.style" :inert="disable || loading">
     <q-card-section>
-      <q-input v-model="searchQuery" :dense="filterDense ?? dense" outlined clearable type="search" :label="filterLabel"
-        :disable="disable || loading">
+      <q-input v-model="searchQuery" :dense="listProps.filterDense ?? filterDense ?? listProps.dense ?? dense" outlined clearable
+        type="search" :label="filterLabel" :disable="disable || loading">
         <template #prepend><q-icon name="search" /></template>
       </q-input>
     </q-card-section>
     <q-card-section class="q-px-sm q-pb-sm q-pt-none">
-      <AppList v-bind="{ bordered: false, 'item-bordered': false, gutter: false, paginate: false, separator: true, ...listProps, ...$attrs }"
-        :dense="dense" :input="input" selectable="left" :item-key="itemKey"
+      <AppList v-bind="{ bordered: false, 'item-bordered': false, gutter: false, paginate: false, separator: true, ...listProps,
+          itemClass: listProps.itemClass ?? props.itemClass, ...$attrs }"
+        :dense="listProps.dense ?? dense" :input="input" selectable="left" :item-key="itemKey"
         :val="item => String(getItemVal(item, null, itemKey))" class="scroll"
-        :style="{ maxHeight: dense ? '168px' : '264px' }" :items="filteredOptions"
+        :style="{ maxHeight: (listProps.dense ?? dense) ? '168px' : '264px' }" :items="filteredOptions"
         :model-value="selectedCodes" :loading="loading"
         :input-label="inputLabel" :input-value="() => value"
         :input-props="item => ({ type, modelValue: valueFor(String(getItemVal(item, null, itemKey))), disable: disable || loading,
@@ -39,8 +40,9 @@ const props = defineProps({
   filterLabel: { type: String, default: 'Filter by name' },
   listProps: { type: Object, default: () => ({}) },
   flat: { type: Boolean, default: false },
-  dense: { type: Boolean, default: false },
-  filterDense: { type: Boolean, default: null },
+  dense: { type: Boolean, default: true },
+  filterDense: { type: Boolean, default: false },
+  itemClass: { type: [String, Array, Object], default: 'bg-transparent' },
   input: { type: [Boolean, String, Object, Function], default: false },
   inputProps: { type: [Object, Function], default: () => ({}) },
   inputLabel: { type: [String, Number, Function], default: 'Value' },
