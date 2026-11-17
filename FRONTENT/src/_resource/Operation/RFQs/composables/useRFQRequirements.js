@@ -6,21 +6,21 @@ import { toDateOnly } from 'src/utils/dateHelpers'
 const RESOURCE = 'RFQs'
 const DEFINITIONS = [
   {
-    column: 'CriterionPrice',
+    column: 'RequirementPrice',
     name: 'Price',
     description: 'Total price of all quoted items, excluding taxes and other charges.',
     type: 'scaled',
     order: 'desc'
   },
   {
-    column: 'CriterionPackaging',
+    column: 'RequirementPackaging',
     name: 'Packaging',
     description: 'Packaging type used for the quoted items.',
     type: 'fixed',
     options: ['Carton', 'Crate', 'Pallet', 'Bag']
   },
   {
-    column: 'CriterionPaymentTerms',
+    column: 'RequirementPaymentTerms',
     name: 'Payment terms',
     description: 'When the supplier expects payment for the order.',
     type: 'fixed',
@@ -28,67 +28,74 @@ const DEFINITIONS = [
       'Advance + After Delivery', 'Full Before Delivery', 'Before Delivery + After Delivery', 'Full After Delivery']
   },
   {
-    column: 'CriterionCreditPeriod',
+    column: 'RequirementCreditPeriod',
     name: 'Credit period',
     description: 'Number of days of credit offered after delivery.',
     type: 'scaled',
     order: 'asc'
   },
   {
-    column: 'CriterionShippingTerms',
+    column: 'RequirementShippingTerms',
     name: 'Shipping terms',
     description: 'Shipping term offered for delivery.',
     type: 'fixed',
     options: ['EXW', 'FOB', 'CIF', 'DDP']
   },
   {
-    column: 'CriterionLeadTime',
+    column: 'RequirementLeadTime',
     name: 'Lead time',
     description: 'Number of days from the PO date to delivery.',
     type: 'scaled',
     order: 'desc'
   },
   {
-    column: 'CriterionQuotationValidity',
+    column: 'RequirementQuotationValidity',
     name: 'Quotation validity',
     description: 'Number of days the quotation stays valid after submission.',
     type: 'scaled',
     order: 'asc'
   },
   {
-    column: 'CriterionShipmentGrouping',
+    column: 'RequirementShipmentGrouping',
     name: 'Number of shipments',
     description: 'Number of shipments needed for the full order. One means all items arrive at once.',
     type: 'scaled',
     order: 'desc'
   },
   {
-    column: 'CriterionExtraCharges',
+    column: 'RequirementExtraCharges',
     name: 'Charges',
     description: 'Total non-refundable taxes and other charges outside the item price.',
     type: 'scaled',
     order: 'desc'
   },
   {
-    column: 'CriterionRefundableTaxAmount',
+    column: 'RequirementRefundableTaxAmount',
     name: 'Refundable tax amount',
     description: 'Tax the buyer can claim back from the government. Put other tax in charges.',
     type: 'scaled',
     order: 'desc'
   },
   {
-    column: 'CriterionItemAvailability',
+    column: 'RequirementItemAvailability',
     name: 'Item availability',
     description: 'Whether the supplier can supply every requested item.',
     type: 'fixed',
     options: ['All requested items available', 'Not all requested items available']
   },
   {
-    column: 'CriterionPartialOrderAcceptance',
+    column: 'RequirementPartialOrderAcceptance',
     name: 'Partial order acceptance',
     description: 'Whether the supplier accepts an order for less than the full requested quantity.',
     type: 'fixed',
     options: ['Accepts partial quantities', 'Full quantity required']
+  },
+  {
+    column: 'RequirementQuality',
+    name: 'Quality',
+    description: 'Item quality compared to the requested specification.',
+    type: 'scaled',
+    order: 'asc'
   }
 ]
 const text = (value) => String(value ?? '').trim()
@@ -105,12 +112,13 @@ function parse (raw, fallback) {
 function catalogueOf (config) {
   const settings = config?.settings || config?.ui?.settings || []
   if (!Array.isArray(settings)) return []
-  const raw = settings.find((entry) => entry.name === 'RFQCriteria')?.value
+  const setting = settings.find((entry) => entry.name === 'RFQRequirements')
+  const raw = (setting || settings.find((entry) => entry.name === 'RFQCriteria'))?.value
   const value = typeof raw === 'string' ? parse(raw, null) : raw
-  const legacyCatalogue = object(value) && Array.isArray(value.criteria)
+  const legacyCatalogue = object(value) && Array.isArray(value.requirements)
   const names = Array.isArray(value) ? value
     : legacyCatalogue
-      ? value.criteria.map((entry) => object(entry) ? entry.name : entry)
+      ? value.requirements.map((entry) => object(entry) ? entry.name : entry)
       : []
   const allowed = new Set(names.map((name) => text(name).toLowerCase()))
   const headers = new Set(config?.headers || [])
@@ -136,7 +144,7 @@ function storedShape (value) {
       (typeof entry.points === 'number' || entry.points === ''))
 }
 
-function readCriteria (record, catalogue) {
+function readRequirements (record, catalogue) {
   const selected = []
   const errors = []
   for (const definition of catalogue) {
@@ -177,51 +185,51 @@ function readCriteria (record, catalogue) {
   return { selected, errors }
 }
 
-function criterionError (criterion) {
-  if (!text(criterion.name)) return 'Enter a criterion name.'
-  if (!Number.isInteger(criterion.weight) || criterion.weight < 1 || criterion.weight > 10) {
-    return `${criterion.name}: set a weight from 1 to 10.`
+export function requirementError (requirement) {
+  if (!text(requirement.name)) return 'Enter a requirement name.'
+  if (!Number.isInteger(requirement.weight) || requirement.weight < 1 || requirement.weight > 10) {
+    return `${requirement.name}: set a weight from 1 to 10.`
   }
-  if (criterion.type === 'scaled') {
-    if (!['asc', 'desc'].includes(criterion.order) || criterion.options !== undefined) {
-      return `${criterion.name}: the scaled rule must set an ascending or descending order.`
+  if (requirement.type === 'scaled') {
+    if (!['asc', 'desc'].includes(requirement.order) || requirement.options !== undefined) {
+      return `${requirement.name}: the scaled rule must set an ascending or descending order.`
     }
     return ''
   }
-  if (criterion.type !== 'fixed' || !Array.isArray(criterion.options) || !criterion.options.length) {
-    return `${criterion.name}: choose fixed options or a scaled number rule.`
+  if (requirement.type !== 'fixed' || !Array.isArray(requirement.options) || !requirement.options.length) {
+    return `${requirement.name}: choose fixed options or a scaled number rule.`
   }
   const names = new Set()
-  for (const option of criterion.options) {
-    if (!object(option) || !text(option.name)) return `${criterion.name}: every option needs a name.`
+  for (const option of requirement.options) {
+    if (!object(option) || !text(option.name)) return `${requirement.name}: every option needs a name.`
     const name = text(option.name).toLowerCase()
-    if (names.has(name)) return `${criterion.name}: option names must be different.`
+    if (names.has(name)) return `${requirement.name}: option names must be different.`
     names.add(name)
-    if (!decimal(option.points, 0, 10)) return `${criterion.name}: give every option 0 to 10 points, with up to two decimal places.`
+    if (!decimal(option.points, 0, 10)) return `${requirement.name}: give every option 0 to 10 points, with up to two decimal places.`
   }
   return ''
 }
 
-function savedCriterion (criterion) {
-  const { id, column, description, ...value } = criterion
+function savedRequirement (requirement) {
+  const { id, column, description, ...value } = requirement
   if (Array.isArray(value.options)) {
     value.options = value.options.map(({ id: optionId, ...option }) => option)
   }
   return value
 }
 
-export function useRFQCriteria () {
+export function useRFQRequirements () {
   const config = useResourceConfig(RESOURCE)
   const source = useRecord()
-  return source.remember('useRFQCriteria', () => {
+  return source.remember('useRFQRequirements', () => {
     const catalogue = computed(() => catalogueOf(config.config.value))
     const columns = computed(() => catalogue.value.map((entry) => entry.column))
     const snapshot = (record = {}) => {
-      return readCriteria(record, catalogue.value)
+      return readRequirements(record, catalogue.value)
     }
-    const optionsOf = (criterion) => {
-      const definition = catalogue.value.find((entry) => entry.column === criterion.id)
-      const selected = new Set((criterion.options || []).map((entry) => text(entry.name).toLowerCase()))
+    const optionsOf = (requirement) => {
+      const definition = catalogue.value.find((entry) => entry.column === requirement.id)
+      const selected = new Set((requirement.options || []).map((entry) => text(entry.name).toLowerCase()))
       return (definition?.options || []).map((name) => ({
         name,
         selected: selected.has(name.toLowerCase())
@@ -229,56 +237,53 @@ export function useRFQCriteria () {
     }
     const stepsOf = (record, editing = false) => {
       const selected = snapshot(record).selected
-      if (editing) {
-        return {
-          criteria: 1, basics: 2, selected,
-          criterionStart: 3,
-          suppliers: null,
-          review: selected.length + 3
-        }
-      }
       return {
-        source: 1,
-        items: 2,
-        criteria: 3,
-        selected,
-        criterionStart: 4,
-        suppliers: selected.length + 4,
-        review: selected.length + 5
+        source: 1, items: 1, basics: 2, requirements: 3, criteria: 3, selected,
+        requirementStart: 4, criterionStart: 4,
+        suppliers: editing ? null : selected.length + 4,
+        review: selected.length + (editing ? 4 : 5)
       }
     }
+
     const termsOf = (record) => [...snapshot(record).selected]
       .sort((a, b) => b.weight - a.weight)
-      .map((criterion) => {
-        const options = [...(criterion.options || [])].sort((a, b) => b.points - a.points)
-        const method = criterion.type === 'scaled'
-          ? `${criterion.order === 'asc' ? 'Higher' : 'Lower'} value is better` : ''
+      .map((requirement) => {
+        const options = [...(requirement.options || [])].sort((a, b) => b.points - a.points)
+        const method = requirement.type === 'scaled'
+          ? `${requirement.order === 'asc' ? 'Higher' : 'Lower'} value is better` : ''
         const details = method || options.map((option) =>
           `${option.name}${option.description ? ` (${option.description})` : ''}: ${option.points} points`).join('; ')
-        return { label: criterion.name, value: `Weight ${criterion.weight} · ${details}`,
-          weight: criterion.weight, method, options }
+        return { label: requirement.name, value: `Weight ${requirement.weight} · ${details}`,
+          weight: requirement.weight, method, options }
       })
     return { catalogue, columns, snapshot, optionsOf, stepsOf, termsOf,
-      ready: computed(() => catalogue.value.length > 0), criterionError, validDate }
+      ready: computed(() => catalogue.value.length > 0), requirementError, criterionError: requirementError, validDate }
   })
 }
 
-export function buildRFQCriteriaNodes ({ record = {}, code = '', operation, id, optionIndex, value, catalogue = [] } = {}) {
-  const state = readCriteria(record, catalogue)
-  const criterion = state.selected.find((entry) => entry.id === id)
+export function buildRFQRequirementsNodes ({ record = {}, code = '', operation, id, optionIndex, value, catalogue = [] } = {}) {
+  const state = readRequirements(record, catalogue)
+  const requirement = state.selected.find((entry) => entry.id === id)
   const definition = catalogue.find((entry) => entry.column === id)
   const blocked = state.errors.find((entry) => entry.column === id)
-  if (blocked && operation !== 'select') return [{ valid: false, message: blocked.message }]
+  if (blocked && !['select', 'set-weight'].includes(operation)) return [{ valid: false, message: blocked.message }]
   const changes = {}
-  if (operation === 'select') {
-    if (!definition) return [{ valid: false, message: 'This criterion is not in the sheet catalogue.' }]
-    changes[id] = criterion || text(record[id]) ? '' : JSON.stringify(definition.type === 'fixed'
-      ? { name: definition.name, type: 'fixed', weight: 1,
-        options: definition.options.map((name) => ({ name, description: '', points: 0 })) }
-      : { name: definition.name, type: 'scaled', order: definition.order, weight: 1 })
+  if (['select', 'set-weight'].includes(operation)) {
+    if (!definition) return [{ valid: false, message: 'This requirement is not in the sheet catalogue.' }]
+    const weight = operation === 'select' ? (requirement || text(record[id]) ? 0 : 1)
+      : value === '' || value == null ? 0 : Number(value)
+    if (!Number.isInteger(weight) || weight < 0 || weight > 10) {
+      return [{ valid: false, message: 'Weight must be from 0 to 10.' }]
+    }
+    if (!weight && !text(record[id])) return []
+    changes[id] = !weight ? '' : JSON.stringify(requirement ? { ...savedRequirement(requirement), weight }
+      : definition.type === 'fixed'
+        ? { name: definition.name, type: 'fixed', weight,
+          options: definition.options.map((name) => ({ name, description: '', points: 0 })) }
+        : { name: definition.name, type: 'scaled', order: definition.order, weight })
   } else if (['weight', 'order', 'option-points', 'add-option', 'remove-option'].includes(operation)) {
-    if (!criterion) return [{ valid: false, message: 'Choose the criterion first.' }]
-    const next = savedCriterion(criterion)
+    if (!requirement) return [{ valid: false, message: 'Choose the requirement first.' }]
+    const next = savedRequirement(requirement)
     if (operation === 'weight') {
       const weight = value === '' || value == null ? '' : Number(value)
       if (weight !== '' && (!Number.isInteger(weight) || weight < 1 || weight > 10)) {
@@ -286,12 +291,12 @@ export function buildRFQCriteriaNodes ({ record = {}, code = '', operation, id, 
       }
       next.weight = weight
     } else if (operation === 'order') {
-      if (criterion.type !== 'scaled' || !['asc', 'desc'].includes(value)) {
+      if (requirement.type !== 'scaled' || !['asc', 'desc'].includes(value)) {
         return [{ valid: false, message: 'Choose higher or lower value as best.' }]
       }
       next.order = value
     } else {
-      if (criterion.type !== 'fixed') return [{ valid: false, message: 'Only fixed criteria have options.' }]
+      if (requirement.type !== 'fixed') return [{ valid: false, message: 'Only fixed requirements have options.' }]
       if (operation === 'add-option') {
         const name = text(value?.name)
         const points = value?.points === '' || value?.points == null ? '' : Number(value.points)
@@ -304,7 +309,7 @@ export function buildRFQCriteriaNodes ({ record = {}, code = '', operation, id, 
       } else {
         const targetIndex = Number.isInteger(optionIndex)
           ? optionIndex
-          : criterion.options.findIndex((entry) => entry.id === optionIndex)
+          : requirement.options.findIndex((entry) => entry.id === optionIndex)
         const option = next.options[targetIndex]
         if (!option) return [{ valid: false, message: 'Choose the option first.' }]
         if (operation === 'remove-option') {
@@ -318,28 +323,28 @@ export function buildRFQCriteriaNodes ({ record = {}, code = '', operation, id, 
       }
     }
     changes[id] = JSON.stringify(next)
-  } else return [{ valid: false, message: 'This criterion change is not supported.' }]
+  } else return [{ valid: false, message: 'This requirement change is not supported.' }]
   const recordCode = text(code || record.Code)
   return [{ resource: RESOURCE, merge: true, ...(recordCode ? { code: recordCode } : {}), record: changes,
     permissions: recordCode ? { update: 'You are not allowed to update this RFQ.' } : { create: 'You are not allowed to create an RFQ.' } }]
 }
 
-export function validateRFQCriteriaNodes ({ record = {}, original = {}, criterionId = '', namesOnly = false } = {}) {
-  const reader = useRFQCriteria()
+export function validateRFQRequirementsNodes ({ record = {}, original = {}, requirementId = '', criterionId = '', namesOnly = false } = {}) {
+  const reader = useRFQRequirements()
   const state = reader.snapshot(record)
-  if (!reader.ready.value) return [{ valid: false, message: 'RFQ criteria are not set up in sheet settings yet.' }]
+  if (!reader.ready.value) return [{ valid: false, message: 'RFQ requirements are not set up in sheet settings yet.' }]
   const changedError = state.errors.find((error) => record[error.column] !== original[error.column])
   if (changedError) return [{ valid: false, message: changedError.message }]
   const names = new Set()
-  for (const criterion of state.selected) {
-    const name = text(criterion.name).toLowerCase()
+  for (const requirement of state.selected) {
+    const name = text(requirement.name).toLowerCase()
     if (!name || names.has(name)) {
-      return [{ valid: false, message: 'Criterion names must be different and not blank.' }]
+      return [{ valid: false, message: 'Requirement names must be different and not blank.' }]
     }
     names.add(name)
-    if (namesOnly || criterionId && criterion.id !== criterionId) continue
-    const error = criterionError(criterion)
-    if (error && (!original.Code || record[criterion.column] !== original[criterion.column])) {
+    if (namesOnly || (requirementId || criterionId) && requirement.id !== (requirementId || criterionId)) continue
+    const error = requirementError(requirement)
+    if (error && (!original.Code || record[requirement.column] !== original[requirement.column])) {
       return [{ valid: false, message: error }]
     }
   }

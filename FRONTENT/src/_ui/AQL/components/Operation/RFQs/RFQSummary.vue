@@ -52,7 +52,9 @@ const facts = computed(() => {
   return [
     { label: 'RFQ Date', value: record.RFQDate },
     { label: 'Deadline', value: record.QuotationSubmissionDeadline },
-    { label: 'Requisition', value: record.PurchaseRequisitionCode },
+    { label: 'Requisitions', value: record.PurchaseRequisitionCodes },
+    { label: 'Warehouse', value: record.WarehouseCode },
+    { label: 'Required By', value: record.RequiredBy },
     { label: 'Suppliers Assigned', value: assignedDetails.value.length || '' }
   ].filter((line) => String(line.value ?? '').trim())
 })

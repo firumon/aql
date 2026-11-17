@@ -2,21 +2,23 @@ import { buildRFQFormInitNodes } from 'src/_resource/Operation/RFQs/composables/
 
 export default {
   sections: ['PageHeader'],
-  contents: ['SelectRequisition', 'DirectItems', 'CriteriaSelection', 'CriterionOptions', 'SupplierSelection', 'ReviewRFQ'],
+  contents: ['SelectPendingPRs', 'ItemDescriptions', 'RFQTerms', 'CriteriaSelection',
+    'CriterionOptions', 'SupplierSelection', 'ReviewSummary', 'ReviewItems', 'ReviewSuppliers', 'ReviewTerms'],
 
   PropsPageHeader: {
     title: 'Generate RFQ',
     reload: false
   },
 
-  PropsSelectRequisition: { step: 1 },
-  PropsDirectItems: { step: 2 },
-  PropsCriterionOptions: (pageProps) => ({ gutter: pageProps.gutter }),
+  PropsSelectPendingPRs: { step: 1 },
+  PropsItemDescriptions: { step: 1 },
+  PropsRFQTerms: { step: 2 },
+  PropsContent: (pageProps) => ({ gutter: pageProps.gutter }),
 
   ready ({ pageState }) {
+    if (pageState.getControls('AddSeeded', false, 'RFQs') === true) return
     pageState.resetForResource('RFQs')
-    pageState.initResource('Procurements')
-    pageState.initResource('PurchaseRequisitions')
     pageState.applyNodes(buildRFQFormInitNodes())
+    pageState.setControls('AddSeeded', true, 'RFQs')
   }
 }

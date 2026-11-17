@@ -1,186 +1,246 @@
-import { findResourceConfig } from 'src/composables/resources/useResourceConfig'
+import { useSkuResource } from 'src/_resource/Master/SKUs/composables/useSkuResource'
+import { batchRef } from 'src/utils/appHelpers'
 import { useAuth } from 'src/composables/core/useAuth'
-import { useWarehouseResource } from 'src/_resource/Master/Warehouses/composables/useWarehouseResource'
-import { useRFQCriteria, buildRFQCriteriaNodes, validateRFQCriteriaNodes } from './useRFQCriteria'
-import { buildRFQInitNodes, buildRFQEditInitNodes, buildRFQRecord, buildRFQCreateChainNodes } from './useRFQPayload'
-import { isDraft } from './useRFQProgress'
+import { useRFQRequirements, buildRFQRequirementsNodes, validateRFQRequirementsNodes } from './useRFQRequirements'
+import {
+  buildRFQInitNodes, buildRFQEditInitNodes, buildRFQRecord, buildRFQSaveChainNodes, buildRFQItemRecords
+} from './useRFQPayload'
+import { isEditable, isActiveRow } from './useRFQProgress'
+import { useRFQResource } from './useRFQResource'
 import { usePurchaseRequisitionResource } from 'src/_resource/Operation/PurchaseRequisitions/composables/usePurchaseRequisitionResource'
-import { isRfqEligible } from 'src/_resource/Operation/PurchaseRequisitions/composables/usePurchaseRequisitionProgress'
-import { useProcurementResource } from 'src/_resource/Operation/Procurements/composables/useProcurementResource'
+import {
+  buildProcurementCreateNode, PROCUREMENT_REF_PATH
+} from 'src/_resource/Operation/Procurements/composables/useProcurementPayload'
+import { RFQ_GENERATED } from 'src/_resource/Operation/Procurements/composables/useProcurementProgress'
 import { useSupplierResource } from 'src/_resource/Master/Suppliers/composables/useSupplierResource'
 
 const RESOURCE = 'RFQs'
-const SECONDARY = ['RFQSuppliers', 'PurchaseRequisitions', 'Procurements']
+const ITEMS_RESOURCE = 'RFQItems'
 const text = (value) => String(value ?? '').trim()
+const codesOf = (value) => [...new Set((Array.isArray(value) ? value : text(value).split(',')).map(text).filter(Boolean))]
 
-function sourceInputs (record) {
-  const { getPurchaseRequisition, linesByRequisition, loading } = usePurchaseRequisitionResource()
-  const { getProcurement } = useProcurementResource()
-  const requisition = getPurchaseRequisition(record.PurchaseRequisitionCode)
+function sourceInputs (record, previousItems = []) {
+  const reader = usePurchaseRequisitionResource()
+  const selected = new Set(codesOf(record.PurchaseRequisitionCodes ?? record.PurchaseRequisitionCode))
+  for (const row of previousItems) {
+    let allocations = row.Allocations || {}
+    if (typeof allocations === 'string') {
+      try { allocations = JSON.parse(allocations) } catch { allocations = {} }
+    }
+    for (const code of Object.keys(allocations || {})) {
+      if (code === 'excess') continue
+      const item = reader.getRequisitionItem(code)
+      if (item?.PurchaseRequisitionCode) selected.add(text(item.PurchaseRequisitionCode))
+    }
+  }
   return {
-    requisition, items: linesByRequisition.value.get(text(record.PurchaseRequisitionCode)) || [],
-    procurement: getProcurement(requisition?.ProcurementCode), loading: Boolean(loading?.value)
+    requisitions: [...selected].map(reader.getPurchaseRequisition).filter(Boolean),
+    prItems: [...selected].flatMap((code) => reader.itemsByRequisition.value.get(code) || []),
+    loading: Boolean(reader.loading?.value)
   }
 }
 
-export function validateRFQDraftNodes ({ record = {}, original = null, suppliers = [], stage = 'all', criterionId = '', sourceType = 'PR', directItems = [] } = {}) {
-  const reader = useRFQCriteria()
-  if (original && !isDraft(original)) return [{ valid: false, message: 'Only a draft RFQ can be edited.' }]
-  if (!findResourceConfig(RESOURCE)?.headers?.includes('QuotationSubmissionDeadline')) {
-    return [{ valid: false, message: 'RFQ sheet setup is still pending. QuotationSubmissionDeadline must be loaded before saving.' }]
+export function validateRFQDraftNodes ({
+  record = {}, original = null, items = null, rfqItems = null, suppliers = [], stage = 'all',
+  requirementId = '', criterionId = '', directItems = []
+} = {}) {
+  const reader = useRFQRequirements()
+  if (original && !isEditable(original)) return [{ valid: false, message: 'Only a draft or assigned RFQ can be edited.' }]
+  if (['all', 'basics'].includes(stage) && (!reader.validDate(record.RFQDate) || !reader.validDate(record.QuotationSubmissionDeadline) ||
+    record.QuotationSubmissionDeadline < record.RFQDate)) {
+    return [{ valid: false, message: 'Use valid dates. The deadline must be on or after the RFQ date.' }]
   }
-  const validateDates = !(original && stage === 'criteria')
-  if (validateDates && (!reader.validDate(record.RFQDate) || !reader.validDate(record.QuotationSubmissionDeadline))) {
-    return [{ valid: false, message: 'Enter a valid RFQ date and quotation submission deadline.' }]
-  }
-  if (validateDates && record.QuotationSubmissionDeadline < record.RFQDate) {
-    return [{ valid: false, message: 'The quotation submission deadline must be on or after the RFQ date.' }]
-  }
-  const criteria = validateRFQCriteriaNodes({ record, original: original || {}, criterionId,
-    namesOnly: ['source', 'items', 'criteria', 'basics', 'suppliers'].includes(stage) })
-  if (criteria.length) return criteria
-  if (!original && sourceType === 'DIRECT') {
-    if (stage !== 'source') {
-      const items = Array.isArray(directItems) ? directItems : []
-      if (!items.length) return [{ valid: false, message: 'Add at least one SKU to quote.' }]
-      if (items.some((item) => !text(item?.sku) || !Number.isFinite(Number(item?.quantity)) || !(Number(item.quantity) > 0))) {
-        return [{ valid: false, message: 'Enter a valid quantity greater than zero for each item.' }]
-      }
+  if (stage === 'all' || stage === 'basics') {
+    if (!reader.validDate(record.RequiredBy) || record.RequiredBy < record.RFQDate) {
+      return [{ valid: false, message: 'Set a valid Required By date on or after the RFQ date.' }]
     }
-  } else {
-    const { requisition, items, loading } = sourceInputs(record)
-    if (loading) return [{ valid: false, message: 'Wait for the requisition items to finish loading.' }]
-    if (!requisition || !original && !isRfqEligible(requisition)) return [{ valid: false, message: 'Select an approved purchase requisition.' }]
-    if (!items.length) return [{ valid: false, message: 'The selected requisition has no active items to quote.' }]
   }
-  if (!original && ['suppliers', 'all'].includes(stage)) {
-    const { activeChoices } = useSupplierResource()
-    const active = new Set(activeChoices.value.map((row) => row.code))
-    if (suppliers.some((code) => !active.has(code))) return [{ valid: false, message: 'Choose active suppliers only.' }]
+  if (['all', 'basics'].includes(stage) && (!text(record.WarehouseCode) || !['STOCK', 'PROJECT', 'SALES', 'ASSET'].includes(record.Type) ||
+    !['Low', 'Medium', 'High', 'Urgent'].includes(record.Priority) || !text(record.Username))) {
+    return [{ valid: false, message: 'Set the warehouse, type, priority, and username.' }]
+  }
+  const requirements = validateRFQRequirementsNodes({
+    record, original: original || {}, requirementId: requirementId || criterionId,
+    namesOnly: ['source', 'items', 'requirements', 'criteria', 'basics', 'suppliers'].includes(stage)
+  })
+  if (!['items', 'source', 'basics'].includes(stage) && requirements.length) return requirements
+  const rows = items ?? rfqItems ?? (directItems.length ? directItems.map((row) => ({
+    SKU: row.sku, Quantity: row.quantity, Status: 'Active'
+  })) : useRFQResource().itemsByRfq.value.get(text(original?.Code || record.Code)) || [])
+  if (!Array.isArray(rows)) return [{ valid: false, message: 'Pass RFQ items as a list.' }]
+  const active = rows.filter((row) => row && isActiveRow(row) && row._action !== 'deactivate')
+  if (!active.length) return [{ valid: false, message: 'Add at least one item to quote.' }]
+  if (active.some((row) => typeof row.SKU !== 'string' || !text(row.SKU) ||
+    !['number', 'string'].includes(typeof row.Quantity) || !Number.isFinite(Number(row.Quantity)) || Number(row.Quantity) <= 0) ||
+    new Set(active.map((row) => text(row.SKU))).size !== active.length) {
+    return [{ valid: false, message: 'Use a different SKU and a quantity above zero for each item.' }]
+  }
+  if (!Array.isArray(suppliers)) return [{ valid: false, message: 'Pass suppliers as a list.' }]
+  if (suppliers.length) {
+    const allowed = new Set(useSupplierResource().activeChoices.value.map((row) => row.code))
+    if (suppliers.some((code) => !allowed.has(text(code)))) return [{ valid: false, message: 'Choose active suppliers only.' }]
   }
   return []
 }
 
-export function syncRFQDraftNodes ({ record = {}, original = null, suppliers = [], sourceType = 'PR', directItems = [] } = {}) {
-  const direct = !original && sourceType === 'DIRECT'
-  const inputs = direct ? { requisition: {}, items: [], procurement: null } : sourceInputs(record)
-  const form = direct ? {
-    ...record,
-    PurchaseRequisitionCode: '',
-    ProcurementCode: ''
-  } : record
-  const header = buildRFQRecord({ ...inputs, form })
-  const primary = {
+export function syncRFQDraftNodes ({
+  record = {}, original = null, items = null, rfqItems = null, previousItems = null,
+  requisitions = null, prItems = null, suppliers = [], directItems = [], prCodes
+} = {}) {
+  const reader = useRFQResource()
+  const saved = previousItems ?? reader.itemsByRfq.value.get(text(original?.Code)) ?? []
+  const rows = items ?? rfqItems ?? (directItems.length ? directItems.map((row) => ({
+    SKU: row.sku, Quantity: row.quantity, UOM: row.uom, Description: row.description, Status: 'Active'
+  })) : saved)
+  const header = buildRFQRecord({ form: { ...record,
+    PurchaseRequisitionCodes: codesOf(prCodes ?? record.PurchaseRequisitionCodes ?? record.PurchaseRequisitionCode).join(',')
+  } })
+  const inputs = requisitions && prItems ? { requisitions, prItems } : sourceInputs(header, saved)
+  const { user } = useAuth()
+  const chain = buildRFQSaveChainNodes({
+    ...inputs, ...(requisitions ? { requisitions } : {}), ...(prItems ? { prItems } : {}),
+    rfq: original, form: header, items: rows, previousItems: saved, suppliers,
+    existingSupplierRows: original ? reader.suppliersOf(original.Code) : [], prCodes: header.PurchaseRequisitionCodes,
+    actorName: text(user.value?.name), actorRole: text(user.value?.role)
+  })
+  if (!chain.some((node) => node.valid === false)) {
+    chain.find(node => node.resource === RESOURCE).controls = { DraftError: '' }
+    return chain
+  }
+  return [{
     resource: RESOURCE, ...(original?.Code ? { code: original.Code } : {}), record: header,
-    permissions: original ? { update: 'You are not allowed to update this RFQ.' } : { create: 'You are not allowed to create an RFQ.' },
-    successMsg: original ? 'RFQ updated.' : 'RFQ generated.'
-  }
-  if (direct) {
-    const placeholders = [
-      { resource: 'Procurements', record: {} },
-      { resource: 'PurchaseRequisitions', record: {} }
-    ]
-    if (validateRFQDraftNodes({ record: header, suppliers, sourceType, directItems }).length) {
-      return [...placeholders, primary]
-    }
-    const { user } = useAuth()
-    const actorName = text(user.value?.name || user.value?.email)
-    const directNodes = buildRFQCreateChainNodes({
-      form: header,
-      suppliers,
-      sourceType,
-      directItems,
-      warehouseCode: text(useWarehouseResource().mainWarehouse.value?.code),
-      actorName,
-      actorRole: text(user.value?.role)
-    })
-    return directNodes.some((node) => node.valid === false)
-      ? [...placeholders, primary, ...directNodes]
-      : directNodes
-  }
-  if (original || validateRFQDraftNodes({ record: header, suppliers, sourceType, directItems }).length) return [primary]
-  return buildRFQCreateChainNodes({ ...inputs, form: header, suppliers })
+    controls: { DraftError: chain.find(node => node.valid === false)?.message || '' },
+    children: [{ resource: ITEMS_RESOURCE, records: buildRFQItemRecords(rows) }],
+    permissions: original ? { update: 'You are not allowed to update this RFQ.' } : { create: 'You are not allowed to create an RFQ.' }
+  }]
 }
 
-function refreshDraft (api, original, sourceType = 'PR') {
+function refreshDraft (api, original, previousItems) {
   const record = api.getRecord(null, RESOURCE) || {}
-  const suppliers = api.getControls('SelectedSupplierCodes', [], RESOURCE)
-  const directItems = api.getControls('DirectItems', [], RESOURCE)
-  const nodes = syncRFQDraftNodes({ record, original, suppliers, sourceType, directItems })
-  const present = new Set(nodes.map((node) => node.resource))
-  for (const name of SECONDARY) if (!present.has(name)) api.removeNode(name)
-  api.setReload(nodes.flatMap((node) => node.resource === '$batch' ? node.reload || [] : []))
-  const changed = nodes.filter((node) => {
-    if (node.resource === '$batch') return true
-    const live = api.useNode(node.resource).node.value
-    const liveRecord = live.record || {}
-    const nextRecord = node.record || {}
-    const recordChanged = [...new Set([...Object.keys(liveRecord), ...Object.keys(nextRecord)])]
-      .some((key) => JSON.stringify(liveRecord[key]) !== JSON.stringify(nextRecord[key]))
-    return recordChanged ||
+  const nodes = syncRFQDraftNodes({
+    record, original, previousItems, items: api.getChildRows(ITEMS_RESOURCE, RESOURCE),
+    suppliers: api.getControls('SelectedSupplierCodes', [], RESOURCE)
+  })
+  const primary = nodes.find((node) => node.resource === RESOURCE)
+  const nextProgress = primary?.record?.Progress
+  const nextError = primary?.controls?.DraftError || ''
+  if (nextProgress !== api.getRecord('Progress', RESOURCE)) api.setRecord('Progress', nextProgress, RESOURCE)
+  if (nextError !== api.getControls('DraftError', '', RESOURCE)) api.setControls('DraftError', nextError, RESOURCE)
+  if (!nextError) {
+    const computedRows = new Map((primary?.children?.find((bucket) => bucket.resource === ITEMS_RESOURCE)?.records || [])
+      .filter((row) => row._action !== 'deactivate').map((row) => [row.SKU, row]))
+    api.getChildRows(ITEMS_RESOURCE, RESOURCE).forEach((row, index) => {
+      if (row._action === 'deactivate') return
+      const next = computedRows.get(row.SKU)
+      if (next && (row.Allocations !== next.Allocations || row.PurchaseRequisitionItemCodes !== next.PurchaseRequisitionItemCodes)) {
+        api.updateChild(ITEMS_RESOURCE, index, {
+          Allocations: next.Allocations, PurchaseRequisitionItemCodes: next.PurchaseRequisitionItemCodes
+        }, RESOURCE)
+      }
+    })
+  }
+  const secondary = nodes.filter((node) => ['RFQSuppliers', 'Procurements'].includes(node.resource) ||
+    ['PurchaseRequisitions', 'PurchaseRequisitionItems'].includes(node.resource) && node.role === 'rfqAllocation')
+  const present = new Set(secondary.map((node) => node.resource + ':' + (node.role || '$default')))
+  for (const [resource, role] of [
+    ['RFQSuppliers', '$default'], ['Procurements', '$default'],
+    ['PurchaseRequisitions', 'rfqAllocation'], ['PurchaseRequisitionItems', 'rfqAllocation']
+  ]) if (!present.has(resource + ':' + role) && api.hasNode(resource, role)) api.removeNode(resource, role)
+  if (api.state.reload.length) api.setReload([])
+  const changed = secondary.filter((node) => {
+    if (!api.hasNode(node.resource, node.role)) return true
+    const live = api.useNode(node.resource, node.role).node.value
+    return JSON.stringify(live.record || {}) !== JSON.stringify(node.record || {}) ||
       JSON.stringify(live.records || []) !== JSON.stringify(node.records || []) ||
       JSON.stringify(live.children || []) !== JSON.stringify(node.children || [])
   })
   if (changed.length) api.applyNodes(changed)
 }
 
-export function buildRFQFormInitNodes ({ rfq = null } = {}) {
+export function buildRFQFormInitNodes ({ rfq = null, items = null } = {}) {
+  const reader = useRFQResource()
+  const saved = rfq ? reader.itemsByRfq.value.get(text(rfq.Code)) || [] : []
   const nodes = rfq ? buildRFQEditInitNodes(rfq) : buildRFQInitNodes()
   if (nodes[0]?.valid === false) return nodes
-  const primary = nodes.find((node) => node.resource === RESOURCE)
-  const reader = useRFQCriteria()
+  const primary = nodes[0]
+  const requirements = useRFQRequirements()
+  if (!rfq) for (const definition of requirements.catalogue.value.filter((entry) => entry.selected === true)) {
+    const selected = buildRFQRequirementsNodes({
+      record: primary.record, operation: 'select', id: definition.column, catalogue: requirements.catalogue.value
+    })
+    if (!selected.some((node) => node.valid === false)) Object.assign(primary.record, selected[0].record)
+  }
+  primary.children = [{ resource: ITEMS_RESOURCE, records: buildRFQItemRecords(items ?? saved) }]
+  const contributions = {}
+  const requisitions = usePurchaseRequisitionResource()
+  for (const item of saved) {
+    let allocations = item.Allocations || {}
+    if (typeof allocations === 'string') {
+      try { allocations = JSON.parse(allocations) } catch { allocations = {} }
+    }
+    for (const [code, quantity] of Object.entries(allocations)) {
+      const pr = requisitions.getRequisitionItem(code)?.PurchaseRequisitionCode
+      if (!pr) continue
+      contributions[pr] ||= {}
+      contributions[pr][item.SKU] = (contributions[pr][item.SKU] || 0) + Number(quantity || 0)
+    }
+  }
+  primary.controls = { SelectedSupplierCodes: [], PrContributions: contributions }
+  primary.derive = [
+    { key: 'rfq:prSelection', on: { resource: RESOURCE, record: 'PurchaseRequisitionCodes' }, immediate: false,
+      handler: (value, api, previous) => {
+        const before = new Set(codesOf(previous))
+        const after = new Set(codesOf(value))
+        const contributions = { ...api.getControls('PrContributions', {}, RESOURCE) }
+          const childRows = api.getChildRows(ITEMS_RESOURCE, RESOURCE)
+          const removedCodes = childRows.filter((row) => row?._action === 'deactivate' && text(row.Code))
+            .map((row) => text(row.Code))
+          const rows = new Map(childRows.filter((row) => row._action !== 'deactivate')
+            .map((row) => [row.SKU, { ...row }]))
+        for (const code of before) {
+          if (after.has(code)) continue
+          for (const [sku, quantity] of Object.entries(contributions[code] || {})) {
+            const row = rows.get(sku)
+            if (!row) continue
+            row.Quantity = Number(row.Quantity) - quantity
+              if (row.Quantity <= 0) {
+                if (text(row.Code)) removedCodes.push(text(row.Code))
+                rows.delete(sku)
+              }
+          }
+          delete contributions[code]
+        }
+        const skus = useSkuResource()
+        for (const code of after) {
+          if (before.has(code)) continue
+          contributions[code] = {}
+          for (const item of requisitions.linesByRequisition.value.get(code) || []) {
+            const quantity = Math.max(0, item.quantity - item.quotedQuantity)
+            if (!quantity) continue
+            const row = rows.get(item.SKU) || { SKU: item.SKU, Quantity: 0,
+              UOM: skus.skuLabelOf(item.SKU).uom, Description: item.Description || '', Status: 'Active' }
+            row.Quantity = Number(row.Quantity) + quantity
+            rows.set(item.SKU, row)
+            contributions[code][item.SKU] = (contributions[code][item.SKU] || 0) + quantity
+          }
+        }
+        api.setControls('PrContributions', contributions, RESOURCE)
+        api.applyNodes([{ resource: RESOURCE, merge: true,
+            children: [{ resource: ITEMS_RESOURCE, records: buildRFQItemRecords([...rows.values()], removedCodes) }] }])
+      } },
+    { key: 'rfq:record', on: { resource: RESOURCE, record: true }, immediate: false,
+      handler: (value, api) => refreshDraft(api, rfq, saved) },
+    { key: 'rfq:items', on: { resource: RESOURCE, children: ITEMS_RESOURCE }, immediate: false,
+      handler: (value, api) => refreshDraft(api, rfq, saved) },
+    { key: 'rfq:suppliers', on: { resource: RESOURCE, control: 'SelectedSupplierCodes' }, immediate: false,
+      handler: (value, api) => refreshDraft(api, rfq, saved) }
+  ]
   if (!rfq) {
-    for (const definition of reader.catalogue.value.filter((entry) => entry.selected === true)) {
-      const selected = buildRFQCriteriaNodes({ record: primary.record, operation: 'select', id: definition.column,
-        catalogue: reader.catalogue.value })
-      if (!selected.some((node) => node.valid === false)) Object.assign(primary.record, selected[0].record)
-    }
+    const { user } = useAuth()
+    primary.record.ProcurementCode = batchRef(PROCUREMENT_REF_PATH)
+    nodes.unshift(buildProcurementCreateNode({
+      progress: RFQ_GENERATED, actorName: text(user.value?.name), actorRole: text(user.value?.role)
+    }))
   }
-  const prConfig = findResourceConfig('PurchaseRequisitions')
-  const prAllowed = Boolean(prConfig && prConfig.permissions?.canRead)
-  const prepared = rfq
-    ? syncRFQDraftNodes({ record: nodes[0].record, original: rfq, sourceType: 'PR' })
-    : [
-        { resource: 'Procurements', record: {} },
-        { resource: 'PurchaseRequisitions', record: {} },
-        ...nodes
-      ]
-  const rfqNode = prepared.find((node) => node.resource === RESOURCE)
-  rfqNode.controls = {
-    SourceType: prAllowed || rfq ? 'PR' : 'DIRECT',
-    DirectItems: [],
-    PrListCollapsed: false,
-    SelectedSupplierCodes: []
-  }
-  rfqNode.derive = [{
-    key: 'rfq:source', on: { resource: RESOURCE, control: 'SourceType' }, immediate: false,
-    handler: (value, api, previous) => {
-      if (value === previous || rfq) return
-      api.setControls('DirectItems', [], RESOURCE)
-      api.setControls('PrListCollapsed', false, RESOURCE)
-      api.removeNode('PurchaseRequisitionItems')
-      api.setRecord(null, {
-        PurchaseRequisitionCode: '',
-        ProcurementCode: ''
-      }, RESOURCE)
-      refreshDraft(api, rfq, value)
-    }
-  }, {
-    key: 'rfq:requisition', on: { resource: RESOURCE, record: 'PurchaseRequisitionCode' }, immediate: false,
-    handler: (value, api, previous) => {
-      if (value === previous || rfq || api.getControls('SourceType', 'PR', RESOURCE) === 'DIRECT') return
-      api.removeNode('PurchaseRequisitionItems')
-      refreshDraft(api, rfq, 'PR')
-    }
-  }, {
-    key: 'rfq:record', on: { resource: RESOURCE, record: true }, immediate: false,
-    handler: (value, api) => refreshDraft(api, rfq, rfq ? 'PR' : api.getControls('SourceType', 'PR', RESOURCE))
-  }, {
-    key: 'rfq:suppliers', on: { resource: RESOURCE, control: 'SelectedSupplierCodes' }, immediate: false,
-    handler: (value, api) => refreshDraft(api, rfq, rfq ? 'PR' : api.getControls('SourceType', 'PR', RESOURCE))
-  }, {
-    key: 'rfq:directItems', on: { resource: RESOURCE, control: 'DirectItems' }, immediate: false, deep: false,
-    handler: (value, api) => refreshDraft(api, rfq, rfq ? 'PR' : api.getControls('SourceType', 'PR', RESOURCE))
-  }]
-  return prepared
+  return nodes
 }

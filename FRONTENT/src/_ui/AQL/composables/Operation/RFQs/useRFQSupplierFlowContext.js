@@ -1,29 +1,25 @@
 import { computed, inject, onMounted } from 'vue'
+import { useSupplierResource } from 'src/_resource/Master/Suppliers/composables/useSupplierResource'
 import { useAuth } from 'src/composables/core/useAuth'
 import { usePageRecord } from 'src/composables/resources/usePageRecord'
 import { useRouteConfig } from 'src/composables/resources/useRouteConfig'
 import { useAQLConfig } from 'src/_ui/AQL/composables/useAQLConfig'
 import {
-  supplierRowsOf,
+  activeSupplierRowsOf,
   canAssignSuppliers,
-  canMarkSuppliersSent,
+  supplierRowsOf,
   progressLabel,
   progressColor,
   supplierProgressLabel,
   supplierProgressColor,
-  SUPPLIER_ASSIGNED
+  SUPPLIER_RESPONDED
 } from 'src/_resource/Operation/RFQs/composables/useRFQProgress'
 
 const NODE = 'RFQs'
-const SELECTED = 'SelectedSupplierCodes'
-const DISPATCH = 'SelectedSupplierRowCodes'
 
 const text = (value) => String(value ?? '').trim()
 const asRow = (value) => (value && typeof value === 'object' ? value : {})
-const isActive = (value) => text(asRow(value).Status || 'Active') === 'Active'
 
-// Shared by AssignSupplier and MarkAsSent: both provide the same context and both
-// resolve the RFQ summary card, so the relay sits at the resource tier.
 export function useRFQSupplierFlowContext () {
   const pageState = inject('pageState', null)
   const resourceConfig = inject('resourceConfig', null)
@@ -33,11 +29,12 @@ export function useRFQSupplierFlowContext () {
 
   const rfqs = usePageRecord(NODE)
   const rfqSuppliers = usePageRecord('RFQSuppliers')
-  const suppliers = usePageRecord('Suppliers')
+  const suppliersPageRecord = usePageRecord('Suppliers')
+  const suppliers = useSupplierResource()
   const procurements = usePageRecord('Procurements')
 
   onMounted(() => {
-    ;[rfqs, rfqSuppliers, suppliers, procurements].forEach((resource) => resource.reload())
+    ;[rfqs, rfqSuppliers, suppliersPageRecord, procurements].forEach((resource) => resource.reload())
   })
 
   const rfq = computed(() => {
@@ -55,97 +52,81 @@ export function useRFQSupplierFlowContext () {
     return procurements.items.value.map(asRow).find((row) => text(row.Code) === code) || null
   })
 
-  const assignedRows = computed(() => supplierRowsOf(rfq.value, rfqSuppliers.items.value))
-
-  const supplierIndex = computed(() => new Map(
-    suppliers.items.value.map(asRow).map((row) => [text(row.Code), row])))
+  const assignedRows = computed(() => activeSupplierRowsOf(rfq.value, rfqSuppliers.items.value))
 
   const assignedDetails = computed(() => assignedRows.value.map((row) => {
-    const master = supplierIndex.value.get(text(row.SupplierCode)) || {}
+    const master = suppliers.getSupplier(row.SupplierCode) || {}
     return {
-      code: text(row.Code),
-      supplierCode: text(row.SupplierCode),
-      name: text(master.Name) || text(row.SupplierCode),
-      country: text(master.Country),
-      contact: text(master.ContactPerson),
-      sentDate: text(row.SentDate),
-      progress: text(row.Progress).toUpperCase()
+      code: text(row.Code), supplierCode: text(row.SupplierCode),
+      name: text(master.Name) || text(row.SupplierCode), country: text(master.Country),
+      contact: text(master.ContactPerson), sentDate: text(row.SentDate), progress: text(row.Progress).toUpperCase()
     }
   }))
-
-  const dispatchable = computed(() => assignedDetails.value.filter((row) => row.progress === SUPPLIER_ASSIGNED))
-
+  const allSupplierRows = computed(() => supplierRowsOf(rfq.value, rfqSuppliers.items.value).map((row) => {
+    const master = suppliers.getSupplier(row.SupplierCode) || {}
+    const progress = text(row.Progress).toUpperCase()
+    return {
+      code: text(row.Code), supplierCode: text(row.SupplierCode),
+      name: text(master.Name) || text(row.SupplierCode), country: text(master.Country),
+      contact: text(master.ContactPerson), sentDate: text(row.SentDate),
+      sentComment: text(row.ProgressSentComment), respondedComment: text(row.ProgressRespondedComment),
+      cancelledComment: text(row.ProgressCancelledComment), progress, locked: progress === SUPPLIER_RESPONDED
+    }
+  }))
   const availableSuppliers = computed(() => {
-    const taken = new Set(assignedRows.value.map((row) => text(row.SupplierCode)))
-    return suppliers.items.value
-      .map(asRow)
-      .filter((row) => isActive(row) && text(row.Code) && !taken.has(text(row.Code)))
-      .map((row) => ({
-        code: text(row.Code),
-        name: text(row.Name) || text(row.Code),
-        country: text(row.Country),
-        contact: text(row.ContactPerson)
-      }))
+    const taken = new Set(allSupplierRows.value.map((row) => row.supplierCode))
+    return suppliers.activeChoices.value.filter((row) => !taken.has(row.code))
   })
-
   const selectedSupplierCodes = computed(() => {
-    const value = pageState?.getControls(SELECTED, null, NODE)
-    return Array.isArray(value) ? value : []
+    const codes = pageState?.getControls('SelectedNewSupplierCodes', [])
+    return Array.isArray(codes) ? codes : []
   })
-
-  const selectedRowCodes = computed(() => {
-    const value = pageState?.getControls(DISPATCH, null, NODE)
-    return Array.isArray(value) ? value : []
+  const pendingStatusByCode = computed(() => {
+    const statuses = pageState?.getControls('PendingSupplierStatuses', {})
+    return statuses && typeof statuses === 'object' && !Array.isArray(statuses) ? statuses : {}
   })
+  const cancellationReason = computed({
+    get: () => pageState?.getControls('SupplierCancelReason', '') ?? '',
+    set: (value) => pageState?.setControls('SupplierCancelReason', value ?? '')
+  })
+  const hasPendingStatusChanges = computed(() => Object.keys(pendingStatusByCode.value).length > 0)
+  const hasPendingCancellation = computed(() => Object.values(pendingStatusByCode.value).includes('CANCELLED'))
+  const hasSelectedNewSuppliers = computed(() => selectedSupplierCodes.value.length > 0)
 
   function setSelectedSupplierCodes (codes) {
-    pageState?.setControls(SELECTED, Array.isArray(codes) ? codes : [], NODE)
+    if (hasPendingStatusChanges.value) return
+    pageState?.setControls('SelectedNewSupplierCodes', [...new Set(Array.isArray(codes) ? codes : [])])
   }
 
-  function setSelectedRowCodes (codes) {
-    pageState?.setControls(DISPATCH, Array.isArray(codes) ? codes : [], NODE)
+  function effectiveProgress (row) {
+    return pendingStatusByCode.value[row.code] || row.progress
   }
 
-  function toggleSupplier (code) {
-    const next = new Set(selectedSupplierCodes.value)
-    if (next.has(code)) next.delete(code)
-    else next.add(code)
-    setSelectedSupplierCodes(Array.from(next))
+  function setRowTargetStatus (row, next) {
+    if (!canManage.value || row.locked || hasSelectedNewSuppliers.value) return
+    const nextMap = { ...pendingStatusByCode.value }
+    if (next === row.progress) delete nextMap[row.code]
+    else nextMap[row.code] = next
+    pageState?.setControls('PendingSupplierStatuses', nextMap)
+    if (!Object.values(nextMap).includes('CANCELLED')) cancellationReason.value = ''
   }
 
-  function toggleRow (code) {
-    const next = new Set(selectedRowCodes.value)
-    if (next.has(code)) next.delete(code)
-    else next.add(code)
-    setSelectedRowCodes(Array.from(next))
+  function resetStatusSelection () {
+    pageState?.setControls('PendingSupplierStatuses', {})
+    pageState?.setControls('SupplierCancelReason', '')
   }
 
-  const canAssign = computed(() => canAssignSuppliers(rfq.value))
-  const canDispatch = computed(() => canMarkSuppliersSent(rfq.value))
+  function resetNewSupplierSelection () {
+    pageState?.setControls('SelectedNewSupplierCodes', [])
+  }
+
+  const canManage = computed(() => canAssignSuppliers(rfq.value))
 
   return {
-    pageState,
-    resourceConfig,
-    ui,
-    user,
-    rfq,
-    procurement,
-    loading,
-    pending,
-    assignedDetails,
-    dispatchable,
-    availableSuppliers,
-    selectedSupplierCodes,
-    selectedRowCodes,
-    setSelectedSupplierCodes,
-    setSelectedRowCodes,
-    toggleSupplier,
-    toggleRow,
-    canAssign,
-    canDispatch,
-    progressLabel,
-    progressColor,
-    supplierProgressLabel,
-    supplierProgressColor
+    pageState, resourceConfig, ui, user, rfq, procurement, loading, pending, assignedDetails,
+    allSupplierRows, availableSuppliers, selectedSupplierCodes, pendingStatusByCode, cancellationReason,
+    hasPendingStatusChanges, hasPendingCancellation, hasSelectedNewSuppliers, effectiveProgress,
+    setRowTargetStatus, setSelectedSupplierCodes, resetStatusSelection, resetNewSupplierSelection, canManage,
+    progressLabel, progressColor, supplierProgressLabel, supplierProgressColor
   }
 }

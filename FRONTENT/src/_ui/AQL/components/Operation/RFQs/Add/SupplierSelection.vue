@@ -14,11 +14,17 @@
       :list-props="{ label: 'name', caption: captionOf, labelClass: ui.flexWrapTextClass, itemClass: 'bg-transparent' }"
       @update:model-value="toggleSupplier(Object.keys($event))">
       <template #selected-items>
-        <q-card-section v-if="selectedSuppliers.length">
-          <AppList dense :items="selectedSuppliers" item-key="Code" separator
-            :label="item => `${selectedSuppliers.indexOf(item) + 1}. ${item.Name}`"
-            :label-class="ui.flexWrapTextClass" :paginate="false" :gutter="false" :item-bordered="false"
-            item-class="bg-transparent" btn="delete_outline" btn-color="negative" @btn-click="toggleSupplier" />
+        <q-card-section>
+          <div v-if="!selectedSuppliers.length" class="text-subtitle2 text-weight-bold text-grey-8">No Supplier Selected</div>
+          <template v-else>
+            <div class="text-subtitle2 text-weight-bold text-grey-8 flex">
+              Selected Suppliers <q-space />{{ selectedSuppliers.length }}
+            </div>
+            <AppList dense :items="selectedSuppliers" item-key="Code" separator
+              :label="item => `${selectedSuppliers.indexOf(item) + 1}. ${item.Name}`"
+              :label-class="ui.flexWrapTextClass" :paginate="false" :gutter="false" :item-bordered="false"
+              item-class="bg-transparent" btn="delete_outline" btn-color="negative" @btn-click="toggleSupplier" />
+          </template>
         </q-card-section>
       </template>
     </AqlInlineMasterPicker>

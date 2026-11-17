@@ -1,5 +1,5 @@
 <template>
-  <div v-if="!pending && terms.length">
+  <div v-if="!pending && terms.length" :class="[attrs.class, `q-gutter-y-${attrs.gutter || 'sm'}`]">
     <SectionDividerLabel :label="finalTitle" />
 
     <q-card flat bordered :class="ui.cardClass">
@@ -27,15 +27,16 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, useAttrs } from 'vue'
 import SectionDividerLabel from 'components/shared/SectionDividerLabel.vue'
 import { useRFQView } from 'src/_ui/AQL/composables/Operation/RFQs/View/useRFQView'
 import { useRFQViewContext } from 'src/_ui/AQL/composables/Operation/RFQs/View/useRFQViewContext'
 
-defineOptions({ name: 'RFQsViewTerms', inheritAttrs: false })
+defineOptions({ name: 'RFQsViewRequirements', inheritAttrs: false })
 
+const attrs = useAttrs()
 const props = defineProps({
-  title: { type: [String, Function], default: 'Commercial Terms' }
+  title: { type: [String, Function], default: 'Requirements' }
 })
 
 const { evaluate, ui } = useRFQViewContext()

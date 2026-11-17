@@ -82,30 +82,32 @@ without read rights. With read rights, it reloads RFQs on mount only when the lo
 list is empty and no reload is in progress. All three cards share one View context.
 
 
-Known gap: RFQ code still imports removed PR approval exports and uses old PR item
-fields. Those callers are reserved for a later phase. The PR resource files do
-now provide the allocation builders below. RFQ pages will use them in Phase 4.
-
-
 ### PR quote allocation nodes
 
-`usePurchaseRequisitionPayload.js` has two pure builders. Both take `rfqCode`,
-`requisitions` (the parent PR rows), `items` (all sibling item rows for each affected
-PR), and `allocations`. Pass the current saved rows each time. The caller must
-load the full sibling set; a selected-item list alone cannot give a full rollup.
+`usePurchaseRequisitionPayload.js` has four builders for RFQ quote amounts:
+`planRequisitionFifoAllocations`, `buildRequisitionRfqFifoNodes`,
+`buildRequisitionRfqAllocationNodes`, and `buildRequisitionRfqQuoteEditNodes`.
+They use parent PR rows, all sibling item rows for each selected PR, and RFQ item
+requests. Load every sibling row so PR totals stay correct.
 
+- `planRequisitionFifoAllocations` shares each requested SKU quantity across the
+  selected PRs in FIFO order. It uses the oldest PR date first, then creation
+  time, then code. It accounts for amounts already quoted and allocations being
+  edited. Any amount left after PR quantities are used goes into `excess`.
+- `buildRequisitionRfqFifoNodes` builds PR update nodes from that plan. RFQ
+  create and edit use it to save item allocations and update PR quote totals.
 - `buildRequisitionRfqAllocationNodes`: each allocation is `{ itemCode, quantity }`.
   The quantity is the amount to add for this RFQ.
 - `buildRequisitionRfqQuoteEditNodes`: each allocation is
   `{ itemCode, previousQuantity, quantity }`. These are this RFQ's old and new
-  shares on the item. Use `quantity: 0` for removal or cancellation. Pass each
-  item once. Several items and several PRs may be passed in one call.
+  shares on the item. Use `quantity: 0` to remove a share or cancel an RFQ.
+  Pass each item once. Several items and PRs may be passed in one call.
 
-Both return a Node array for `pageState.applyNodes`. Bad input returns
+The builders return nodes for `pageState.applyNodes`. Bad input returns
 `[{ valid: false, message }]`. An empty allocation list returns `[]`.
-The two bulk nodes use role `rfqAllocation` and need update rights on their own
-resources. A fresh call replaces those nodes. Mount the RFQ create node first,
-so its new code can be used by the item nodes.
+The bulk PR nodes use role `rfqAllocation` and need update rights on their own
+resources. Replacing or cancelling an RFQ reverses its old allocations. The
+RFQ item `Allocations` JSON stores the PR item shares and any `excess` amount.
 
 Missing, inactive, or closed parents block the whole call. Selected items must
 be active. Quote totals may go above the requested quantity. Edits add the new
@@ -164,7 +166,8 @@ changes alone do not change live sheets or saved access rules.
 | `SKUs` | Individual inventory items / variants under a product | `ProductCode`, `Variant1`..`Variant5`, `Status` |
 | `Suppliers` | Supplier profiles, currency, and contact info | `Status` (`Active`, `Inactive`) |
 | `PurchaseRequisitions` | Internal purchase requests | `Progress` (`Open`, `Partially Quoted`, `Fully Quoted`, `Closed`, `Cancelled`) |
-| `RFQs` | Request for Quotation sent to suppliers | `Progress` (`Draft`, `Sent`, `Closed`, `Cancelled`) |
+| `RFQs` | Request for Quotation and item lines sent to suppliers | `Progress` (`DRAFT`, `ASSIGNED`, `SENT`, `CLOSED`, `CANCELLED`) |
+| `RFQItems` | Requested SKU and quantity lines for an RFQ | `RFQCode`, `SKU`, `Quantity`, `Allocations` |
 | `SupplierQuotations` | Captured supplier pricing responses | `Progress` (`Received`, `Accepted`, `Rejected`) |
 | `PurchaseOrders` | Official purchase order contracts issued to suppliers | `Progress` (`DRAFT`, `PO_ISSUED`, `GOODS_RECEIVING`, `GRN_GENERATED`, `COMPLETED`, `CANCELLED`) |
 | `PurchaseOrderItems` | Line items under a Purchase Order | `ItemCode`, `OrderedQty`, `UnitPrice` |
@@ -185,9 +188,43 @@ changes alone do not change live sheets or saved access rules.
 - **Composite Add/Edit UX**: Creating or editing a product dynamically generates variant input tables based on `VariantTypes`.
 
 ### 3.2 RFQ Supplier Dispatch & Quotations
-1. **Requisition**: Purchasing need is identified based on inventory stock-out risk. Requisitions use [AqlInlineSkuPicker.vue](file:///f:/AQL/FRONTENT/src/components/shared/AqlInlineSkuPicker.vue) for click-and-go SKU selection without typing.
-2. **RFQ Dispatch**: RFQ is created and dispatched to eligible suppliers for competitive bidding.
-3. **Quotation Capture**: Received quotes are entered into `SupplierQuotations` for comparison (unit cost, lead time, payment terms).
+
+The Goods Receipts, RFQ Suppliers, and Procurements index lists still await updates.
+
+The RFQ Index shows `PRPending`, `PRUsers`, `RFQOverview`, and `SupplierResponse`. PR counts and user groups are hidden when the user lacks PR read access. The RFQ overview and supplier response sections show RFQ data. The Index context reads cached/store data directly. It does not force resource reloads on mount.
+
+Add and Edit use a step form. `DRAFT` and `ASSIGNED` RFQs can be edited. `SENT` RFQs are locked.
+
+- Step 1 has an optional PR helper when the user can read `PurchaseRequisitions`, plus merged `RFQItems` and `AqlInlineSkuPicker` SKU selection. The pending PR list follows FIFO order: `PRDate`, then `CreatedAt`, then `Code`. It stores requested items with PR allocations.
+- Step 2 holds basic RFQ details, including `RequiredBy`. `DefaultQuotationSubmissionDays` defaults to `14`. There are no `RFQDate` or `Username` inputs.
+- Step 3 (`CriteriaSelection.vue`) shows **Select Requirements** in catalogue order. Each row has an inline weight input from `0–10`.
+- Step 4 and later requirement steps (`CriterionOptions.vue`) hold each selected requirement's options and points, or its scaled best-value order. Add also has optional supplier selection. The review step shows the RFQ before submit.
+- Invalid weight or option-points inputs set `RequirementInputErrors`. These errors block `next` on that step and block `submit` across all steps. `back` clears errors for the current step.
+- Draft updates in `refreshDraft` (`useRFQForm.js`) clear `reload`. Saves do not send trailing `$batch` reload `get` nodes. Form and view contexts use cache/TTL-aware `usePageRecord.reload()`.
+
+RFQ View has `RFQHeader`, `Suppliers`, `Items`, `Requirements`, and `Workflow`. The header shows PR links only as clickable links when the user can read PRs. Otherwise, it shows plain codes.
+
+The RFQ View `Suppliers` card is read-only. It has no checkboxes, status picker, or action buttons. It lists all `Status: Active` supplier rows on the RFQ, including `CANCELLED` rows. Each row shows the supplier name, country, status badge, and saved `SentDate`. Non-empty send, reply, and cancel comments appear below the supplier name. The not-sent banner appears only while assigned rows remain and the RFQ is not closed or cancelled.
+
+The `RFQSuppliers` View shows `PageHeader`, `SupplierTimeline`, and `Requirements`. The requirements card is labelled "RFQ requirements".
+
+`ManageSuppliers` is the single supplier action at `/operation/rfqs/{code}/manage-suppliers`. It is visible for `DRAFT`, `ASSIGNED`, and `SENT`. The page shows the RFQ summary and two supplier cards. For a `CLOSED` or `CANCELLED` RFQ, it shows a lock banner. Supplier changes are blocked, and the add card is hidden.
+
+- **Assigned Suppliers** and **Add New Suppliers** use `<SectionDividerLabel>` headers outside the cards.
+- **Assigned Suppliers** lists all active supplier rows, including `CANCELLED` rows. Each `ASSIGNED`, `SENT`, and `CANCELLED` row has an inline 3-state `q-btn-toggle`: `Assigned`, `Sent`, and `Cancelled`. `RESPONDED` rows stay locked. They show a status badge and the text "Locked — quotation recorded".
+- Each row keeps its pending status in `PendingSupplierStatuses`. The save passes these choices as `statusByCode`, so one save can apply different changes to different rows. A required **Cancellation Reason** textarea appears when any row has a pending change to `CANCELLED`.
+- Status changes and new supplier selection cannot be used together. Selecting new suppliers disables the row status toggles and shows a warning banner in **Assigned Suppliers**. Pending status changes disable `AqlInlineMasterPicker` and show a warning banner in **Add New Suppliers**.
+- Moving back to `ASSIGNED` clears `SentDate` and all send, reply, and cancel stamps and comments. Moving to `SENT` keeps a saved `SentDate`, or uses today if blank. It saves new send stamps and clears reply and cancel stamps and comments. Cancellation saves the reason in `ProgressCancelledComment`.
+- After status changes, active, non-cancelled rows set `RFQs.Progress`. Any `SENT` or `RESPONDED` row means `SENT`. Otherwise, any `ASSIGNED` row means `ASSIGNED`. No such rows means `DRAFT`.
+- When at least one active, non-cancelled row remains and all are `SENT` or `RESPONDED`, the linked procurement can advance to `RFQ_SENT_TO_SUPPLIERS`. Its own state rules still apply. If the RFQ drops to `ASSIGNED` or `DRAFT`, a procurement at `RFQ_SENT_TO_SUPPLIERS` rolls back to `RFQ_GENERATED`.
+- **Add New Suppliers** uses `AqlInlineMasterPicker`. It offers active master `Suppliers` with no active supplier row on this RFQ. Existing cancelled rows stay in the first card and are not offered here. **Assign Suppliers** adds `ASSIGNED` rows. It moves a `DRAFT` RFQ to `ASSIGNED`. On success it clears the new supplier selection and stays on the page.
+- The sticky `FormActions` bar has **Back to RFQ**, which returns to RFQ View. It shows **Apply Status** when `PendingSupplierStatuses` has entries. This action is disabled if any pending `CANCELLED` change lacks a reason. Otherwise, it shows **Assign Suppliers** when new suppliers are available. This action is disabled until at least one new supplier is selected. Both save actions stay on the page and clear the controls on success. A failed save keeps the user's selections.
+
+`Close` moves a `SENT` RFQ to `CLOSED`. `Closing Remarks` is optional and is saved with the close stamps. `Cancel` is available for `DRAFT`, `ASSIGNED`, and `SENT` RFQs. Active quotations or active, non-cancelled purchase orders block cancellation. Otherwise, a reason is required. Cancel reverses PR allocations, including `QuotedQuantity` and `RFQCodes`, and cancels the linked procurement with cancel stamps. It leaves `RFQSuppliers` rows untouched in their current `Progress` state. They stay read-only under the cancelled RFQ.
+
+1. **Requisition**: Purchasing need is identified based on inventory stock-out risk. Requisitions use [AqlInlineSkuPicker.vue](file:///f:/AQL/FRONTENT/src/components/shared/AqlInlineSkuPicker.vue) for SKU selection.
+2. **RFQ Dispatch**: RFQ items are sent to selected suppliers outside AQL. Users record which suppliers were sent the RFQ.
+3. **Quotation Capture**: Received quotes are entered into `SupplierQuotations`. Supplier answer shapes and score comparison are still pending.
 
 ### 3.3 Purchase Order Module (`PurchaseOrders`)
 1. **PO Generation**: A Purchase Order is generated from the winning quotation (`Progress = DRAFT`).

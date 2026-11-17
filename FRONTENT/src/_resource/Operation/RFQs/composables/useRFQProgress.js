@@ -4,6 +4,7 @@ import { sortByDate } from 'src/utils/sortHelpers'
 export { sortByDate }
 
 export const DRAFT = 'DRAFT'
+export const ASSIGNED = 'ASSIGNED'
 export const SENT = 'SENT'
 export const CLOSED = 'CLOSED'
 export const CANCELLED = 'CANCELLED'
@@ -13,16 +14,18 @@ export const SUPPLIER_SENT = 'SENT'
 export const SUPPLIER_RESPONDED = 'RESPONDED'
 export const SUPPLIER_CANCELLED = 'CANCELLED'
 
-export const WORKFLOW_STATES = [DRAFT, SENT, CLOSED, CANCELLED]
+export const WORKFLOW_STATES = [DRAFT, ASSIGNED, SENT, CLOSED, CANCELLED]
+export const EDITABLE_STATES = [DRAFT, ASSIGNED]
 export const TERMINAL_STATES = [CLOSED, CANCELLED]
 export const IN_FLIGHT_STATES = WORKFLOW_STATES.filter((state) => !TERMINAL_STATES.includes(state))
 export const SUPPLIER_STATES = [SUPPLIER_ASSIGNED, SUPPLIER_SENT, SUPPLIER_RESPONDED, SUPPLIER_CANCELLED]
 
 export const PROGRESS_META = {
   [DRAFT]: { label: 'Draft', color: 'grey-7', icon: 'edit_note' },
+  [ASSIGNED]: { label: 'Assigned', color: 'warning', icon: 'group_add' },
   [SENT]: { label: 'Sent', color: 'primary', icon: 'send' },
   [CLOSED]: { label: 'Closed', color: 'positive', icon: 'lock' },
-  [CANCELLED]: { label: 'Cancelled', color: 'negative', icon: 'block' }
+  [CANCELLED]: { label: 'Cancelled', color: 'negative', icon: 'cancel' }
 }
 
 export const SUPPLIER_ROW_META = {
@@ -38,11 +41,13 @@ export const PROGRESS_ICONS = Object.fromEntries(Object.entries(PROGRESS_META).m
 export const PROGRESS_LABELS = Object.fromEntries(Object.entries(PROGRESS_META).map(([state, meta]) => [state, meta.label]))
 
 export const PROGRESS_STAMP_PREFIX = {
-  [CLOSED]: 'ProgressClosed'
+  [CLOSED]: 'ProgressClosed',
+  [CANCELLED]: 'ProgressCancelled'
 }
 
 export const WORKFLOW_STAMPS = [
-  { state: CLOSED, prefix: 'ProgressClosed', title: 'RFQ Closed' }
+  { state: CLOSED, prefix: 'ProgressClosed', title: 'RFQ Closed' },
+  { state: CANCELLED, prefix: 'ProgressCancelled', title: 'RFQ Cancelled' }
 ]
 
 export const TERM_OPTIONS = {
@@ -157,6 +162,8 @@ export function supplierProgressLabel (state) {
 }
 
 export function isDraft (row) { return progressOf(row) === DRAFT }
+export function isAssigned (row) { return progressOf(row) === ASSIGNED }
+export function isEditable (row) { return isActiveRow(row) && EDITABLE_STATES.includes(progressOf(row)) }
 export function isSent (row) { return progressOf(row) === SENT }
 export function isClosed (row) { return progressOf(row) === CLOSED }
 export function isCancelled (row) { return progressOf(row) === CANCELLED }
@@ -171,7 +178,7 @@ export function canAssignSuppliers (row) {
 }
 
 export function canMarkSuppliersSent (row) {
-  return isActiveRow(row) && (isDraft(row) || isSent(row))
+  return isActiveRow(row) && (isAssigned(row) || isSent(row))
 }
 
 export function canClose (row) {
@@ -197,19 +204,40 @@ export function supplierRowsOf (rfq, supplierRows = []) {
     .filter((row) => text(row.RFQCode) === code && isActiveRow(row))
 }
 
+export function activeSupplierRowsOf (rfq, supplierRows = []) {
+  return supplierRowsOf(rfq, supplierRows).filter((row) => progressOf(row) !== SUPPLIER_CANCELLED)
+}
+
 export function assignedSupplierCount (rfq, supplierRows = []) {
-  return supplierRowsOf(rfq, supplierRows).length
+  return activeSupplierRowsOf(rfq, supplierRows).length
 }
 
 export function respondedSupplierCount (rfq, supplierRows = []) {
-  return supplierRowsOf(rfq, supplierRows)
+  return activeSupplierRowsOf(rfq, supplierRows)
     .filter((row) => progressOf(row) === SUPPLIER_RESPONDED).length
 }
 
 export function allSuppliersDispatched (rfq, supplierRows = []) {
-  const rows = supplierRowsOf(rfq, supplierRows)
+  const rows = activeSupplierRowsOf(rfq, supplierRows)
   if (!rows.length) return false
   return !rows.some((row) => progressOf(row) === SUPPLIER_ASSIGNED)
+}
+
+export function rfqCancelBlocker (row, { quotations = [], purchaseOrders = [] } = {}) {
+  if (!text(row?.Code) || !isActiveRow(row) || isTerminal(row)) return 'Only an active open RFQ can be cancelled.'
+  if (quotations.some((q) => isActiveRow(q) && text(q.RFQCode) === text(row.Code))) {
+    return 'Cannot cancel this RFQ because supplier quotations have already been recorded.'
+  }
+  if (purchaseOrders.some((po) => isActiveRow(po) && progressOf(po) !== CANCELLED &&
+    (text(po.RFQCode) === text(row.Code) ||
+      (text(row.ProcurementCode) && text(po.ProcurementCode) === text(row.ProcurementCode))))) {
+    return 'Cannot cancel this RFQ because a purchase order already exists.'
+  }
+  return ''
+}
+
+export function canCancelRfq (row, context = {}) {
+  return !rfqCancelBlocker(row, context)
 }
 
 export function isOwnedBy (row, userId) {
@@ -284,6 +312,8 @@ export function ageColor (days) {
 export function useRFQProgress () {
   return {
     DRAFT,
+    ASSIGNED,
+    EDITABLE_STATES,
     SENT,
     CLOSED,
     CANCELLED,
@@ -316,6 +346,8 @@ export function useRFQProgress () {
     supplierProgressIcon,
     supplierProgressLabel,
     isDraft,
+    isAssigned,
+    isEditable,
     isSent,
     isClosed,
     isCancelled,
@@ -327,6 +359,9 @@ export function useRFQProgress () {
     parsePrItemCodeCsv,
     buildPrItemCodeCsv,
     supplierRowsOf,
+    activeSupplierRowsOf,
+    rfqCancelBlocker,
+    canCancelRfq,
     assignedSupplierCount,
     respondedSupplierCount,
     allSuppliersDispatched,

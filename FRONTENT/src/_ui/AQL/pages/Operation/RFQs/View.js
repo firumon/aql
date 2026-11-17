@@ -1,8 +1,7 @@
-// The RFQ is a dispatch record: who it went to leads, then what they must quote for,
-// then the terms, then its history.
 export default {
-  sections: ['PageHeader', 'RFQHeader', 'Suppliers', 'Items', 'Terms', 'Workflow'],
+  sections: ['PageHeader', 'RFQHeader', 'Suppliers', 'Items', 'Requirements', 'Workflow'],
   contents: [],
+  PropsSection: (pageProps) => ({ gutter: pageProps.gutter }),
 
   PropsPageHeader: {
     title: 'Request for Quotation',
@@ -11,6 +10,6 @@ export default {
   PropsRFQHeader: { title: 'RFQ Details' },
   PropsSuppliers: { title: 'Suppliers' },
   PropsItems: { title: 'Items to Quote' },
-  PropsTerms: { title: 'Commercial Terms' },
+  PropsRequirements: { title: 'Requirements' },
   PropsWorkflow: { title: 'Workflow Timeline' }
 }

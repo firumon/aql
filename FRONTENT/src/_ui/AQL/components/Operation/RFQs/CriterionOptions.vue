@@ -1,8 +1,7 @@
 <template>
-  <div
-    v-if="activeCriterion && currentStep >= (stepPlan.criterionStart || 3) && currentStep < (stepPlan.suppliers || stepPlan.review)"
-    :class="gutterClass"
-  >
+  <div v-if="!locked && activeCriterion && currentStep >= (stepPlan.criterionStart || 3)
+    && currentStep < (stepPlan.suppliers || stepPlan.review)" :class="gutterClass">
+    <SectionDividerLabel label="Requirement Options" />
     <q-card flat bordered :class="ui.cardClass">
       <AppList :items="[activeCriterion]" label="name" caption="description" :layout="['label', 'caption']"
         item-key="id" align="top" :gutter="attrs.gutter || 'sm'" :item-bordered="false" item-class="bg-transparent">
@@ -65,6 +64,7 @@
 import { computed, reactive, useAttrs } from 'vue'
 import { resolveFieldComponent } from 'src/_fields/useFieldResolver'
 import AppList from 'components/app/AppList.vue'
+import SectionDividerLabel from 'components/shared/SectionDividerLabel.vue'
 import { useRFQFormContext } from 'src/_ui/AQL/composables/Operation/RFQs/useRFQFormContext'
 
 defineOptions({ name: 'RFQsCriterionOptions', inheritAttrs: false })
@@ -79,5 +79,5 @@ const orderOptions = [
 const attrs = useAttrs()
 const gutterClass = computed(() => `q-gutter-y-${attrs.gutter || 'sm'}`)
 const draft = reactive({ name: '', description: '', points: 0 })
-const { ui, activeCriterion, currentStep, stepPlan, changeCriterion } = useRFQFormContext()
+const { locked, ui, activeCriterion, currentStep, stepPlan, changeCriterion } = useRFQFormContext()
 </script>

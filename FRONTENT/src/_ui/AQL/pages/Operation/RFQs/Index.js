@@ -1,13 +1,5 @@
-// Sections run in urgency order: my queue, response rate, pipeline, deadline age, work.
 export default {
-  sections: [
-    'PageHeader',
-    'MetricCards',
-    'LinearProgress',
-    'WorkflowFunnel',
-    'AgeingBuckets',
-    'FilterInput',
-    'ListSwitcher'
-  ],
-  contents: ['List']
+  sections: ['PageHeader', 'PRPending', 'PRUsers', 'RFQOverview', 'SupplierResponse', 'FilterInput', 'ListSwitcher'],
+  contents: ['List'],
+  PropsSection: (pageProps) => ({ gutter: pageProps.gutter })
 }

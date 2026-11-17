@@ -1,5 +1,5 @@
 <template>
-  <div>
+  <div :class="[attrs.class, `q-gutter-y-${attrs.gutter || 'sm'}`]">
     <SectionDividerLabel :label="finalTitle" />
 
     <q-card flat bordered :class="ui.cardClass">
@@ -16,7 +16,8 @@
 
       <q-card-section v-else>
         <div class="row items-center q-gutter-xs q-mb-sm">
-          <q-chip dense square color="grey-3" text-color="grey-9" :label="`${counts.total} assigned`" />
+          <q-chip dense square color="grey-3" text-color="grey-9" :label="`${counts.active} assigned`" />
+          <q-chip v-if="counts.cancelled" dense square color="grey-5" text-color="white" :label="`${counts.cancelled} cancelled`" />
           <q-chip v-if="counts.assigned" dense square color="warning" text-color="white" :label="`${counts.assigned} not sent`" />
           <q-chip v-if="counts.responded" dense square color="positive" text-color="white" :label="`${counts.responded} responded`" />
         </div>
@@ -32,6 +33,9 @@
             <span :class="[ui.detailKeyClass, ui.flexWrapTextClass]">
               {{ row.name }}
               <span v-if="row.country" class="text-caption text-grey-6 block">{{ row.country }}</span>
+              <span v-if="row.sentComment" class="text-caption text-grey-7 block">Send: {{ row.sentComment }}</span>
+              <span v-if="row.respondedComment" class="text-caption text-grey-7 block">Reply: {{ row.respondedComment }}</span>
+              <span v-if="row.cancelledComment" class="text-caption text-grey-7 block">Cancelled: {{ row.cancelledComment }}</span>
             </span>
             <span class="col overflow-hidden flex justify-end items-center" :class="ui.detailValClass">
               <span v-if="row.sentDate" class="text-caption text-grey-6 q-mr-xs">{{ row.sentDate }}</span>
@@ -40,7 +44,7 @@
           </div>
         </div>
 
-        <q-banner v-if="counts.assigned" dense rounded class="bg-grey-2 q-mt-sm text-caption">
+        <q-banner v-if="counts.assigned && !isTerminal(rfq)" dense rounded class="bg-grey-2 q-mt-sm text-caption">
           Suppliers still marked as assigned have not been sent the RFQ yet.
         </q-banner>
       </q-card-section>
@@ -49,20 +53,22 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, useAttrs } from 'vue'
+import { isTerminal } from 'src/_resource/Operation/RFQs/composables/useRFQProgress'
 import SectionDividerLabel from 'components/shared/SectionDividerLabel.vue'
 import { useRFQView } from 'src/_ui/AQL/composables/Operation/RFQs/View/useRFQView'
 import { useRFQViewContext } from 'src/_ui/AQL/composables/Operation/RFQs/View/useRFQViewContext'
 
 defineOptions({ name: 'RFQsViewSuppliers', inheritAttrs: false })
 
+const attrs = useAttrs()
 const props = defineProps({
   title: { type: [String, Function], default: 'Suppliers' },
   items: { type: Array, default: null }
 })
 
 const { evaluate, ui } = useRFQViewContext()
-const { supplierRows, supplierCounts, pending, supplierProgressColor, supplierProgressLabel } = useRFQView()
+const { rfq, supplierRows, supplierCounts, pending, supplierProgressColor, supplierProgressLabel } = useRFQView()
 
 const finalTitle = computed(() => evaluate(props.title))
 const rows = computed(() => (props.items === null ? supplierRows.value : props.items))

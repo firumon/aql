@@ -1,25 +1,21 @@
-import { watch } from 'vue'
-import { buildRFQFormInitNodes } from 'src/_resource/Operation/RFQs/composables/useRFQForm'
+import { useRFQFormSeed } from 'src/_ui/AQL/composables/Operation/RFQs/useRFQFormContext'
 
 export default {
   sections: ['PageHeader'],
-  contents: ['CriteriaSelection', 'RFQTerms', 'ItemDescriptions', 'CriterionOptions', 'ReviewRFQ'],
-  PropsCriterionOptions: (pageProps) => ({ gutter: pageProps.gutter }),
+  contents: ['SelectPendingPRs', 'ItemDescriptions', 'RFQTerms', 'CriteriaSelection',
+    'CriterionOptions', 'ReviewSummary', 'ReviewItems', 'ReviewTerms'],
+  PropsSelectPendingPRs: { step: 1 },
+  PropsItemDescriptions: { step: 1 },
   PropsRFQTerms: { step: 2 },
-  PropsReviewRFQ: { mode: 'edit' },
+  PropsContent: (pageProps) => ({ gutter: pageProps.gutter }),
 
   PropsPageHeader: {
     title: 'Edit RFQ',
     reload: false
   },
 
-  ready ({ pageState, resourceRecord }) {
-    pageState.resetForResource('RFQs')
-    watch([() => resourceRecord?.record?.value, () => resourceRecord?.loading?.value,
-      () => resourceRecord?.backgroundSyncing?.value], ([record, loading, syncing]) => {
-      if (!loading && !syncing && record?.Code && pageState.useNode('RFQs').node.value.code !== record.Code) {
-        pageState.applyNodes(buildRFQFormInitNodes({ rfq: record }))
-      }
-    }, { immediate: true })
+  ready (ctx) {
+    ctx.pageState.resetForResource('RFQs')
+    useRFQFormSeed(ctx)
   }
 }

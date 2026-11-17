@@ -1,5 +1,5 @@
 <template>
-  <div>
+  <div :class="[attrs.class, `q-gutter-y-${attrs.gutter || 'sm'}`]">
     <SectionDividerLabel :label="finalTitle" />
 
     <q-card flat bordered :class="ui.cardClass">
@@ -36,6 +36,15 @@
           </div>
         </div>
 
+        <div v-if="prCodes.length" :class="ui.detailLineClass">
+          <span :class="ui.detailKeyClass">Purchase Requisitions</span>
+          <span :class="ui.detailValClass">
+            <template v-for="code in prCodes" :key="code">
+              <q-btn v-if="canReadPR" flat dense no-caps color="primary" :label="code" @click="openPR(code)" />
+              <span v-else>{{ code }} </span>
+            </template>
+          </span>
+        </div>
         <q-banner v-if="deadlinePassed" dense rounded class="bg-orange-2 q-mt-sm text-caption">
           The submission deadline has passed. Late quotations may still be captured.
         </q-banner>
@@ -45,20 +54,21 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, useAttrs } from 'vue'
 import SectionDividerLabel from 'components/shared/SectionDividerLabel.vue'
 import { useRFQView } from 'src/_ui/AQL/composables/Operation/RFQs/View/useRFQView'
 import { useRFQViewContext } from 'src/_ui/AQL/composables/Operation/RFQs/View/useRFQViewContext'
 
 defineOptions({ name: 'RFQsViewRFQHeader', inheritAttrs: false })
 
+const attrs = useAttrs()
 const props = defineProps({
   title: { type: [String, Function], default: 'RFQ Details' },
   color: { type: [String, Function], default: null }
 })
 
 const { evaluate, ui } = useRFQViewContext()
-const { rfq, pending, deadlinePassed, deadlineDays, progressColor, progressIcon, progressLabel } = useRFQView()
+const { rfq, pending, deadlinePassed, deadlineDays, prCodes, canReadPR, openPR, progressColor, progressIcon, progressLabel } = useRFQView()
 
 const finalTitle = computed(() => evaluate(props.title))
 
@@ -76,7 +86,8 @@ const facts = computed(() => {
   return [
     { label: 'RFQ Date', value: record.RFQDate || '—' },
     { label: 'Deadline', value: deadline },
-    { label: 'Requisition', value: record.PurchaseRequisitionCode },
+    ...['RequiredBy', 'WarehouseCode', 'Type', 'TypeReferenceCode', 'Priority', 'Username', 'Remarks'].map(key =>
+      ({ label: key.replace(/([A-Z])/g, ' $1').trim(), value: record[key] })),
     { label: 'Procurement', value: record.ProcurementCode }
   ].filter((line) => String(line.value ?? '').trim())
 })

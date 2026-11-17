@@ -1,5 +1,5 @@
 <template>
-  <div>
+  <div :class="[attrs.class, `q-gutter-y-${attrs.gutter || 'sm'}`]">
     <SectionDividerLabel :label="finalTitle" />
 
     <q-card flat bordered :class="ui.cardClass">
@@ -11,7 +11,7 @@
       <q-card-section v-else-if="!rows.length" class="text-center q-py-lg">
         <q-icon name="inventory_2" :size="ui.emptyIconSize" :color="ui.emptyIconColor" class="q-mb-sm block q-mx-auto" />
         <div :class="ui.emptyTitleClass">No items</div>
-        <div :class="ui.emptyCaptionClass">This RFQ names no requisition lines to quote against.</div>
+        <div :class="ui.emptyCaptionClass">This RFQ has no items to quote.</div>
       </q-card-section>
 
       <q-card-section v-else>
@@ -47,13 +47,14 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, useAttrs } from 'vue'
 import SectionDividerLabel from 'components/shared/SectionDividerLabel.vue'
 import { useRFQView } from 'src/_ui/AQL/composables/Operation/RFQs/View/useRFQView'
 import { useRFQViewContext } from 'src/_ui/AQL/composables/Operation/RFQs/View/useRFQViewContext'
 
 defineOptions({ name: 'RFQsViewItems', inheritAttrs: false })
 
+const attrs = useAttrs()
 const props = defineProps({
   title: { type: [String, Function], default: 'Items to Quote' },
   items: { type: Array, default: null }

@@ -1,185 +1,71 @@
 import { computed, onMounted } from 'vue'
 import { usePageRecord } from 'src/composables/resources/usePageRecord'
-import { useRFQCriteria } from 'src/_resource/Operation/RFQs/composables/useRFQCriteria'
-import { usePurchaseRequisitionResource } from 'src/_resource/Operation/PurchaseRequisitions/composables/usePurchaseRequisitionResource'
-import {
-  progressLabel,
-  progressColor,
-  progressIcon,
-  supplierProgressLabel,
-  supplierProgressColor,
-  supplierProgressIcon,
-  termLabel,
-  supplierRowsOf,
-  allSuppliersDispatched,
-  daysToDeadline,
-  isDeadlinePassed,
-  canAssignSuppliers,
-  canMarkSuppliersSent,
-  canClose,
-  workflowStamps,
-  SUPPLIER_ASSIGNED,
-  SUPPLIER_RESPONDED
+import { useRecord } from 'src/composables/resources/useRecord'
+import { useResourceNav } from 'src/composables/resources/useResourceNav'
+import { findResourceConfig } from 'src/composables/resources/useResourceConfig'
+import { useRFQRequirements } from 'src/_resource/Operation/RFQs/composables/useRFQRequirements'
+import { useRFQResource } from 'src/_resource/Operation/RFQs/composables/useRFQResource'
+import { useSupplierResource } from 'src/_resource/Master/Suppliers/composables/useSupplierResource'
+import { parseAnyDate } from 'src/utils/dateHelpers'
+import { progressLabel, progressColor, progressIcon, supplierProgressLabel, supplierProgressColor,
+  supplierProgressIcon, workflowStamps, isDeadlinePassed, daysToDeadline, isActiveRow
 } from 'src/_resource/Operation/RFQs/composables/useRFQProgress'
-import { progressLabel as procurementLabel, progressColor as procurementColor, progressIcon as procurementIcon } from 'src/_resource/Operation/Procurements/composables/useProcurementProgress'
 import { useRFQViewContext } from './useRFQViewContext'
 
-const text = (value) => String(value ?? '').trim()
-const num = (value) => {
-  const parsed = Number(value)
-  return Number.isFinite(parsed) ? parsed : 0
-}
-const asRow = (value) => (value && typeof value === 'object' ? value : {})
-
-export { progressLabel, progressColor, progressIcon, supplierProgressLabel, supplierProgressColor, supplierProgressIcon, termLabel, workflowStamps }
+const views = new WeakMap()
 
 export function formatStampDate (value) {
-  const raw = text(value)
-  if (!raw) return ''
-  const parsed = new Date(raw)
-  if (Number.isNaN(parsed.getTime())) return raw
-  return parsed.toLocaleString(undefined, {
-    day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit'
-  })
+  return parseAnyDate(value)?.toLocaleString() || String(value || '')
 }
 
 export function useRFQView () {
-  const criteria = useRFQCriteria()
   const { resourceRecord } = useRFQViewContext()
-
-  const rfqSuppliers = usePageRecord('RFQSuppliers')
-  const suppliers = usePageRecord('Suppliers')
-  const requisitionItems = usePageRecord('PurchaseRequisitionItems')
-  const quotations = usePageRecord('SupplierQuotations')
-  const procurements = usePageRecord('Procurements')
-  const skus = usePageRecord('SKUs')
-  const products = usePageRecord('Products')
-
-  const { linesByRequisition } = usePurchaseRequisitionResource()
-
-  onMounted(() => {
-    ;[rfqSuppliers, suppliers, requisitionItems, quotations, procurements, skus, products]
-      .forEach((resource) => resource.reload())
-  })
-
+  if (resourceRecord && views.has(resourceRecord)) return views.get(resourceRecord)
+  onMounted(() => Promise.all(['RFQItems', 'RFQSuppliers', 'Suppliers',
+    'PurchaseRequisitions', 'PurchaseRequisitionItems', 'Procurements', 'SupplierQuotations', 'PurchaseOrders',
+    'SKUs', 'Products']
+    .filter(name => findResourceConfig(name)?.permissions?.canRead !== false)
+    .map(name => usePageRecord(name).reload())))
+  const reader = useRFQResource()
+  const requirements = useRFQRequirements()
+  const suppliers = useSupplierResource()
+  const source = useRecord()
+  const nav = useResourceNav()
   const rfq = computed(() => resourceRecord?.record?.value || null)
-  const loading = computed(() => resourceRecord?.loading?.value === true)
-  const pending = computed(() => !rfq.value && loading.value)
-
-  const supplierIndex = computed(() => new Map(
-    suppliers.items.value.map(asRow).map((row) => [text(row.Code), row])))
-
-  const supplierRows = computed(() => supplierRowsOf(rfq.value, rfqSuppliers.items.value)
-    .map((row) => {
-      const master = supplierIndex.value.get(text(row.SupplierCode)) || {}
-      return {
-        code: text(row.Code),
-        supplierCode: text(row.SupplierCode),
-        name: text(master.Name) || text(row.SupplierCode),
-        country: text(master.Country),
-        contact: text(master.ContactPerson),
-        sentDate: text(row.SentDate),
-        progress: text(row.Progress).toUpperCase()
+  const projections = source.remember('rfq:viewSuppliers', () => computed(() => {
+    const result = new Map()
+    for (const [code, entries] of reader.suppliersByRfq.value) {
+      const rows = entries.filter(isActiveRow).map(row => ({ code: row.Code, supplierCode: row.SupplierCode,
+        name: suppliers.getSupplier(row.SupplierCode)?.Name || row.SupplierCode,
+        sentComment: row.ProgressSentComment || '', respondedComment: row.ProgressRespondedComment || '',
+        cancelledComment: row.ProgressCancelledComment || '',
+        country: suppliers.getSupplier(row.SupplierCode)?.Country || '', sentDate: row.SentDate, progress: row.Progress }))
+      const counts = { total: rows.length, assigned: 0, responded: 0, sent: 0, cancelled: 0 }
+      for (const row of rows) {
+        const key = String(row.progress).toLowerCase()
+        if (key in counts) counts[key]++
       }
-    }))
-
-  const supplierCounts = computed(() => supplierRows.value.reduce((acc, row) => {
-    acc.total += 1
-    if (row.progress === SUPPLIER_ASSIGNED) acc.assigned += 1
-    if (row.progress === SUPPLIER_RESPONDED) acc.responded += 1
-    return acc
-  }, { total: 0, assigned: 0, responded: 0 }))
-
-  const lines = computed(() => {
-    const prCode = text(rfq.value?.PurchaseRequisitionCode)
-    if (!prCode) return []
-    return linesByRequisition.value.get(prCode) || []
-  })
-
-  const totals = computed(() => lines.value.reduce((acc, line) => {
-    acc.lines += 1
-    acc.quantity += line.quantity
-    return acc
-  }, { lines: 0, quantity: 0 }))
-
-  const terms = computed(() => {
-    const record = rfq.value
-    if (!record) return []
-    const selected = criteria.termsOf(record)
-    if (selected.length) return selected
-    if (!['LeadTimeDays', 'QuotationValidityDays', 'ShippingTerm', 'PaymentTerm', 'DeliveryMode']
-      .some((column) => text(record[column]))) return []
-    return [
-      { label: 'Lead Time', value: `${num(record.LeadTimeDays)} days · ${termLabel(record.LeadTimeType)}` },
-      { label: 'Validity', value: `${num(record.QuotationValidityDays)} days · ${termLabel(record.QuotationValidityMode)}` },
-      { label: 'Shipping', value: `${termLabel(record.ShippingTermMode)}${text(record.ShippingTerm) ? ` · ${termLabel(record.ShippingTerm)}` : ''}` },
-      { label: 'Payment', value: `${termLabel(record.PaymentTermMode)}${text(record.PaymentTerm) ? ` · ${termLabel(record.PaymentTerm)}` : ''}` },
-      { label: 'Payment Detail', value: text(record.PaymentTermDetail) },
-      { label: 'Delivery', value: termLabel(record.DeliveryMode) },
-      { label: 'Partial Delivery', value: text(record.AllowPartialDelivery) },
-      { label: 'Split Shipment', value: text(record.AllowSplitShipment) }
-    ].filter((line) => text(line.value))
-  })
-
-  const quotationRows = computed(() => {
-    const code = text(rfq.value?.Code)
-    if (!code) return []
-    return quotations.items.value
-      .map(asRow)
-      .filter((row) => text(row.RFQCode) === code && text(row.Status || 'Active') === 'Active')
-  })
-
-  const procurement = computed(() => {
-    const code = text(rfq.value?.ProcurementCode)
-    if (!code) return null
-    return procurements.items.value.map(asRow).find((row) => text(row.Code) === code) || null
-  })
-
-  const procurementStage = computed(() => {
-    const row = procurement.value
-    if (!row) return null
-    return {
-      code: text(row.Code),
-      label: procurementLabel(row.Progress),
-      color: procurementColor(row.Progress),
-      icon: procurementIcon(row.Progress)
+      counts.active = rows.length - counts.cancelled
+      result.set(code, { rows, counts })
     }
-  })
-
-  const deadlineDays = computed(() => daysToDeadline(rfq.value))
-  const deadlinePassed = computed(() => isDeadlinePassed(rfq.value))
-  const dispatched = computed(() => allSuppliersDispatched(rfq.value, rfqSuppliers.items.value))
-  const canAssign = computed(() => canAssignSuppliers(rfq.value))
-  const canDispatch = computed(() => canMarkSuppliersSent(rfq.value) && supplierCounts.value.assigned > 0)
-  const closable = computed(() => canClose(rfq.value))
-  const events = computed(() => workflowStamps(rfq.value))
-
-  return {
-    rfq,
-    loading,
-    pending,
-    supplierRows,
-    supplierCounts,
-    lines,
-    totals,
-    terms,
-    quotationRows,
-    procurement,
-    procurementStage,
-    deadlineDays,
-    deadlinePassed,
-    dispatched,
-    canAssign,
-    canDispatch,
-    closable,
-    events,
-    progressLabel,
-    progressColor,
-    progressIcon,
-    supplierProgressLabel,
-    supplierProgressColor,
-    supplierProgressIcon,
-    termLabel,
-    formatStampDate
+    return result
+  }))
+  const supplierRows = computed(() => projections.value.get(rfq.value?.Code)?.rows || [])
+  const supplierCounts = computed(() => projections.value.get(rfq.value?.Code)?.counts || { total: 0 })
+  const lines = computed(() => reader.linesOf(rfq.value?.Code))
+  const canReadPR = computed(() => Boolean(findResourceConfig('PurchaseRequisitions')?.permissions?.canRead))
+  const view = {
+    rfq, supplierRows, supplierCounts, lines, canReadPR,
+    prCodes: computed(() => String(rfq.value?.PurchaseRequisitionCodes || '').split(',').map(code => code.trim()).filter(Boolean)),
+    openPR: code => { if (canReadPR.value) nav.goTo('view', { scope: 'operation', resourceSlug: 'purchase-requisitions', code }) },
+    totals: computed(() => reader.itemSummary(reader.itemsByRfq.value.get(rfq.value?.Code) || [])),
+    terms: computed(() => requirements.termsOf(rfq.value || {})),
+    pending: computed(() => !rfq.value && resourceRecord?.loading?.value),
+    deadlinePassed: computed(() => isDeadlinePassed(rfq.value)),
+    deadlineDays: computed(() => daysToDeadline(rfq.value)),
+    events: computed(() => workflowStamps(rfq.value)),
+    progressLabel, progressColor, progressIcon, supplierProgressLabel, supplierProgressColor, supplierProgressIcon, formatStampDate
   }
+  if (resourceRecord) views.set(resourceRecord, view)
+  return view
 }
